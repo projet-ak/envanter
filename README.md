@@ -1,0 +1,2 @@
+# envanter
+it evnvater uygulaması
