@@ -37,6 +37,16 @@ FAKE = {
             "last_checkout": None, "expected_checkin": None,
         }
     ],
+    "/accessories": [
+        {"id": 20, "name": "USB Mouse", "qty": 50, "min_amt": 5,
+         "manufacturer": {"id": 5}, "category": {"id": 1}}
+    ],
+    "/consumables": [{"id": 30, "name": "Toner", "qty": 12, "min_amt": 2}],
+    "/components": [{"id": 40, "name": "RAM 16GB", "serial": "R-1", "qty": 8}],
+    "/licenses": [
+        {"id": 50, "name": "Office 365", "seats": 100,
+         "product_key": "XXX-YYY", "manufacturer": {"id": 5}}
+    ],
 }
 
 
@@ -57,7 +67,7 @@ def test_snipeit_import(tmp_path, monkeypatch):
             pass
 
     monkeypatch.setattr(imp, "_client", lambda: _DummyClient())
-    monkeypatch.setattr(imp, "fetch_all", lambda client, path: FAKE.get(path, []))
+    monkeypatch.setattr(imp, "fetch_all", lambda c, p, limit=None: FAKE.get(p, []))
 
     imp.run()
 
@@ -86,8 +96,44 @@ def test_snipeit_import(tmp_path, monkeypatch):
         assert asset.assigned_user_id == user.id
         assert asset.location_id is not None
 
+        # Diğer varlık türleri
+        acc = db.scalar(select(models.Accessory))
+        assert acc.name == "USB Mouse" and acc.qty == 50 and acc.min_qty == 5
+        assert db.scalar(select(func.count()).select_from(models.Consumable)) == 1
+        comp = db.scalar(select(models.Component))
+        assert comp.serial == "R-1"
+        lic = db.scalar(select(models.License))
+        assert lic.seats == 100 and lic.license_key == "XXX-YYY"
+
     # İdempotency: tekrar çalıştır, sayılar artmamalı
     imp.run()
     with Session() as db:
         assert db.scalar(select(func.count()).select_from(models.Asset)) == 1
         assert db.scalar(select(func.count()).select_from(models.Category)) == 1
+        assert db.scalar(select(func.count()).select_from(models.Accessory)) == 1
+
+
+def test_snipeit_dry_run(tmp_path, monkeypatch):
+    """Kuru çalıştırma hiçbir şey yazmamalı."""
+    import scripts.import_snipeit as imp
+
+    url = f"sqlite:///{tmp_path / 'dry.db'}"
+    engine = create_engine(url, connect_args={"check_same_thread": False})
+    Session = sessionmaker(bind=engine)
+    monkeypatch.setattr(imp, "engine", engine)
+    monkeypatch.setattr(imp, "SessionLocal", Session)
+    monkeypatch.setattr(imp, "Base", Base)
+
+    class _DummyClient:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(imp, "_client", lambda: _DummyClient())
+    monkeypatch.setattr(imp, "fetch_all", lambda c, p, limit=None: FAKE.get(p, []))
+
+    imp.run(dry_run=True)
+
+    with Session() as db:
+        # Hiçbir şey kalıcı yazılmamış olmalı
+        assert db.scalar(select(func.count()).select_from(models.Asset)) == 0
+        assert db.scalar(select(func.count()).select_from(models.Category)) == 0

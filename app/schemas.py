@@ -332,6 +332,125 @@ class ActivityLogRead(ORMModel):
 
 
 # --------------------------------------------------------------------------- #
+# Adet bazlı varlıklar: aksesuar / sarf malzeme / bileşen
+# --------------------------------------------------------------------------- #
+class StockBase(BaseModel):
+    name: str
+    model_number: str | None = None
+    category_id: int | None = None
+    manufacturer_id: int | None = None
+    supplier_id: int | None = None
+    location_id: int | None = None
+    company_id: int | None = None
+    purchase_date: dt.date | None = None
+    purchase_cost: float | None = None
+    order_number: str | None = None
+    notes: str | None = None
+    qty: int = 1
+    min_qty: int = 0
+
+
+class StockUpdate(BaseModel):
+    name: str | None = None
+    model_number: str | None = None
+    category_id: int | None = None
+    manufacturer_id: int | None = None
+    supplier_id: int | None = None
+    location_id: int | None = None
+    company_id: int | None = None
+    purchase_date: dt.date | None = None
+    purchase_cost: float | None = None
+    order_number: str | None = None
+    notes: str | None = None
+    qty: int | None = None
+    min_qty: int | None = None
+
+
+class StockRead(ORMModel):
+    id: int
+    name: str
+    model_number: str | None = None
+    category_id: int | None = None
+    manufacturer_id: int | None = None
+    supplier_id: int | None = None
+    location_id: int | None = None
+    company_id: int | None = None
+    purchase_date: dt.date | None = None
+    purchase_cost: float | None = None
+    order_number: str | None = None
+    notes: str | None = None
+    qty: int
+    min_qty: int
+
+
+class ComponentCreate(StockBase):
+    serial: str | None = None
+
+
+class ComponentUpdate(StockUpdate):
+    serial: str | None = None
+
+
+class ComponentRead(StockRead):
+    serial: str | None = None
+
+
+class LicenseCreate(BaseModel):
+    name: str
+    seats: int = 1
+    license_key: str | None = None
+    licensed_to_name: str | None = None
+    licensed_to_email: str | None = None
+    manufacturer_id: int | None = None
+    supplier_id: int | None = None
+    company_id: int | None = None
+    category_id: int | None = None
+    purchase_date: dt.date | None = None
+    purchase_cost: float | None = None
+    order_number: str | None = None
+    expiration_date: dt.date | None = None
+    maintained: bool = False
+    notes: str | None = None
+
+
+class LicenseUpdate(BaseModel):
+    name: str | None = None
+    seats: int | None = None
+    license_key: str | None = None
+    licensed_to_name: str | None = None
+    licensed_to_email: str | None = None
+    manufacturer_id: int | None = None
+    supplier_id: int | None = None
+    company_id: int | None = None
+    category_id: int | None = None
+    purchase_date: dt.date | None = None
+    purchase_cost: float | None = None
+    order_number: str | None = None
+    expiration_date: dt.date | None = None
+    maintained: bool | None = None
+    notes: str | None = None
+
+
+class LicenseRead(ORMModel):
+    id: int
+    name: str
+    seats: int
+    license_key: str | None = None
+    licensed_to_name: str | None = None
+    licensed_to_email: str | None = None
+    manufacturer_id: int | None = None
+    supplier_id: int | None = None
+    company_id: int | None = None
+    category_id: int | None = None
+    purchase_date: dt.date | None = None
+    purchase_cost: float | None = None
+    order_number: str | None = None
+    expiration_date: dt.date | None = None
+    maintained: bool
+    notes: str | None = None
+
+
+# --------------------------------------------------------------------------- #
 # Doğal dil arama
 # --------------------------------------------------------------------------- #
 class SearchFilter(BaseModel):

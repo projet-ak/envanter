@@ -264,6 +264,61 @@ class Asset(Base, TimestampMixin, ExternalMixin):
 # --------------------------------------------------------------------------- #
 # Etkinlik / geçmiş kaydı (checkout/checkin/düzenleme audit'i)
 # --------------------------------------------------------------------------- #
+class StockMixin:
+    """Adet bazlı varlıklar için ortak alanlar (aksesuar/sarf/bileşen)."""
+
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    model_number: Mapped[str | None] = mapped_column(String(120))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    manufacturer_id: Mapped[int | None] = mapped_column(ForeignKey("manufacturers.id"))
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"))
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
+    purchase_date: Mapped[dt.date | None] = mapped_column(Date)
+    purchase_cost: Mapped[float | None] = mapped_column(Numeric(15, 2))
+    order_number: Mapped[str | None] = mapped_column(String(120))
+    notes: Mapped[str | None] = mapped_column(Text)
+    qty: Mapped[int] = mapped_column(Integer, default=1)
+    min_qty: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Accessory(Base, StockMixin, TimestampMixin, ExternalMixin):
+    __tablename__ = "accessories"
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+
+class Consumable(Base, StockMixin, TimestampMixin, ExternalMixin):
+    __tablename__ = "consumables"
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+
+class Component(Base, StockMixin, TimestampMixin, ExternalMixin):
+    __tablename__ = "components"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    serial: Mapped[str | None] = mapped_column(String(255), index=True)
+
+
+class License(Base, TimestampMixin, ExternalMixin):
+    __tablename__ = "licenses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    seats: Mapped[int] = mapped_column(Integer, default=1)
+    license_key: Mapped[str | None] = mapped_column(String(255))
+    licensed_to_name: Mapped[str | None] = mapped_column(String(255))
+    licensed_to_email: Mapped[str | None] = mapped_column(String(180))
+    manufacturer_id: Mapped[int | None] = mapped_column(ForeignKey("manufacturers.id"))
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    purchase_date: Mapped[dt.date | None] = mapped_column(Date)
+    purchase_cost: Mapped[float | None] = mapped_column(Numeric(15, 2))
+    order_number: Mapped[str | None] = mapped_column(String(120))
+    expiration_date: Mapped[dt.date | None] = mapped_column(Date)
+    maintained: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
 

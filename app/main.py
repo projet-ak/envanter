@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import settings
 from app.database import Base, SessionLocal, engine
-from app.routers import assets, auth, lookups, search
+from app.routers import assets, auth, csv_io, lookups, search
 from app.seed import seed_defaults
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -44,6 +44,7 @@ for router in lookups.routers:
     app.include_router(router)
 app.include_router(assets.router)
 app.include_router(search.router)
+app.include_router(csv_io.router)
 
 
 @app.get("/", include_in_schema=False)

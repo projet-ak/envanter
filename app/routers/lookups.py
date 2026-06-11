@@ -84,6 +84,42 @@ custom_fields = make_crud_router(
     tag="Özel Alanlar",
 )
 
+accessories = make_crud_router(
+    model=models.Accessory,
+    create_schema=schemas.StockBase,
+    update_schema=schemas.StockUpdate,
+    read_schema=schemas.StockRead,
+    prefix="/accessories",
+    tag="Aksesuarlar",
+)
+
+consumables = make_crud_router(
+    model=models.Consumable,
+    create_schema=schemas.StockBase,
+    update_schema=schemas.StockUpdate,
+    read_schema=schemas.StockRead,
+    prefix="/consumables",
+    tag="Sarf Malzemeleri",
+)
+
+components = make_crud_router(
+    model=models.Component,
+    create_schema=schemas.ComponentCreate,
+    update_schema=schemas.ComponentUpdate,
+    read_schema=schemas.ComponentRead,
+    prefix="/components",
+    tag="Bileşenler",
+)
+
+licenses = make_crud_router(
+    model=models.License,
+    create_schema=schemas.LicenseCreate,
+    update_schema=schemas.LicenseUpdate,
+    read_schema=schemas.LicenseRead,
+    prefix="/licenses",
+    tag="Lisanslar",
+)
+
 routers = [
     companies,
     locations,
@@ -94,4 +130,8 @@ routers = [
     asset_models,
     users,
     custom_fields,
+    accessories,
+    consumables,
+    components,
+    licenses,
 ]

@@ -46,8 +46,8 @@ def _client() -> httpx.Client:
     )
 
 
-def fetch_all(client: httpx.Client, path: str) -> list[dict]:
-    """Snipe-IT'in sayfalı listesini tümüyle çeker."""
+def fetch_all(client: httpx.Client, path: str, limit: int | None = None) -> list[dict]:
+    """Snipe-IT'in sayfalı listesini çeker. `limit` verilirse o kadar kayıtla sınırlar."""
     rows: list[dict] = []
     offset = 0
     page = 100
@@ -59,6 +59,8 @@ def fetch_all(client: httpx.Client, path: str) -> list[dict]:
         rows.extend(batch)
         total = data.get("total", len(rows))
         offset += page
+        if limit and len(rows) >= limit:
+            return rows[:limit]
         if offset >= total or not batch:
             break
     return rows
@@ -117,13 +119,24 @@ def id_map(db: Session, model) -> dict[int, int]:
 # --------------------------------------------------------------------------- #
 # İçe aktarım adımları
 # --------------------------------------------------------------------------- #
-def run() -> None:
+def run(dry_run: bool = False, limit: int | None = None) -> None:
     Base.metadata.create_all(bind=engine)
     client = _client()
     db = SessionLocal()
+
+    def step() -> None:
+        # Kuru çalıştırmada veriyi yazmadan (flush) ilerle; sonunda geri al.
+        db.flush() if dry_run else db.commit()
+
+    def fetch(path: str) -> list[dict]:
+        return fetch_all(client, path, limit=limit)
+
+    if dry_run:
+        print("⚠ KURU ÇALIŞTIRMA (dry-run): hiçbir şey kalıcı olarak yazılmayacak.\n")
+
     try:
         print("→ Kategoriler…")
-        for row in fetch_all(client, "/categories"):
+        for row in fetch("/categories"):
             upsert(
                 db,
                 models.Category,
@@ -133,10 +146,10 @@ def run() -> None:
                     "type": _category_type(row.get("category_type")),
                 },
             )
-        db.commit()
+        step()
 
         print("→ Üreticiler…")
-        for row in fetch_all(client, "/manufacturers"):
+        for row in fetch("/manufacturers"):
             upsert(
                 db,
                 models.Manufacturer,
@@ -148,10 +161,10 @@ def run() -> None:
                     "support_email": row.get("support_email"),
                 },
             )
-        db.commit()
+        step()
 
         print("→ Tedarikçiler…")
-        for row in fetch_all(client, "/suppliers"):
+        for row in fetch("/suppliers"):
             upsert(
                 db,
                 models.Supplier,
@@ -163,15 +176,15 @@ def run() -> None:
                     "email": row.get("email"),
                 },
             )
-        db.commit()
+        step()
 
         print("→ Şirketler…")
-        for row in fetch_all(client, "/companies"):
+        for row in fetch("/companies"):
             upsert(db, models.Company, row["id"], {"name": row.get("name") or "Adsız"})
-        db.commit()
+        step()
 
         print("→ Durum etiketleri…")
-        for row in fetch_all(client, "/statuslabels"):
+        for row in fetch("/statuslabels"):
             upsert(
                 db,
                 models.StatusLabel,
@@ -181,10 +194,10 @@ def run() -> None:
                     "type": _status_type(row.get("type")),
                 },
             )
-        db.commit()
+        step()
 
         print("→ Lokasyonlar (1. geçiş)…")
-        for row in fetch_all(client, "/locations"):
+        for row in fetch("/locations"):
             upsert(
                 db,
                 models.Location,
@@ -196,11 +209,11 @@ def run() -> None:
                     "country": row.get("country"),
                 },
             )
-        db.commit()
+        step()
         # 2. geçiş: parent ilişkisi
         loc_map = id_map(db, models.Location)
         print("→ Lokasyonlar (parent ilişkisi)…")
-        for row in fetch_all(client, "/locations"):
+        for row in fetch("/locations"):
             parent_ext = nested_id(row.get("parent"))
             if parent_ext and parent_ext in loc_map:
                 obj = db.scalar(
@@ -210,12 +223,12 @@ def run() -> None:
                 )
                 if obj:
                     obj.parent_id = loc_map[parent_ext]
-        db.commit()
+        step()
 
         cat_map = id_map(db, models.Category)
         man_map = id_map(db, models.Manufacturer)
         print("→ Modeller…")
-        for row in fetch_all(client, "/models"):
+        for row in fetch("/models"):
             upsert(
                 db,
                 models.AssetModel,
@@ -228,10 +241,10 @@ def run() -> None:
                     "notes": row.get("notes"),
                 },
             )
-        db.commit()
+        step()
 
         print("→ Kullanıcılar…")
-        for row in fetch_all(client, "/users"):
+        for row in fetch("/users"):
             upsert(
                 db,
                 models.User,
@@ -249,14 +262,14 @@ def run() -> None:
                     "active": bool(row.get("activated", True)),
                 },
             )
-        db.commit()
+        step()
 
         model_map = id_map(db, models.AssetModel)
         status_map = id_map(db, models.StatusLabel)
         sup_map = id_map(db, models.Supplier)
         comp_map = id_map(db, models.Company)
         print("→ Varlıklar (1. geçiş: temel veri)…")
-        for row in fetch_all(client, "/hardware"):
+        for row in fetch("/hardware"):
             upsert(
                 db,
                 models.Asset,
@@ -281,13 +294,13 @@ def run() -> None:
                     "custom": _custom_fields(row.get("custom_fields")),
                 },
             )
-        db.commit()
+        step()
 
         # 2. geçiş: zimmet (assigned_to) — tüm varlıklar/kullanıcılar var artık
         user_map = id_map(db, models.User)
         asset_map = id_map(db, models.Asset)
         print("→ Varlıklar (2. geçiş: zimmet)…")
-        for row in fetch_all(client, "/hardware"):
+        for row in fetch("/hardware"):
             assigned = row.get("assigned_to")
             if not assigned:
                 continue
@@ -309,9 +322,68 @@ def run() -> None:
             elif atype == "asset" and asset_map.get(aid):
                 obj.assigned_type = models.AssignedType.asset
                 obj.assigned_asset_id = asset_map[aid]
-        db.commit()
+        step()
+
+        # Diğer varlık türleri: aksesuar / sarf / bileşen / lisans
+        def _stock_defaults(row: dict) -> dict:
+            return {
+                "name": row.get("name") or "Adsız",
+                "model_number": row.get("model_number"),
+                "category_id": cat_map.get(nested_id(row.get("category"))),
+                "manufacturer_id": man_map.get(nested_id(row.get("manufacturer"))),
+                "supplier_id": sup_map.get(nested_id(row.get("supplier"))),
+                "location_id": loc_map.get(nested_id(row.get("location"))),
+                "company_id": comp_map.get(nested_id(row.get("company"))),
+                "purchase_date": parse_date(row.get("purchase_date")),
+                "purchase_cost": parse_float(row.get("purchase_cost")),
+                "order_number": row.get("order_number"),
+                "notes": row.get("notes"),
+                "qty": _int(row.get("qty"), 1),
+                "min_qty": _int(row.get("min_amt"), 0),
+            }
+
+        print("→ Aksesuarlar…")
+        for row in fetch("/accessories"):
+            upsert(db, models.Accessory, row["id"], _stock_defaults(row))
+        step()
+
+        print("→ Sarf malzemeleri…")
+        for row in fetch("/consumables"):
+            upsert(db, models.Consumable, row["id"], _stock_defaults(row))
+        step()
+
+        print("→ Bileşenler…")
+        for row in fetch("/components"):
+            defaults = _stock_defaults(row)
+            defaults["serial"] = row.get("serial")
+            upsert(db, models.Component, row["id"], defaults)
+        step()
+
+        print("→ Lisanslar…")
+        for row in fetch("/licenses"):
+            upsert(db, models.License, row["id"], {
+                "name": row.get("name") or "Adsız",
+                "seats": _int(row.get("seats"), 1),
+                "license_key": row.get("product_key"),
+                "licensed_to_name": row.get("license_name"),
+                "licensed_to_email": row.get("license_email"),
+                "manufacturer_id": man_map.get(nested_id(row.get("manufacturer"))),
+                "supplier_id": sup_map.get(nested_id(row.get("supplier"))),
+                "company_id": comp_map.get(nested_id(row.get("company"))),
+                "category_id": cat_map.get(nested_id(row.get("category"))),
+                "purchase_date": parse_date(row.get("purchase_date")),
+                "purchase_cost": parse_float(row.get("purchase_cost")),
+                "order_number": row.get("order_number"),
+                "expiration_date": parse_date(row.get("expiration_date")),
+                "maintained": bool(row.get("maintained", False)),
+                "notes": row.get("notes"),
+            })
+        step()
 
         _summary(db)
+        if dry_run:
+            db.rollback()
+            print("\n⚠ KURU ÇALIŞTIRMA: değişiklikler geri alındı, kalıcı yazma yapılmadı.")
     finally:
         db.close()
         client.close()
@@ -338,6 +410,15 @@ def _as_text(value):
     if isinstance(value, dict):
         return value.get("name") or value.get("address")
     return value
+
+
+def _int(value, default: int = 0) -> int:
+    if value in (None, ""):
+        return default
+    try:
+        return int(str(value).strip())
+    except (ValueError, TypeError):
+        return default
 
 
 def _warranty(value) -> int | None:
@@ -385,10 +466,22 @@ def _summary(db: Session) -> None:
         ("Model", models.AssetModel),
         ("Kullanıcı", models.User),
         ("Varlık", models.Asset),
+        ("Aksesuar", models.Accessory),
+        ("Sarf", models.Consumable),
+        ("Bileşen", models.Component),
+        ("Lisans", models.License),
     ]:
         count = db.scalar(select(func.count()).select_from(model))
         print(f"  - {label}: {count}")
 
 
 if __name__ == "__main__":
-    run()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Snipe-IT verisini içe aktar")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Yazmadan dene; ne aktarılacağını göster")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Her türden en fazla N kayıt (hızlı test için)")
+    args = parser.parse_args()
+    run(dry_run=args.dry_run, limit=args.limit)

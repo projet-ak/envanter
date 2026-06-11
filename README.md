@@ -113,13 +113,23 @@ hiçbir şey silinmez; veriler REST API üzerinden okunur.
 3. Çalıştır:
 
 ```bash
+# Önce güvenli deneme (hiçbir şey yazmaz, ne aktarılacağını gösterir):
+python scripts/import_snipeit.py --dry-run --limit 20
+
+# Gerçek aktarım:
 python scripts/import_snipeit.py
 ```
 
 Taşınan veriler: kategoriler, üreticiler, tedarikçiler, şirketler, durum
 etiketleri, lokasyonlar (hiyerarşi dahil), modeller, kullanıcılar, varlıklar
-(zimmet durumu ve özel alanlar dahil). Script birden çok kez çalıştırılabilir;
+(zimmet durumu ve özel alanlar dahil), **aksesuarlar, sarf malzemeleri,
+bileşenler ve lisanslar**. Script birden çok kez çalıştırılabilir;
 `external_id` eşlemesi sayesinde veriyi çoğaltmaz, günceller.
+
+| Seçenek | Açıklama |
+|---|---|
+| `--dry-run` | Yazmadan dener; her türden kaç kayıt aktarılacağını gösterir |
+| `--limit N` | Her türden en fazla N kayıt (hızlı deneme için) |
 
 ## Doğal dil arama
 
@@ -146,6 +156,9 @@ yapısal bir filtre üretir, o da parametreli sorguya çevrilir.
 | `POST` | `/assets/{id}/checkin` | İade al |
 | `GET` | `/assets/{id}/history` | Varlık geçmişi |
 | `POST` | `/search` | Doğal dil araması |
+| `GET` | `/io/assets.csv` | Varlıkları CSV olarak indir |
+| `POST` | `/io/assets/import` | CSV'den varlık içe aktar (etikete göre ekle/güncelle) |
+| `*` | `/accessories`, `/consumables`, `/components`, `/licenses` | Aksesuar / sarf / bileşen / lisans CRUD |
 | `*` | `/categories`, `/manufacturers`, `/suppliers`, `/companies`, `/locations`, `/status-labels`, `/models`, `/users`, `/custom-fields` | Referans tabloları CRUD |
 
 Tam liste ve deneme için `/docs`.
@@ -166,9 +179,10 @@ gerçek Snipe-IT gerektirmeden) kapsar.
 - [x] Basit web arayüzü (`/ui/`) — giriş ekranı dahil
 - [x] Otomatik testler (pytest)
 - [x] Kimlik doğrulama + rol/izin (JWT: admin/editor/viewer)
-- [ ] Aksesuar / sarf malzeme / lisans / bileşen türleri (model bunlara hazır)
+- [x] Aksesuar / sarf malzeme / lisans / bileşen türleri
+- [x] CSV içe/dışa aktarım (varlıklar)
 - [ ] Fatura/irsaliye görselinden otomatik varlık çıkarımı (Claude vision)
-- [ ] CSV içe/dışa aktarım
+- [ ] Web arayüzünde diğer varlık türleri için ekranlar
 
 ## Proje yapısı
 
