@@ -1,22 +1,34 @@
 """Envanter API — uygulama giriş noktası."""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import __version__
+from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.routers import assets, lookups, search
 from app.seed import seed_defaults
 
+STATIC_DIR = Path(__file__).parent / "static"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Geliştirme kolaylığı: tabloları oluştur + varsayılanları ekle.
-    # Üretimde şema değişiklikleri için Alembic göçleri kullanılmalı.
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        seed_defaults(db)
+    # Geliştirme kolaylığı: sqlite'ta tabloları otomatik oluştur.
+    # Üretimde (PostgreSQL) şema, Alembic göçleriyle yönetilir:
+    #   alembic upgrade head
+    if settings.database_url.startswith("sqlite"):
+        Base.metadata.create_all(bind=engine)
+    try:
+        with SessionLocal() as db:
+            seed_defaults(db)
+    except Exception:
+        # Tablolar henüz yoksa (göç çalıştırılmadıysa) sessizce geç.
+        pass
     yield
 
 
@@ -33,15 +45,16 @@ app.include_router(assets.router)
 app.include_router(search.router)
 
 
-@app.get("/", tags=["Sistem"])
+@app.get("/", include_in_schema=False)
 def root():
-    return {
-        "ad": "Envanter API",
-        "surum": __version__,
-        "dokuman": "/docs",
-    }
+    return RedirectResponse(url="/ui/")
 
 
 @app.get("/health", tags=["Sistem"])
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "surum": __version__}
+
+
+# Basit web arayüzü (statik). /ui/ adresinde sunulur.
+if STATIC_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")

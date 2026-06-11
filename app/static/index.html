@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Envanter</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#1e293b; --line:#334155; --txt:#e2e8f0;
+            --mut:#94a3b8; --acc:#38bdf8; --ok:#34d399; --warn:#fbbf24; --err:#f87171; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--txt); }
+    header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex;
+             align-items:baseline; gap:12px; }
+    header h1 { margin:0; font-size:20px; }
+    header .sub { color:var(--mut); font-size:13px; }
+    main { max-width:1100px; margin:0 auto; padding:24px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+             padding:16px; margin-bottom:20px; }
+    .panel h2 { margin:0 0 12px; font-size:15px; color:var(--mut); text-transform:uppercase;
+                letter-spacing:.05em; }
+    input, select, button { font:inherit; padding:8px 10px; border-radius:7px;
+                            border:1px solid var(--line); background:#0b1220; color:var(--txt); }
+    button { background:var(--acc); color:#03263a; border:none; cursor:pointer; font-weight:600; }
+    button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); font-weight:400; }
+    button:hover { opacity:.9; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; }
+    .grow { flex:1; min-width:180px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+    th { color:var(--mut); font-weight:600; }
+    .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; }
+    .tag.free { background:#064e3b; color:var(--ok); }
+    .tag.used { background:#78350f; color:var(--warn); }
+    .muted { color:var(--mut); }
+    .note { font-size:13px; color:var(--mut); margin-top:8px; }
+    .pill { background:#0b1220; border:1px solid var(--line); border-radius:6px;
+            padding:2px 8px; font-size:12px; color:var(--acc); }
+    a { color:var(--acc); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📦 Envanter</h1>
+    <span class="sub">BT envanter yönetimi · <a href="/docs">API dokümanı</a></span>
+  </header>
+
+  <main>
+    <div class="panel">
+      <h2>Doğal dil arama</h2>
+      <div class="row">
+        <input id="q" class="grow" placeholder="örn: depodaki boştaki Dell laptoplar"
+               onkeydown="if(event.key==='Enter')doSearch()" />
+        <button onclick="doSearch()">Ara</button>
+        <button class="ghost" onclick="loadAssets()">Tümünü göster</button>
+      </div>
+      <div id="searchInfo" class="note"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Hızlı varlık ekle</h2>
+      <div class="row">
+        <input id="newTag" placeholder="Etiket (örn. BT-0001)" />
+        <input id="newName" class="grow" placeholder="Ad" />
+        <input id="newSerial" placeholder="Seri no" />
+        <button onclick="addAsset()">Ekle</button>
+      </div>
+      <div id="addInfo" class="note"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Varlıklar (<span id="count">0</span>)</h2>
+      <table>
+        <thead>
+          <tr><th>Etiket</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script>
+    const api = (p, opt) => fetch(p, opt).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e)));
+    let statusMap = {};
+
+    async function loadStatuses() {
+      const s = await api('/status-labels');
+      statusMap = Object.fromEntries(s.map(x => [x.id, x.name]));
+    }
+
+    function render(assets) {
+      document.getElementById('count').textContent = assets.length;
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '';
+      for (const a of assets) {
+        const assigned = a.assigned_type
+          ? `<span class="tag used">zimmetli</span>`
+          : `<span class="tag free">boşta</span>`;
+        const btn = a.assigned_type
+          ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
+          : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><b>${a.asset_tag}</b></td>
+          <td>${a.name ?? '<span class="muted">—</span>'}</td>
+          <td class="muted">${a.serial ?? '—'}</td>
+          <td>${statusMap[a.status_id] ?? '<span class="muted">—</span>'}</td>
+          <td>${assigned}</td>
+          <td>${btn}</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadAssets() {
+      document.getElementById('searchInfo').textContent = '';
+      render(await api('/assets?limit=200'));
+    }
+
+    async function doSearch() {
+      const q = document.getElementById('q').value.trim();
+      if (!q) return loadAssets();
+      const res = await api('/search', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q })
+      });
+      const f = res.interpreted_filter;
+      const used = res.used_ai ? '🤖 Claude yorumladı' : '🔤 metin araması';
+      const parts = Object.entries(f).filter(([k, v]) =>
+        v !== null && v !== false && !['limit'].includes(k)).map(([k, v]) => `${k}=${v}`);
+      document.getElementById('searchInfo').innerHTML =
+        `${used} · <span class="pill">${parts.join(' · ') || 'filtre yok'}</span> · ${res.count} sonuç`;
+      render(res.results);
+    }
+
+    async function addAsset() {
+      const body = {
+        asset_tag: newTag.value.trim(),
+        name: newName.value.trim() || null,
+        serial: newSerial.value.trim() || null,
+      };
+      if (!body.asset_tag) { addInfo.textContent = 'Etiket zorunlu.'; return; }
+      try {
+        await api('/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body) });
+        newTag.value = newName.value = newSerial.value = '';
+        addInfo.textContent = '✓ Eklendi.';
+        loadAssets();
+      } catch (e) { addInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
+    }
+
+    async function checkoutPrompt(id) {
+      const uid = prompt('Zimmetlenecek kullanıcı ID (boş bırakma):');
+      if (!uid) return;
+      try {
+        await api(`/assets/${id}/checkout`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assigned_type: 'user', assigned_id: Number(uid) }) });
+        loadAssets();
+      } catch (e) { alert('⚠ ' + (e.detail || 'Hata')); }
+    }
+
+    async function checkin(id) {
+      try {
+        await api(`/assets/${id}/checkin`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        loadAssets();
+      } catch (e) { alert('⚠ ' + (e.detail || 'Hata')); }
+    }
+
+    (async () => { await loadStatuses(); await loadAssets(); })();
+  </script>
+</body>
+</html>

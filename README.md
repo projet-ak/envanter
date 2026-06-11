@@ -30,8 +30,12 @@ cp .env.example .env        # ayarları düzenle
 uvicorn app.main:app --reload
 ```
 
+- Web arayüzü: <http://localhost:8000/ui/>
 - API dokümanı: <http://localhost:8000/docs>
 - Sağlık kontrolü: <http://localhost:8000/health>
+
+> ⚠️ Web arayüzünde henüz kimlik doğrulama yok. Giriş (JWT) eklenene kadar
+> uygulamayı yalnızca yerel/özel ağda çalıştır.
 
 ## PostgreSQL (önerilen, üretim)
 
@@ -42,6 +46,25 @@ sudo -u postgres createdb envanter -O envanter
 # .env içinde:
 # DATABASE_URL=postgresql+psycopg2://envanter:PAROLA@localhost:5432/envanter
 ```
+
+Üretimde şemayı Alembic göçleriyle oluştur (sqlite'ta tablolar otomatik
+oluşur; PostgreSQL'de göç çalıştırmalısın):
+
+```bash
+alembic upgrade head
+```
+
+### Şema değişiklikleri (göçler)
+
+Modeli değiştirdiğinde yeni bir göç üret, sonra uygula:
+
+```bash
+alembic revision --autogenerate -m "açıklama"
+alembic upgrade head
+```
+
+Böylece "güncelleme her şeyi bozdu" durumu olmaz — her değişiklik sürümlenir
+ve geri alınabilir (`alembic downgrade -1`).
 
 ### Yedekleme (veri kaybolmasın)
 
@@ -101,15 +124,25 @@ yapısal bir filtre üretir, o da parametreli sorguya çevrilir.
 
 Tam liste ve deneme için `/docs`.
 
-## Yol haritası (sonraki adımlar)
+## Testler
 
-- [ ] Alembic göçleri (üretimde `create_all` yerine)
-- [ ] Kimlik doğrulama + rol/izin (JWT)
-- [ ] Web arayüzü
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Testler API uçlarını ve **Snipe-IT veri taşımayı** (sahte API yanıtlarıyla,
+gerçek Snipe-IT gerektirmeden) kapsar.
+
+## Yol haritası
+
+- [x] Alembic göçleri (üretimde `create_all` yerine)
+- [x] Basit web arayüzü (`/ui/`)
+- [x] Otomatik testler (pytest)
+- [ ] Kimlik doğrulama + rol/izin (JWT) — **sıradaki adım**
 - [ ] Aksesuar / sarf malzeme / lisans / bileşen türleri (model bunlara hazır)
 - [ ] Fatura/irsaliye görselinden otomatik varlık çıkarımı (Claude vision)
 - [ ] CSV içe/dışa aktarım
-- [ ] Otomatik testler (pytest)
 
 ## Proje yapısı
 
@@ -124,6 +157,9 @@ app/
   seed.py            # Varsayılan durum etiketleri
   ai/search.py       # Doğal dil → yapısal filtre (Claude)
   routers/           # API uçları
+  static/index.html  # Basit web arayüzü
+alembic/             # Veritabanı göçleri
 scripts/
   import_snipeit.py  # Snipe-IT'ten veri taşıma
+tests/               # pytest (API + içe aktarım)
 ```
