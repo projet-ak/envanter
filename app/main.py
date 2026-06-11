@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app import __version__
 from app.config import settings
 from app.database import Base, SessionLocal, engine
-from app.routers import assets, lookups, search
+from app.routers import assets, auth, lookups, search
 from app.seed import seed_defaults
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -39,6 +39,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth.router)
 for router in lookups.routers:
     app.include_router(router)
 app.include_router(assets.router)

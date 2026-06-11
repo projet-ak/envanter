@@ -7,12 +7,15 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.ai import search as ai_search
+from app.auth import get_current_user
 from app.database import get_db
 
 router = APIRouter(prefix="/search", tags=["Arama"])
 
 
-@router.post("", response_model=schemas.SearchResponse)
+@router.post(
+    "", response_model=schemas.SearchResponse, dependencies=[Depends(get_current_user)]
+)
 def natural_language_search(
     payload: schemas.SearchRequest, db: Session = Depends(get_db)
 ):

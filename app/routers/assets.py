@@ -9,9 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
+from app.auth import get_current_user, require_editor
 from app.database import get_db
 
 router = APIRouter(prefix="/assets", tags=["Varlıklar"])
+READ = [Depends(get_current_user)]
+WRITE = [Depends(require_editor)]
 
 
 def _log(
@@ -39,7 +42,7 @@ def _log(
     )
 
 
-@router.get("", response_model=list[schemas.AssetRead])
+@router.get("", response_model=list[schemas.AssetRead], dependencies=READ)
 def list_assets(
     skip: int = 0,
     limit: int = Query(100, le=500),
@@ -72,7 +75,7 @@ def list_assets(
     return db.scalars(stmt).all()
 
 
-@router.post("", response_model=schemas.AssetRead, status_code=201)
+@router.post("", response_model=schemas.AssetRead, status_code=201, dependencies=WRITE)
 def create_asset(payload: schemas.AssetCreate, db: Session = Depends(get_db)):
     if db.scalar(select(models.Asset).where(models.Asset.asset_tag == payload.asset_tag)):
         raise HTTPException(409, f"'{payload.asset_tag}' etiketi zaten kullanımda")
@@ -85,7 +88,7 @@ def create_asset(payload: schemas.AssetCreate, db: Session = Depends(get_db)):
     return asset
 
 
-@router.get("/{asset_id}", response_model=schemas.AssetRead)
+@router.get("/{asset_id}", response_model=schemas.AssetRead, dependencies=READ)
 def get_asset(asset_id: int, db: Session = Depends(get_db)):
     asset = db.get(models.Asset, asset_id)
     if asset is None:
@@ -93,7 +96,7 @@ def get_asset(asset_id: int, db: Session = Depends(get_db)):
     return asset
 
 
-@router.put("/{asset_id}", response_model=schemas.AssetRead)
+@router.put("/{asset_id}", response_model=schemas.AssetRead, dependencies=WRITE)
 def update_asset(
     asset_id: int, payload: schemas.AssetUpdate, db: Session = Depends(get_db)
 ):
@@ -113,7 +116,7 @@ def update_asset(
     return asset
 
 
-@router.delete("/{asset_id}", status_code=204)
+@router.delete("/{asset_id}", status_code=204, dependencies=WRITE)
 def delete_asset(asset_id: int, db: Session = Depends(get_db)):
     asset = db.get(models.Asset, asset_id)
     if asset is None:
@@ -123,7 +126,7 @@ def delete_asset(asset_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@router.post("/{asset_id}/checkout", response_model=schemas.AssetRead)
+@router.post("/{asset_id}/checkout", response_model=schemas.AssetRead, dependencies=WRITE)
 def checkout_asset(
     asset_id: int, payload: schemas.CheckoutRequest, db: Session = Depends(get_db)
 ):
@@ -168,7 +171,7 @@ def checkout_asset(
     return asset
 
 
-@router.post("/{asset_id}/checkin", response_model=schemas.AssetRead)
+@router.post("/{asset_id}/checkin", response_model=schemas.AssetRead, dependencies=WRITE)
 def checkin_asset(
     asset_id: int, payload: schemas.CheckinRequest, db: Session = Depends(get_db)
 ):
@@ -204,7 +207,7 @@ def checkin_asset(
     return asset
 
 
-@router.get("/{asset_id}/history", response_model=list[schemas.ActivityLogRead])
+@router.get("/{asset_id}/history", response_model=list[schemas.ActivityLogRead], dependencies=READ)
 def asset_history(asset_id: int, db: Session = Depends(get_db)):
     if db.get(models.Asset, asset_id) is None:
         raise HTTPException(404, "Varlık bulunamadı")

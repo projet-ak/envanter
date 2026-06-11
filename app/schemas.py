@@ -6,7 +6,13 @@ import datetime as dt
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models import ActivityAction, AssignedType, CategoryType, StatusType
+from app.models import (
+    ActivityAction,
+    AssignedType,
+    CategoryType,
+    StatusType,
+    UserRole,
+)
 
 
 class ORMModel(BaseModel):
@@ -362,3 +368,25 @@ class SearchResponse(BaseModel):
     count: int
     results: list[AssetRead]
     used_ai: bool
+
+
+# --------------------------------------------------------------------------- #
+# Kimlik doğrulama
+# --------------------------------------------------------------------------- #
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AuthUser(ORMModel):
+    id: int
+    username: str | None = None
+    first_name: str
+    last_name: str | None = None
+    role: UserRole
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: AuthUser

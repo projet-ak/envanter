@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     # Veritabanı
     database_url: str = "sqlite:///./envanter.db"
 
+    # Kimlik doğrulama (JWT)
+    # ÜRETİMDE mutlaka değiştir! (örn: `openssl rand -hex 32`)
+    secret_key: str = "dev-insecure-change-me-0123456789abcdef-please-set-SECRET_KEY"
+    access_token_expire_minutes: int = 480  # 8 saat
+    jwt_algorithm: str = "HS256"
+
     # Claude / Anthropic
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-4-8"

@@ -72,6 +72,12 @@ class AssignedType(str, enum.Enum):
     asset = "asset"
 
 
+class UserRole(str, enum.Enum):
+    admin = "admin"    # Her şey + kullanıcı yönetimi
+    editor = "editor"  # Okuma + yazma
+    viewer = "viewer"  # Sadece okuma
+
+
 class ActivityAction(str, enum.Enum):
     create = "create"
     update = "update"
@@ -177,6 +183,10 @@ class User(Base, TimestampMixin, ExternalMixin):
     manager_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     notes: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Kimlik doğrulama (giriş yapabilen kullanıcılar için)
+    password_hash: Mapped[str | None] = mapped_column(String(255))
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.viewer)
 
     location: Mapped[Location | None] = relationship()
     manager: Mapped[User | None] = relationship(remote_side="User.id")

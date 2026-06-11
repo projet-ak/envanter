@@ -30,12 +30,38 @@ cp .env.example .env        # ayarları düzenle
 uvicorn app.main:app --reload
 ```
 
+İlk yönetici kullanıcıyı oluştur (giriş için gerekir):
+
+```bash
+python scripts/create_admin.py --username admin --password "GucluParola"
+```
+
 - Web arayüzü: <http://localhost:8000/ui/>
 - API dokümanı: <http://localhost:8000/docs>
 - Sağlık kontrolü: <http://localhost:8000/health>
 
-> ⚠️ Web arayüzünde henüz kimlik doğrulama yok. Giriş (JWT) eklenene kadar
-> uygulamayı yalnızca yerel/özel ağda çalıştır.
+## Kimlik doğrulama ve roller
+
+Giriş JWT ile yapılır. Üç rol vardır:
+
+| Rol | Yetki |
+|---|---|
+| `admin` | Her şey + kullanıcı yönetimi |
+| `editor` | Okuma + yazma (ekle/güncelle/sil, zimmet) |
+| `viewer` | Sadece okuma |
+
+```bash
+# Giriş → token al
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"GucluParola"}'
+# Korumalı uca istek
+curl http://localhost:8000/assets -H "Authorization: Bearer <TOKEN>"
+```
+
+> ⚠️ Üretimde `SECRET_KEY`'i mutlaka ayarla (`openssl rand -hex 32`). Snipe-IT'ten
+> içe aktarılan kullanıcılar parolasız gelir (giriş yapamaz); birini yönetici
+> yapmak için `create_admin.py`'yi o kullanıcı adıyla çalıştır.
 
 ## PostgreSQL (önerilen, üretim)
 
@@ -137,9 +163,9 @@ gerçek Snipe-IT gerektirmeden) kapsar.
 ## Yol haritası
 
 - [x] Alembic göçleri (üretimde `create_all` yerine)
-- [x] Basit web arayüzü (`/ui/`)
+- [x] Basit web arayüzü (`/ui/`) — giriş ekranı dahil
 - [x] Otomatik testler (pytest)
-- [ ] Kimlik doğrulama + rol/izin (JWT) — **sıradaki adım**
+- [x] Kimlik doğrulama + rol/izin (JWT: admin/editor/viewer)
 - [ ] Aksesuar / sarf malzeme / lisans / bileşen türleri (model bunlara hazır)
 - [ ] Fatura/irsaliye görselinden otomatik varlık çıkarımı (Claude vision)
 - [ ] CSV içe/dışa aktarım
@@ -151,6 +177,7 @@ app/
   main.py            # FastAPI uygulaması
   config.py          # Ayarlar (.env)
   database.py        # DB bağlantısı/oturum
+  auth.py            # JWT + parola hash + rol bağımlılıkları
   models.py          # ORM modelleri (tüm varlıklar)
   schemas.py         # Pydantic şemaları
   crud_factory.py    # Referans tabloları için jenerik CRUD
@@ -161,5 +188,6 @@ app/
 alembic/             # Veritabanı göçleri
 scripts/
   import_snipeit.py  # Snipe-IT'ten veri taşıma
-tests/               # pytest (API + içe aktarım)
+  create_admin.py    # Admin kullanıcı oluştur/yükselt
+tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```

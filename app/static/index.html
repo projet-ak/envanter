@@ -10,9 +10,10 @@
     * { box-sizing: border-box; }
     body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--txt); }
     header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex;
-             align-items:baseline; gap:12px; }
+             align-items:center; gap:12px; }
     header h1 { margin:0; font-size:20px; }
     header .sub { color:var(--mut); font-size:13px; }
+    header .spacer { flex:1; }
     main { max-width:1100px; margin:0 auto; padding:24px; }
     .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
              padding:16px; margin-bottom:20px; }
@@ -31,60 +32,135 @@
     .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; }
     .tag.free { background:#064e3b; color:var(--ok); }
     .tag.used { background:#78350f; color:var(--warn); }
+    .tag.role { background:#1e3a5f; color:var(--acc); }
     .muted { color:var(--mut); }
     .note { font-size:13px; color:var(--mut); margin-top:8px; }
     .pill { background:#0b1220; border:1px solid var(--line); border-radius:6px;
             padding:2px 8px; font-size:12px; color:var(--acc); }
     a { color:var(--acc); }
+    /* Giriş ekranı */
+    #login { position:fixed; inset:0; background:var(--bg); display:flex;
+             align-items:center; justify-content:center; }
+    #login .box { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+                  padding:28px; width:320px; }
+    #login h1 { margin:0 0 4px; font-size:22px; }
+    #login p { margin:0 0 18px; color:var(--mut); font-size:13px; }
+    #login input { width:100%; margin-bottom:10px; }
+    #login button { width:100%; }
+    #loginErr { color:var(--err); font-size:13px; min-height:18px; margin-top:6px; }
+    .hidden { display:none !important; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>📦 Envanter</h1>
-    <span class="sub">BT envanter yönetimi · <a href="/docs">API dokümanı</a></span>
-  </header>
+  <!-- Giriş ekranı -->
+  <div id="login">
+    <div class="box">
+      <h1>📦 Envanter</h1>
+      <p>Devam etmek için giriş yap</p>
+      <input id="lu" placeholder="Kullanıcı adı" autocomplete="username"
+             onkeydown="if(event.key==='Enter')login()" />
+      <input id="lp" type="password" placeholder="Parola" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')login()" />
+      <button onclick="login()">Giriş</button>
+      <div id="loginErr"></div>
+    </div>
+  </div>
 
-  <main>
-    <div class="panel">
-      <h2>Doğal dil arama</h2>
-      <div class="row">
-        <input id="q" class="grow" placeholder="örn: depodaki boştaki Dell laptoplar"
-               onkeydown="if(event.key==='Enter')doSearch()" />
-        <button onclick="doSearch()">Ara</button>
-        <button class="ghost" onclick="loadAssets()">Tümünü göster</button>
+  <!-- Uygulama -->
+  <div id="app" class="hidden">
+    <header>
+      <h1>📦 Envanter</h1>
+      <span class="sub"><a href="/docs">API dokümanı</a></span>
+      <span class="spacer"></span>
+      <span class="sub" id="who"></span>
+      <button class="ghost" onclick="logout()">Çıkış</button>
+    </header>
+
+    <main>
+      <div class="panel">
+        <h2>Doğal dil arama</h2>
+        <div class="row">
+          <input id="q" class="grow" placeholder="örn: depodaki boştaki Dell laptoplar"
+                 onkeydown="if(event.key==='Enter')doSearch()" />
+          <button onclick="doSearch()">Ara</button>
+          <button class="ghost" onclick="loadAssets()">Tümünü göster</button>
+        </div>
+        <div id="searchInfo" class="note"></div>
       </div>
-      <div id="searchInfo" class="note"></div>
-    </div>
 
-    <div class="panel">
-      <h2>Hızlı varlık ekle</h2>
-      <div class="row">
-        <input id="newTag" placeholder="Etiket (örn. BT-0001)" />
-        <input id="newName" class="grow" placeholder="Ad" />
-        <input id="newSerial" placeholder="Seri no" />
-        <button onclick="addAsset()">Ekle</button>
+      <div class="panel" id="addPanel">
+        <h2>Hızlı varlık ekle</h2>
+        <div class="row">
+          <input id="newTag" placeholder="Etiket (örn. BT-0001)" />
+          <input id="newName" class="grow" placeholder="Ad" />
+          <input id="newSerial" placeholder="Seri no" />
+          <button onclick="addAsset()">Ekle</button>
+        </div>
+        <div id="addInfo" class="note"></div>
       </div>
-      <div id="addInfo" class="note"></div>
-    </div>
 
-    <div class="panel">
-      <h2>Varlıklar (<span id="count">0</span>)</h2>
-      <table>
-        <thead>
-          <tr><th>Etiket</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </main>
+      <div class="panel">
+        <h2>Varlıklar (<span id="count">0</span>)</h2>
+        <table>
+          <thead>
+            <tr><th>Etiket</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
 
   <script>
-    const api = (p, opt) => fetch(p, opt).then(r => r.ok ? r.json() : r.json().then(e => Promise.reject(e)));
+    let token = localStorage.getItem('token') || '';
+    let me = JSON.parse(localStorage.getItem('me') || 'null');
     let statusMap = {};
+    const canWrite = () => me && (me.role === 'admin' || me.role === 'editor');
 
-    async function loadStatuses() {
+    async function api(path, opt = {}) {
+      opt.headers = Object.assign({ 'Authorization': `Bearer ${token}` }, opt.headers || {});
+      const r = await fetch(path, opt);
+      if (r.status === 401) { logout(); throw { detail: 'Oturum süresi doldu' }; }
+      if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
+      return r.status === 204 ? null : r.json();
+    }
+
+    async function login() {
+      const username = document.getElementById('lu').value.trim();
+      const password = document.getElementById('lp').value;
+      try {
+        const r = await fetch('/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        if (!r.ok) throw 0;
+        const data = await r.json();
+        token = data.access_token; me = data.user;
+        localStorage.setItem('token', token);
+        localStorage.setItem('me', JSON.stringify(me));
+        showApp();
+      } catch { document.getElementById('loginErr').textContent = 'Kullanıcı adı veya parola hatalı.'; }
+    }
+
+    function logout() {
+      token = ''; me = null;
+      localStorage.removeItem('token'); localStorage.removeItem('me');
+      document.getElementById('app').classList.add('hidden');
+      document.getElementById('login').classList.remove('hidden');
+    }
+
+    async function showApp() {
+      document.getElementById('login').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      document.getElementById('who').textContent = (me.username || me.first_name) + ' ';
+      const role = document.createElement('span');
+      document.getElementById('who').innerHTML =
+        `${me.username || me.first_name} <span class="tag role">${me.role}</span>`;
+      // viewer ise yazma alanlarını gizle
+      document.getElementById('addPanel').classList.toggle('hidden', !canWrite());
       const s = await api('/status-labels');
       statusMap = Object.fromEntries(s.map(x => [x.id, x.name]));
+      loadAssets();
     }
 
     function render(assets) {
@@ -95,9 +171,12 @@
         const assigned = a.assigned_type
           ? `<span class="tag used">zimmetli</span>`
           : `<span class="tag free">boşta</span>`;
-        const btn = a.assigned_type
-          ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
-          : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
+        let btn = '';
+        if (canWrite()) {
+          btn = a.assigned_type
+            ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
+            : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
+        }
         const tr = document.createElement('tr');
         tr.innerHTML = `<td><b>${a.asset_tag}</b></td>
           <td>${a.name ?? '<span class="muted">—</span>'}</td>
@@ -124,7 +203,7 @@
       const f = res.interpreted_filter;
       const used = res.used_ai ? '🤖 Claude yorumladı' : '🔤 metin araması';
       const parts = Object.entries(f).filter(([k, v]) =>
-        v !== null && v !== false && !['limit'].includes(k)).map(([k, v]) => `${k}=${v}`);
+        v !== null && v !== false && k !== 'limit').map(([k, v]) => `${k}=${v}`);
       document.getElementById('searchInfo').innerHTML =
         `${used} · <span class="pill">${parts.join(' · ') || 'filtre yok'}</span> · ${res.count} sonuç`;
       render(res.results);
@@ -147,7 +226,7 @@
     }
 
     async function checkoutPrompt(id) {
-      const uid = prompt('Zimmetlenecek kullanıcı ID (boş bırakma):');
+      const uid = prompt('Zimmetlenecek kullanıcı ID:');
       if (!uid) return;
       try {
         await api(`/assets/${id}/checkout`, { method: 'POST',
@@ -165,7 +244,13 @@
       } catch (e) { alert('⚠ ' + (e.detail || 'Hata')); }
     }
 
-    (async () => { await loadStatuses(); await loadAssets(); })();
+    // Açılış: token varsa doğrula, yoksa giriş ekranı
+    (async () => {
+      if (token && me) {
+        try { await api('/auth/me'); showApp(); }
+        catch { logout(); }
+      }
+    })();
   </script>
 </body>
 </html>
