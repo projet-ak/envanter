@@ -181,8 +181,8 @@ gerçek Snipe-IT gerektirmeden) kapsar.
 - [x] Kimlik doğrulama + rol/izin (JWT: admin/editor/viewer)
 - [x] Aksesuar / sarf malzeme / lisans / bileşen türleri
 - [x] CSV içe/dışa aktarım (varlıklar)
+- [x] Web arayüzünde diğer varlık türleri için ekranlar (sekmeli + düşük stok uyarısı)
 - [ ] Fatura/irsaliye görselinden otomatik varlık çıkarımı (Claude vision)
-- [ ] Web arayüzünde diğer varlık türleri için ekranlar
 
 ## Proje yapısı
 

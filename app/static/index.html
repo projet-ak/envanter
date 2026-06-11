@@ -14,6 +14,11 @@
     header h1 { margin:0; font-size:20px; }
     header .sub { color:var(--mut); font-size:13px; }
     header .spacer { flex:1; }
+    nav { display:flex; gap:4px; padding:0 24px; border-bottom:1px solid var(--line);
+          background:#0b1220; flex-wrap:wrap; }
+    nav button { background:none; border:none; color:var(--mut); padding:12px 16px;
+                 cursor:pointer; font:inherit; border-bottom:2px solid transparent; }
+    nav button.active { color:var(--acc); border-bottom-color:var(--acc); font-weight:600; }
     main { max-width:1100px; margin:0 auto; padding:24px; }
     .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
              padding:16px; margin-bottom:20px; }
@@ -21,11 +26,11 @@
                 letter-spacing:.05em; }
     input, select, button { font:inherit; padding:8px 10px; border-radius:7px;
                             border:1px solid var(--line); background:#0b1220; color:var(--txt); }
-    button { background:var(--acc); color:#03263a; border:none; cursor:pointer; font-weight:600; }
-    button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); font-weight:400; }
+    button.primary { background:var(--acc); color:#03263a; border:none; cursor:pointer; font-weight:600; }
+    button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); cursor:pointer; }
     button:hover { opacity:.9; }
     .row { display:flex; gap:8px; flex-wrap:wrap; }
-    .grow { flex:1; min-width:180px; }
+    .grow { flex:1; min-width:160px; }
     table { width:100%; border-collapse:collapse; font-size:14px; }
     th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
     th { color:var(--mut); font-weight:600; }
@@ -33,12 +38,12 @@
     .tag.free { background:#064e3b; color:var(--ok); }
     .tag.used { background:#78350f; color:var(--warn); }
     .tag.role { background:#1e3a5f; color:var(--acc); }
+    .tag.low { background:#7f1d1d; color:var(--err); }
     .muted { color:var(--mut); }
     .note { font-size:13px; color:var(--mut); margin-top:8px; }
     .pill { background:#0b1220; border:1px solid var(--line); border-radius:6px;
             padding:2px 8px; font-size:12px; color:var(--acc); }
     a { color:var(--acc); }
-    /* Giriş ekranı */
     #login { position:fixed; inset:0; background:var(--bg); display:flex;
              align-items:center; justify-content:center; }
     #login .box { background:var(--panel); border:1px solid var(--line); border-radius:12px;
@@ -52,7 +57,6 @@
   </style>
 </head>
 <body>
-  <!-- Giriş ekranı -->
   <div id="login">
     <div class="box">
       <h1>📦 Envanter</h1>
@@ -61,12 +65,11 @@
              onkeydown="if(event.key==='Enter')login()" />
       <input id="lp" type="password" placeholder="Parola" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')login()" />
-      <button onclick="login()">Giriş</button>
+      <button class="primary" onclick="login()">Giriş</button>
       <div id="loginErr"></div>
     </div>
   </div>
 
-  <!-- Uygulama -->
   <div id="app" class="hidden">
     <header>
       <h1>📦 Envanter</h1>
@@ -75,47 +78,36 @@
       <span class="sub" id="who"></span>
       <button class="ghost" onclick="logout()">Çıkış</button>
     </header>
-
-    <main>
-      <div class="panel">
-        <h2>Doğal dil arama</h2>
-        <div class="row">
-          <input id="q" class="grow" placeholder="örn: depodaki boştaki Dell laptoplar"
-                 onkeydown="if(event.key==='Enter')doSearch()" />
-          <button onclick="doSearch()">Ara</button>
-          <button class="ghost" onclick="loadAssets()">Tümünü göster</button>
-        </div>
-        <div id="searchInfo" class="note"></div>
-      </div>
-
-      <div class="panel" id="addPanel">
-        <h2>Hızlı varlık ekle</h2>
-        <div class="row">
-          <input id="newTag" placeholder="Etiket (örn. BT-0001)" />
-          <input id="newName" class="grow" placeholder="Ad" />
-          <input id="newSerial" placeholder="Seri no" />
-          <button onclick="addAsset()">Ekle</button>
-        </div>
-        <div id="addInfo" class="note"></div>
-      </div>
-
-      <div class="panel">
-        <h2>Varlıklar (<span id="count">0</span>)</h2>
-        <table>
-          <thead>
-            <tr><th>Etiket</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-    </main>
+    <nav id="tabs"></nav>
+    <main id="view"></main>
   </div>
 
   <script>
     let token = localStorage.getItem('token') || '';
     let me = JSON.parse(localStorage.getItem('me') || 'null');
     let statusMap = {};
+    let activeTab = 'assets';
     const canWrite = () => me && (me.role === 'admin' || me.role === 'editor');
+
+    // Adet bazlı türlerin yapılandırması (veri-odaklı arayüz)
+    const STOCK = {
+      accessories: { label: 'Aksesuarlar', endpoint: '/accessories',
+        cols: [['name','Ad'],['model_number','Model No'],['qty','Adet'],['min_qty','Min']],
+        add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
+        lowStock: true },
+      consumables: { label: 'Sarf Malzeme', endpoint: '/consumables',
+        cols: [['name','Ad'],['qty','Adet'],['min_qty','Min']],
+        add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
+        lowStock: true },
+      components: { label: 'Bileşenler', endpoint: '/components',
+        cols: [['name','Ad'],['serial','Seri'],['qty','Adet'],['min_qty','Min']],
+        add: [['name','Ad','text'],['serial','Seri','text'],['qty','Adet','number'],['min_qty','Min','number']],
+        lowStock: true },
+      licenses: { label: 'Lisanslar', endpoint: '/licenses',
+        cols: [['name','Ad'],['seats','Koltuk'],['license_key','Anahtar'],['expiration_date','Bitiş']],
+        add: [['name','Ad','text'],['seats','Koltuk','number'],['license_key','Anahtar','text']],
+        lowStock: false },
+    };
 
     async function api(path, opt = {}) {
       opt.headers = Object.assign({ 'Authorization': `Bearer ${token}` }, opt.headers || {});
@@ -152,82 +144,109 @@
     async function showApp() {
       document.getElementById('login').classList.add('hidden');
       document.getElementById('app').classList.remove('hidden');
-      document.getElementById('who').textContent = (me.username || me.first_name) + ' ';
-      const role = document.createElement('span');
       document.getElementById('who').innerHTML =
         `${me.username || me.first_name} <span class="tag role">${me.role}</span>`;
-      // viewer ise yazma alanlarını gizle
-      document.getElementById('addPanel').classList.toggle('hidden', !canWrite());
+      buildTabs();
       const s = await api('/status-labels');
       statusMap = Object.fromEntries(s.map(x => [x.id, x.name]));
+      selectTab('assets');
+    }
+
+    function buildTabs() {
+      const tabs = [['assets', 'Varlıklar'], ...Object.entries(STOCK).map(([k, v]) => [k, v.label])];
+      document.getElementById('tabs').innerHTML = tabs.map(([k, label]) =>
+        `<button data-tab="${k}" onclick="selectTab('${k}')">${label}</button>`).join('');
+    }
+
+    function selectTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('#tabs button').forEach(b =>
+        b.classList.toggle('active', b.dataset.tab === tab));
+      if (tab === 'assets') renderAssetsView();
+      else renderStockView(tab);
+    }
+
+    const esc = (v) => v == null ? '<span class="muted">—</span>' : String(v);
+
+    // ---------- Varlıklar ----------
+    function renderAssetsView() {
+      document.getElementById('view').innerHTML = `
+        <div class="panel">
+          <h2>Doğal dil arama</h2>
+          <div class="row">
+            <input id="q" class="grow" placeholder="örn: depodaki boştaki Dell laptoplar"
+                   onkeydown="if(event.key==='Enter')doSearch()" />
+            <button class="primary" onclick="doSearch()">Ara</button>
+            <button class="ghost" onclick="loadAssets()">Tümünü göster</button>
+            <a class="pill" href="/io/assets.csv" onclick="downloadCsv(event)">CSV indir</a>
+          </div>
+          <div id="searchInfo" class="note"></div>
+        </div>
+        ${canWrite() ? `<div class="panel">
+          <h2>Hızlı varlık ekle</h2>
+          <div class="row">
+            <input id="newTag" placeholder="Etiket (örn. BT-0001)" />
+            <input id="newName" class="grow" placeholder="Ad" />
+            <input id="newSerial" placeholder="Seri no" />
+            <button class="primary" onclick="addAsset()">Ekle</button>
+          </div>
+          <div id="addInfo" class="note"></div>
+        </div>` : ''}
+        <div class="panel">
+          <h2>Varlıklar (<span id="count">0</span>)</h2>
+          <table><thead><tr><th>Etiket</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr></thead>
+          <tbody id="rows"></tbody></table>
+        </div>`;
       loadAssets();
     }
 
-    function render(assets) {
+    function renderAssets(assets) {
       document.getElementById('count').textContent = assets.length;
-      const tbody = document.getElementById('rows');
-      tbody.innerHTML = '';
-      for (const a of assets) {
+      document.getElementById('rows').innerHTML = assets.map(a => {
         const assigned = a.assigned_type
-          ? `<span class="tag used">zimmetli</span>`
-          : `<span class="tag free">boşta</span>`;
+          ? `<span class="tag used">zimmetli</span>` : `<span class="tag free">boşta</span>`;
         let btn = '';
-        if (canWrite()) {
-          btn = a.assigned_type
-            ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
-            : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
-        }
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td><b>${a.asset_tag}</b></td>
-          <td>${a.name ?? '<span class="muted">—</span>'}</td>
-          <td class="muted">${a.serial ?? '—'}</td>
-          <td>${statusMap[a.status_id] ?? '<span class="muted">—</span>'}</td>
-          <td>${assigned}</td>
-          <td>${btn}</td>`;
-        tbody.appendChild(tr);
-      }
+        if (canWrite()) btn = a.assigned_type
+          ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
+          : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
+        return `<tr><td><b>${a.asset_tag}</b></td><td>${esc(a.name)}</td>
+          <td class="muted">${esc(a.serial)}</td><td>${esc(statusMap[a.status_id])}</td>
+          <td>${assigned}</td><td>${btn}</td></tr>`;
+      }).join('');
     }
 
     async function loadAssets() {
-      document.getElementById('searchInfo').textContent = '';
-      render(await api('/assets?limit=200'));
+      const info = document.getElementById('searchInfo'); if (info) info.textContent = '';
+      renderAssets(await api('/assets?limit=200'));
     }
 
     async function doSearch() {
       const q = document.getElementById('q').value.trim();
       if (!q) return loadAssets();
-      const res = await api('/search', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q })
-      });
+      const res = await api('/search', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q }) });
       const f = res.interpreted_filter;
       const used = res.used_ai ? '🤖 Claude yorumladı' : '🔤 metin araması';
-      const parts = Object.entries(f).filter(([k, v]) =>
-        v !== null && v !== false && k !== 'limit').map(([k, v]) => `${k}=${v}`);
+      const parts = Object.entries(f).filter(([k, v]) => v !== null && v !== false && k !== 'limit')
+        .map(([k, v]) => `${k}=${v}`);
       document.getElementById('searchInfo').innerHTML =
         `${used} · <span class="pill">${parts.join(' · ') || 'filtre yok'}</span> · ${res.count} sonuç`;
-      render(res.results);
+      renderAssets(res.results);
     }
 
     async function addAsset() {
-      const body = {
-        asset_tag: newTag.value.trim(),
-        name: newName.value.trim() || null,
-        serial: newSerial.value.trim() || null,
-      };
+      const body = { asset_tag: newTag.value.trim(), name: newName.value.trim() || null,
+                     serial: newSerial.value.trim() || null };
       if (!body.asset_tag) { addInfo.textContent = 'Etiket zorunlu.'; return; }
       try {
         await api('/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body) });
-        newTag.value = newName.value = newSerial.value = '';
-        addInfo.textContent = '✓ Eklendi.';
-        loadAssets();
+        addInfo.textContent = '✓ Eklendi.'; loadAssets();
       } catch (e) { addInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
     }
 
     async function checkoutPrompt(id) {
-      const uid = prompt('Zimmetlenecek kullanıcı ID:');
-      if (!uid) return;
+      const uid = prompt('Zimmetlenecek kullanıcı ID:'); if (!uid) return;
       try {
         await api(`/assets/${id}/checkout`, { method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -244,12 +263,70 @@
       } catch (e) { alert('⚠ ' + (e.detail || 'Hata')); }
     }
 
-    // Açılış: token varsa doğrula, yoksa giriş ekranı
-    (async () => {
-      if (token && me) {
-        try { await api('/auth/me'); showApp(); }
-        catch { logout(); }
+    async function downloadCsv(ev) {
+      ev.preventDefault();
+      const blob = await (await fetch('/io/assets.csv',
+        { headers: { 'Authorization': `Bearer ${token}` } })).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'varliklar.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ---------- Adet bazlı türler (genel) ----------
+    function renderStockView(tab) {
+      const cfg = STOCK[tab];
+      const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('');
+      const addForm = canWrite() ? `<div class="panel">
+        <h2>${cfg.label} — hızlı ekle</h2>
+        <div class="row">
+          ${cfg.add.map(([k, l, t]) =>
+            `<input id="f_${k}" type="${t}" placeholder="${l}" class="${k === 'name' ? 'grow' : ''}" />`).join('')}
+          <button class="primary" onclick="addStock('${tab}')">Ekle</button>
+        </div>
+        <div id="stockInfo" class="note"></div>
+      </div>` : '';
+      document.getElementById('view').innerHTML = `${addForm}
+        <div class="panel">
+          <h2>${cfg.label} (<span id="scount">0</span>)</h2>
+          <table><thead><tr>${head}</tr></thead><tbody id="srows"></tbody></table>
+        </div>`;
+      loadStock(tab);
+    }
+
+    async function loadStock(tab) {
+      const cfg = STOCK[tab];
+      const items = await api(cfg.endpoint + '?limit=500');
+      document.getElementById('scount').textContent = items.length;
+      document.getElementById('srows').innerHTML = items.map(it => {
+        const low = cfg.lowStock && it.min_qty != null && it.qty != null && it.qty <= it.min_qty;
+        const cells = cfg.cols.map(([k]) => {
+          let v = esc(it[k]);
+          if (k === 'qty' && low) v = `${it[k]} <span class="tag low">düşük stok</span>`;
+          return `<td>${v}</td>`;
+        }).join('');
+        return `<tr>${cells}</tr>`;
+      }).join('');
+    }
+
+    async function addStock(tab) {
+      const cfg = STOCK[tab];
+      const body = {};
+      for (const [k, , t] of cfg.add) {
+        const el = document.getElementById('f_' + k);
+        let v = el.value.trim();
+        if (v === '') continue;
+        body[k] = t === 'number' ? Number(v) : v;
       }
+      if (!body.name) { stockInfo.textContent = 'Ad zorunlu.'; return; }
+      try {
+        await api(cfg.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body) });
+        stockInfo.textContent = '✓ Eklendi.'; loadStock(tab);
+      } catch (e) { stockInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
+    }
+
+    (async () => {
+      if (token && me) { try { await api('/auth/me'); showApp(); } catch { logout(); } }
     })();
   </script>
 </body>
