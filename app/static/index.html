@@ -170,6 +170,7 @@
     function buildTabs() {
       const tabs = [['dashboard', 'Özet'], ['assets', 'Varlıklar'],
                     ...Object.entries(STOCK).map(([k, v]) => [k, v.label])];
+      if (canWrite()) tabs.push(['invoice', 'Fatura Oku']);
       document.getElementById('tabs').innerHTML = tabs.map(([k, label]) =>
         `<button data-tab="${k}" onclick="selectTab('${k}')">${label}</button>`).join('');
     }
@@ -180,7 +181,108 @@
         b.classList.toggle('active', b.dataset.tab === tab));
       if (tab === 'dashboard') renderDashboard();
       else if (tab === 'assets') renderAssetsView();
+      else if (tab === 'invoice') renderInvoiceView();
       else renderStockView(tab);
+    }
+
+    // ---------- Fatura okuma (Claude vision) ----------
+    let invoiceData = null;
+
+    function renderInvoiceView() {
+      document.getElementById('view').innerHTML = `
+        <div class="panel">
+          <h2>Fatura / irsaliye oku</h2>
+          <p class="note" style="margin-top:0">
+            Fatura fotoğrafını veya PDF'ini yükle; Claude kalemleri çıkarsın.
+            <b>Onaylamadan hiçbir şey kaydedilmez.</b></p>
+          <div class="row">
+            <input type="file" id="invFile" accept="image/*,application/pdf" class="grow" />
+            <button class="primary" onclick="readInvoice()">Oku</button>
+          </div>
+          <div id="invInfo" class="note"></div>
+        </div>
+        <div id="invResult"></div>`;
+    }
+
+    async function readInvoice() {
+      const f = document.getElementById('invFile').files[0];
+      const info = document.getElementById('invInfo');
+      if (!f) { info.textContent = 'Önce bir dosya seç.'; return; }
+      info.textContent = '⏳ Fatura okunuyor, bu birkaç saniye sürebilir…';
+      document.getElementById('invResult').innerHTML = '';
+      const fd = new FormData(); fd.append('file', f);
+      try {
+        const r = await fetch('/invoices/oku', {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
+        invoiceData = await r.json();
+        info.innerHTML = `✓ Okundu — <b>${invoiceData.kalemler.length}</b> kalem bulundu. ` +
+          `Kontrol edip onayla.`;
+        renderInvoiceLines();
+      } catch (e) {
+        info.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Okunamadı'}</span>`;
+      }
+    }
+
+    function renderInvoiceLines() {
+      const d = invoiceData;
+      const rows = d.kalemler.map((k, i) => `<tr>
+        <td><input type="checkbox" id="k_ok_${i}" checked /></td>
+        <td><input id="k_ad_${i}" value="${(k.ad || '').replace(/"/g, '&quot;')}" class="grow" /></td>
+        <td><input id="k_adet_${i}" type="number" min="1" value="${k.adet || 1}" style="width:70px" /></td>
+        <td><input id="k_fiyat_${i}" type="number" step="0.01" value="${k.birim_fiyat ?? ''}" style="width:110px" /></td>
+        <td><input id="k_pre_${i}" value="BT" style="width:70px" title="Etiket ön eki" /></td>
+        <td class="muted">${k.kategori ?? '—'}</td></tr>`).join('');
+
+      document.getElementById('invResult').innerHTML = `
+        <div class="panel">
+          <h2>Fatura bilgileri</h2>
+          <div class="row">
+            <input id="inv_no" value="${d.fatura_no ?? ''}" placeholder="Fatura no" />
+            <input id="inv_date" type="date" value="${d.fatura_tarihi ?? ''}" />
+            <input id="inv_sup" value="${d.tedarikci ?? ''}" placeholder="Tedarikçi" class="grow" disabled />
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Kalemler (${d.kalemler.length})</h2>
+          <table><thead><tr><th></th><th>Ürün</th><th>Adet</th><th>Birim fiyat</th>
+            <th>Etiket ön eki</th><th>Kategori</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+          <div class="row" style="margin-top:12px">
+            <button class="primary" onclick="importInvoice()">Onayla ve envantere ekle</button>
+            <button class="ghost" onclick="renderInvoiceView()">Vazgeç</button>
+          </div>
+          <div id="invImportInfo" class="note"></div>
+        </div>`;
+    }
+
+    async function importInvoice() {
+      const kalemler = [];
+      invoiceData.kalemler.forEach((k, i) => {
+        if (!document.getElementById(`k_ok_${i}`).checked) return;
+        const fiyat = document.getElementById(`k_fiyat_${i}`).value;
+        kalemler.push({
+          ad: document.getElementById(`k_ad_${i}`).value.trim(),
+          adet: Number(document.getElementById(`k_adet_${i}`).value) || 1,
+          birim_fiyat: fiyat === '' ? null : Number(fiyat),
+          seri_no: k.seri_no || null,
+          asset_tag_prefix: document.getElementById(`k_pre_${i}`).value.trim() || 'BT',
+        });
+      });
+      const info = document.getElementById('invImportInfo');
+      if (!kalemler.length) { info.textContent = 'Hiç kalem seçilmedi.'; return; }
+      try {
+        const res = await api('/invoices/aktar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            kalemler,
+            fatura_no: document.getElementById('inv_no').value.trim() || null,
+            purchase_date: document.getElementById('inv_date').value || null,
+          })
+        });
+        info.innerHTML = `✓ <b>${res.eklenen}</b> varlık eklendi: ` +
+          res.varliklar.map(v => v.asset_tag).join(', ');
+      } catch (e) { info.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Hata'}</span>`; }
     }
 
     // ---------- Özet / dashboard ----------

@@ -212,6 +212,24 @@ Yanıt, Claude'un sorguyu nasıl yorumladığını (`interpreted_filter`) ve eş
 varlıkları döner. **Güvenlik:** Modele asla ham SQL yazdırılmaz; yalnızca
 yapısal bir filtre üretir, o da parametreli sorguya çevrilir.
 
+## Fatura / irsaliye okuma (Claude vision)
+
+Fatura fotoğrafını veya PDF'ini yükle; Claude ürün kalemlerini çıkarsın.
+**Onaylamadan hiçbir şey kaydedilmez** — kalemleri düzenleyip seçebilirsin.
+
+```bash
+POST /invoices/oku     # dosya yükle → kalemleri çıkar (önizleme, kaydetmez)
+POST /invoices/aktar   # onaylanan kalemleri envantere ekle
+```
+
+- Desteklenen biçimler: JPEG, PNG, GIF, WebP, PDF (en fazla 10 MB).
+- Hizmet/kargo/KDV satırları kalem olarak alınmaz; Türkçe sayı biçimi
+  (1.250,50) doğru ayrıştırılır.
+- Aktarımda her kalem **adet kadar ayrı varlık** oluşturur; etiketler
+  ön eke göre otomatik üretilir (NB-0001, NB-0002…) ve çakışma olmaz.
+- `ANTHROPIC_API_KEY` gerektirir; yoksa uç 503 döner (sistemin geri kalanı
+  etkilenmez).
+
 ## API uçları (özet)
 
 | Yöntem | Yol | Açıklama |
@@ -248,7 +266,8 @@ gerçek Snipe-IT gerektirmeden) kapsar.
 - [x] Aksesuar / sarf malzeme / lisans / bileşen türleri
 - [x] CSV içe/dışa aktarım (varlıklar)
 - [x] Web arayüzünde diğer varlık türleri için ekranlar (sekmeli + düşük stok uyarısı)
-- [ ] Fatura/irsaliye görselinden otomatik varlık çıkarımı (Claude vision)
+- [x] Fatura/irsaliye görselinden otomatik varlık çıkarımı (Claude vision)
+- [x] Raporlar / dashboard, barkod-QR etiket, zimmet tutanağı
 
 ## Proje yapısı
 

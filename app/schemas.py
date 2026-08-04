@@ -536,6 +536,54 @@ class SearchRequest(BaseModel):
     limit: int = Field(50, ge=1, le=500)
 
 
+# --------------------------------------------------------------------------- #
+# Fatura / irsaliye okuma (Claude vision)
+# --------------------------------------------------------------------------- #
+class InvoiceLine(BaseModel):
+    """Faturadan çıkarılan tek bir ürün kalemi."""
+
+    ad: str = Field(..., description="Ürün/cihaz adı")
+    marka: str | None = Field(None, description="Marka (Dell, HP, Apple...)")
+    model: str | None = Field(None, description="Model adı veya numarası")
+    adet: int = Field(1, ge=1, description="Kalem adedi")
+    seri_no: str | None = Field(None, description="Varsa seri numarası")
+    birim_fiyat: float | None = Field(None, description="KDV hariç birim fiyat")
+    kategori: str | None = Field(
+        None, description="Tahmini kategori: Dizüstü, Masaüstü, Monitör, Telefon vb."
+    )
+
+
+class InvoiceExtraction(BaseModel):
+    """Faturanın tamamından çıkarılan bilgiler."""
+
+    tedarikci: str | None = Field(None, description="Satıcı firma adı")
+    fatura_no: str | None = Field(None, description="Fatura / irsaliye numarası")
+    fatura_tarihi: dt.date | None = Field(None, description="Fatura tarihi")
+    para_birimi: str | None = Field(None, description="TRY, USD, EUR")
+    kalemler: list[InvoiceLine] = Field(default_factory=list)
+
+
+class InvoiceImportLine(BaseModel):
+    """Onaylanan kalemin envantere eklenme talebi."""
+
+    ad: str
+    adet: int = Field(1, ge=1, le=500)
+    seri_no: str | None = None
+    birim_fiyat: float | None = None
+    asset_tag_prefix: str | None = Field(
+        None, description="Etiket ön eki; boşsa otomatik üretilir"
+    )
+
+
+class InvoiceImportRequest(BaseModel):
+    kalemler: list[InvoiceImportLine]
+    fatura_no: str | None = None
+    purchase_date: dt.date | None = None
+    supplier_id: int | None = None
+    location_id: int | None = None
+    status_id: int | None = None
+
+
 class LabelRequest(BaseModel):
     """Toplu etiket üretimi isteği."""
 
