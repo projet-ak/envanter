@@ -18,7 +18,7 @@ set -euo pipefail
 PROJE_DIZIN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVIS_ADI="envanter"
 PORT="${PORT:-8901}"
-KOK_YOL="${KOK_YOL:-/envanet}"
+KOK_YOL="${KOK_YOL:-/envanter}"
 SERVIS_KULLANICI="${SERVIS_KULLANICI:-www}"
 
 renk() { printf "\033[1;36m%s\033[0m\n" "$*"; }
@@ -76,9 +76,9 @@ fi
 # --------------------------------------------------------------------------- #
 renk "→ 5/5  systemd servisi…"
 SERVIS_DOSYA="/etc/systemd/system/${SERVIS_ADI}.service"
-sed -e "s|/www/wwwroot/ernsaha.com.tr/envanet|${PROJE_DIZIN}|g" \
+sed -e "s|/www/wwwroot/ernsaha.com.tr/envanter|${PROJE_DIZIN}|g" \
     -e "s|--port 8901|--port ${PORT}|" \
-    -e "s|--root-path /envanet|--root-path ${KOK_YOL}|" \
+    -e "s|--root-path /envanter|--root-path ${KOK_YOL}|" \
     -e "s|^User=.*|User=${SERVIS_KULLANICI}|" \
     -e "s|^Group=.*|Group=${SERVIS_KULLANICI}|" \
     "${PROJE_DIZIN}/deploy/envanter.service" > "$SERVIS_DOSYA"
@@ -110,7 +110,7 @@ Sıradaki adımlar:
        ./.venv/bin/python scripts/create_admin.py --username admin --password 'GucluParola'
 
   2) aaPanel → Website → ernsaha.com.tr → Config'e şu dosyanın içeriğini ekle:
-       ${PROJE_DIZIN}/deploy/nginx-envanet.conf
+       ${PROJE_DIZIN}/deploy/nginx-envanter.conf
 
   3) Tarayıcıdan aç:
        https://ernsaha.com.tr${KOK_YOL}/ui/

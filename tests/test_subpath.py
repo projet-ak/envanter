@@ -1,4 +1,4 @@
-"""Alt klasörde yayın (root_path, örn. /envanet) testleri."""
+"""Alt klasörde yayın (root_path, örn. /envanter) testleri."""
 
 from fastapi.testclient import TestClient
 
@@ -10,23 +10,23 @@ def test_root_redirects_to_ui(client):
 
 
 def test_root_redirect_respects_root_path(_app_db):
-    """Alt klasörde çalışırken yönlendirme /envanet/ui/ olmalı."""
+    """Alt klasörde çalışırken yönlendirme /envanter/ui/ olmalı."""
     from app.main import app
 
-    with TestClient(app, root_path="/envanet") as c:
+    with TestClient(app, root_path="/envanter") as c:
         r = c.get("/", follow_redirects=False)
         assert r.status_code == 307
-        assert r.headers["location"] == "/envanet/ui/"
+        assert r.headers["location"] == "/envanter/ui/"
 
 
 def test_openapi_served_under_root_path(_app_db):
     """OpenAPI şeması alt klasör bilgisiyle üretilmeli (Swagger için)."""
     from app.main import app
 
-    with TestClient(app, root_path="/envanet") as c:
+    with TestClient(app, root_path="/envanter") as c:
         schema = c.get("/openapi.json").json()
         servers = schema.get("servers", [])
-        assert any(s.get("url", "").rstrip("/") == "/envanet" for s in servers), servers
+        assert any(s.get("url", "").rstrip("/") == "/envanter" for s in servers), servers
 
 
 def test_ui_uses_relative_base():

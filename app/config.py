@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     # Kurum bilgileri (zimmet fişi / raporlarda görünür)
     org_name: str = "Kurum Adı"
 
-    # Alt klasörde yayınlanıyorsa (örn. https://site.com/envanet/) buraya
-    # "/envanet" yaz. Kök dizinde çalışıyorsa boş bırak.
+    # Alt klasörde yayınlanıyorsa (örn. https://site.com/envanter/) buraya
+    # "/envanter" yaz. Kök dizinde çalışıyorsa boş bırak.
     root_path: str = ""
 
     # Kimlik doğrulama (JWT)

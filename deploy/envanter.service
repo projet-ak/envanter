@@ -16,19 +16,19 @@ Wants=postgresql.service
 Type=simple
 User=www
 Group=www
-WorkingDirectory=/www/wwwroot/ernsaha.com.tr/envanet
+WorkingDirectory=/www/wwwroot/ernsaha.com.tr/envanter
 
 # Ortam değişkenleri .env dosyasından okunur
-EnvironmentFile=/www/wwwroot/ernsaha.com.tr/envanet/.env
+EnvironmentFile=/www/wwwroot/ernsaha.com.tr/envanter/.env
 
 # 4 çekirdek için 4 worker uygundur (2*çekirdek+1 yerine bellek dostu seçim)
-ExecStart=/www/wwwroot/ernsaha.com.tr/envanet/.venv/bin/uvicorn app.main:app \
+ExecStart=/www/wwwroot/ernsaha.com.tr/envanter/.venv/bin/uvicorn app.main:app \
     --host 127.0.0.1 \
     --port 8901 \
     --workers 4 \
     --proxy-headers \
     --forwarded-allow-ips=127.0.0.1 \
-    --root-path /envanet
+    --root-path /envanter
 
 Restart=always
 RestartSec=5

@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-PROJE_DIZIN="${PROJE_DIZIN:-/www/wwwroot/ernsaha.com.tr/envanet}"
+PROJE_DIZIN="${PROJE_DIZIN:-/www/wwwroot/ernsaha.com.tr/envanter}"
 YEDEK_DIZIN="${YEDEK_DIZIN:-/www/backup/envanter}"
 SAKLAMA_GUN="${SAKLAMA_GUN:-30}"
 

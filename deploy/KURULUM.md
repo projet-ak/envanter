@@ -1,13 +1,13 @@
 # Sunucu Kurulumu — aaPanel / Ubuntu VPS
 
-Hedef: uygulamayı **https://ernsaha.com.tr/envanet/** adresinde yayınlamak.
+Hedef: uygulamayı **https://ernsaha.com.tr/envanter/** adresinde yayınlamak.
 
 Ortam: Ubuntu 26.04 LTS, Python 3.12, aaPanel, 16 GB RAM, 4 çekirdek.
 
 Mimari:
 
 ```
-Tarayıcı → Nginx (aaPanel, 443) → /envanet → 127.0.0.1:8901 (uvicorn, 4 worker)
+Tarayıcı → Nginx (aaPanel, 443) → /envanter → 127.0.0.1:8901 (uvicorn, 4 worker)
                                                      ↓
                                               PostgreSQL
 ```
@@ -25,8 +25,8 @@ SSH ile bağlan:
 ssh root@ernsaha.com.tr
 mkdir -p /www/wwwroot/ernsaha.com.tr
 cd /www/wwwroot/ernsaha.com.tr
-git clone <REPO_ADRESI> envanet
-cd envanet
+git clone <REPO_ADRESI> envanter
+cd envanter
 ```
 
 > Git yoksa: `apt install -y git`
@@ -52,7 +52,7 @@ SQL
 ## 3. Otomatik kurulumu çalıştır
 
 ```bash
-cd /www/wwwroot/ernsaha.com.tr/envanet
+cd /www/wwwroot/ernsaha.com.tr/envanter
 sudo bash deploy/kurulum.sh
 ```
 
@@ -63,13 +63,13 @@ göçleri, systemd servisi.
 **Sonra `.env` dosyasını düzenle:**
 
 ```bash
-nano /www/wwwroot/ernsaha.com.tr/envanet/.env
+nano /www/wwwroot/ernsaha.com.tr/envanter/.env
 ```
 
 ```ini
 DATABASE_URL=postgresql+psycopg2://envanter:PAROLA@localhost:5432/envanter
 ORG_NAME=Ernsaha A.Ş.
-ROOT_PATH=/envanet
+ROOT_PATH=/envanter
 SECRET_KEY=<script otomatik doldurdu, değiştirme>
 ANTHROPIC_API_KEY=      # fatura okuma + doğal dil arama için (isteğe bağlı)
 ```
@@ -86,11 +86,11 @@ sudo systemctl restart envanter
 
 aaPanel → **Website** → `ernsaha.com.tr` → **Config** (Yapılandırma).
 
-Açılan `server { ... }` bloğunun **içine**, `deploy/nginx-envanet.conf`
+Açılan `server { ... }` bloğunun **içine**, `deploy/nginx-envanter.conf`
 dosyasındaki `location` bloklarını yapıştır → **Save**.
 
 > ⚠️ `proxy_pass http://127.0.0.1:8901;` satırının sonunda **eğik çizgi yok**.
-> Eğik çizgi eklersen Nginx `/envanet` ön ekini kırpar ve bağlantılar bozulur.
+> Eğik çizgi eklersen Nginx `/envanter` ön ekini kırpar ve bağlantılar bozulur.
 
 Nginx'i yenile:
 
@@ -103,11 +103,11 @@ nginx -t && systemctl reload nginx
 ## 5. Yönetici kullanıcı oluştur
 
 ```bash
-cd /www/wwwroot/ernsaha.com.tr/envanet
+cd /www/wwwroot/ernsaha.com.tr/envanter
 ./.venv/bin/python scripts/create_admin.py --username admin --password 'GucluParola'
 ```
 
-Artık **https://ernsaha.com.tr/envanet/ui/** adresinden giriş yapabilirsin.
+Artık **https://ernsaha.com.tr/envanter/ui/** adresinden giriş yapabilirsin.
 
 ---
 
@@ -138,7 +138,7 @@ gunzip -c /www/backup/envanter/envanter_2026-06-11_0300.dump.gz \
 ## 7. Snipe-IT verisini taşı
 
 ```bash
-cd /www/wwwroot/ernsaha.com.tr/envanet
+cd /www/wwwroot/ernsaha.com.tr/envanter
 nano .env      # SNIPEIT_URL ve SNIPEIT_TOKEN ekle
 
 # Önce güvenli deneme (hiçbir şey yazmaz):

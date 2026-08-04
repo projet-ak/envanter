@@ -125,10 +125,10 @@
         lowStock: false },
     };
 
-    // Uygulama alt klasörde de yayınlanabilir (örn. https://site.com/envanet/).
+    // Uygulama alt klasörde de yayınlanabilir (örn. https://site.com/envanter/).
     // Arayüz /ui/ altında sunulduğu için, taban yolu adresten türetiyoruz:
-    //   /ui/          -> ''            (kök dizin)
-    //   /envanet/ui/  -> '/envanet'    (alt klasör)
+    //   /ui/           -> ''           (kök dizin)
+    //   /envanter/ui/  -> '/envanter'  (alt klasör)
     const BASE = window.location.pathname.replace(/\/ui\/?$/, '');
     const url = (path) => BASE + path;
 

@@ -39,7 +39,7 @@ app = FastAPI(
     description="Esnek, stabil BT envanter yönetim sistemi (Snipe-IT alternatifi).",
     version=__version__,
     lifespan=lifespan,
-    # Alt klasörde yayın (örn. /envanet) için; uvicorn --root-path ile de verilebilir.
+    # Alt klasörde yayın (örn. /envanter) için; uvicorn --root-path ile de verilebilir.
     root_path=settings.root_path.rstrip("/"),
 )
 
@@ -56,7 +56,7 @@ app.include_router(invoices.router)
 
 @app.get("/", include_in_schema=False)
 def root(request: Request):
-    # Alt klasörde yayınlanırken doğru hedefe yönlendir (örn. /envanet/ui/)
+    # Alt klasörde yayınlanırken doğru hedefe yönlendir (örn. /envanter/ui/)
     prefix = request.scope.get("root_path", "").rstrip("/")
     return RedirectResponse(url=f"{prefix}/ui/")
 
