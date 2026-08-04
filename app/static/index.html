@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Envanter</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
   <style>
     :root { --bg:#0f172a; --panel:#1e293b; --line:#334155; --txt:#e2e8f0;
             --mut:#94a3b8; --acc:#38bdf8; --ok:#34d399; --warn:#fbbf24; --err:#f87171; }
@@ -88,7 +89,7 @@
   <div id="app" class="hidden">
     <header>
       <h1>📦 Envanter</h1>
-      <span class="sub"><a href="/docs">API dokümanı</a></span>
+      <span class="sub"><a id="docsLink" href="docs">API dokümanı</a></span>
       <span class="spacer"></span>
       <span class="sub" id="who"></span>
       <button class="ghost" onclick="logout()">Çıkış</button>
@@ -124,9 +125,22 @@
         lowStock: false },
     };
 
+    // Uygulama alt klasörde de yayınlanabilir (örn. https://site.com/envanet/).
+    // Arayüz /ui/ altında sunulduğu için, taban yolu adresten türetiyoruz:
+    //   /ui/          -> ''            (kök dizin)
+    //   /envanet/ui/  -> '/envanet'    (alt klasör)
+    const BASE = window.location.pathname.replace(/\/ui\/?$/, '');
+    const url = (path) => BASE + path;
+
+    // API dokümanı bağlantısını taban yola göre ayarla
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById('docsLink');
+      if (el) el.href = (BASE || '') + '/docs';
+    });
+
     async function api(path, opt = {}) {
       opt.headers = Object.assign({ 'Authorization': `Bearer ${token}` }, opt.headers || {});
-      const r = await fetch(path, opt);
+      const r = await fetch(url(path), opt);
       if (r.status === 401) { logout(); throw { detail: 'Oturum süresi doldu' }; }
       if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
       return r.status === 204 ? null : r.json();
@@ -136,7 +150,7 @@
       const username = document.getElementById('lu').value.trim();
       const password = document.getElementById('lp').value;
       try {
-        const r = await fetch('/auth/login', {
+        const r = await fetch(url('/auth/login'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
         });
@@ -212,7 +226,7 @@
       document.getElementById('invResult').innerHTML = '';
       const fd = new FormData(); fd.append('file', f);
       try {
-        const r = await fetch('/invoices/oku', {
+        const r = await fetch(url('/invoices/oku'), {
           method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
         if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
         invoiceData = await r.json();
@@ -375,7 +389,7 @@
                    onkeydown="if(event.key==='Enter')doSearch()" />
             <button class="primary" onclick="doSearch()">Ara</button>
             <button class="ghost" onclick="loadAssets()">Tümünü göster</button>
-            <a class="pill" href="/io/assets.csv" onclick="downloadCsv(event)">CSV indir</a>
+            <a class="pill" href="#" onclick="downloadCsv(event)">CSV indir</a>
           </div>
           <div id="searchInfo" class="note"></div>
         </div>
@@ -493,7 +507,7 @@
       const assets = await api('/assets?limit=500');
       if (!assets.length) return alert('Etiket basılacak varlık yok.');
       try {
-        const r = await fetch('/documents/etiketler.pdf', {
+        const r = await fetch(url('/documents/etiketler.pdf'), {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ asset_ids: assets.map(a => a.id) })
@@ -508,7 +522,7 @@
     // Korumalı PDF uçlarını token ile açar (yeni sekmede gösterir)
     async function openPdf(path) {
       try {
-        const r = await fetch(path, { headers: { 'Authorization': `Bearer ${token}` } });
+        const r = await fetch(url(path), { headers: { 'Authorization': `Bearer ${token}` } });
         if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
         const url = URL.createObjectURL(await r.blob());
         window.open(url, '_blank');
@@ -518,7 +532,7 @@
 
     async function downloadCsv(ev) {
       ev.preventDefault();
-      const blob = await (await fetch('/io/assets.csv',
+      const blob = await (await fetch(url('/io/assets.csv'),
         { headers: { 'Authorization': `Bearer ${token}` } })).blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = 'varliklar.csv'; a.click();

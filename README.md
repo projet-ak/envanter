@@ -63,6 +63,35 @@ curl http://localhost:8000/assets -H "Authorization: Bearer <TOKEN>"
 > içe aktarılan kullanıcılar parolasız gelir (giriş yapamaz); birini yönetici
 > yapmak için `create_admin.py`'yi o kullanıcı adıyla çalıştır.
 
+## Sunucuya kurulum (VPS / aaPanel)
+
+Uygulamayı kendi sunucunda yayınlamak için: **[deploy/KURULUM.md](deploy/KURULUM.md)**
+
+Kısaca:
+
+```bash
+git clone <repo> /www/wwwroot/ernsaha.com.tr/envanet
+cd /www/wwwroot/ernsaha.com.tr/envanet
+sudo bash deploy/kurulum.sh          # paketler, venv, .env, göçler, systemd
+nano .env                            # DATABASE_URL, ORG_NAME, ANTHROPIC_API_KEY
+sudo systemctl restart envanter
+```
+
+Sonra aaPanel → Website → Config'e `deploy/nginx-envanet.conf` içeriğini ekle.
+
+| Dosya | İşlev |
+|---|---|
+| `deploy/kurulum.sh` | Tek komutla kurulum (tekrar çalıştırılabilir) |
+| `deploy/envanter.service` | systemd servisi (4 worker, otomatik yeniden başlatma) |
+| `deploy/nginx-envanet.conf` | Nginx alt klasör (`/envanet`) vekil ayarı |
+| `deploy/yedek.sh` | Günlük otomatik veritabanı yedeği (cron ile) |
+
+### Alt klasörde yayın
+
+Uygulama alt klasörde çalışabilir (örn. `https://site.com/envanet/`):
+`.env` içinde `ROOT_PATH=/envanet` yeter — arayüz API adreslerini kendi
+bulunduğu yoldan türetir, ek ayar gerekmez.
+
 ## PostgreSQL (önerilen, üretim)
 
 ```bash

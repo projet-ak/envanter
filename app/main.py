@@ -3,7 +3,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -39,6 +39,8 @@ app = FastAPI(
     description="Esnek, stabil BT envanter yönetim sistemi (Snipe-IT alternatifi).",
     version=__version__,
     lifespan=lifespan,
+    # Alt klasörde yayın (örn. /envanet) için; uvicorn --root-path ile de verilebilir.
+    root_path=settings.root_path.rstrip("/"),
 )
 
 app.include_router(auth.router)
@@ -53,8 +55,10 @@ app.include_router(invoices.router)
 
 
 @app.get("/", include_in_schema=False)
-def root():
-    return RedirectResponse(url="/ui/")
+def root(request: Request):
+    # Alt klasörde yayınlanırken doğru hedefe yönlendir (örn. /envanet/ui/)
+    prefix = request.scope.get("root_path", "").rstrip("/")
+    return RedirectResponse(url=f"{prefix}/ui/")
 
 
 @app.get("/health", tags=["Sistem"])

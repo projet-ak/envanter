@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     # Kurum bilgileri (zimmet fişi / raporlarda görünür)
     org_name: str = "Kurum Adı"
 
+    # Alt klasörde yayınlanıyorsa (örn. https://site.com/envanet/) buraya
+    # "/envanet" yaz. Kök dizinde çalışıyorsa boş bırak.
+    root_path: str = ""
+
     # Kimlik doğrulama (JWT)
     # ÜRETİMDE mutlaka değiştir! (örn: `openssl rand -hex 32`)
     secret_key: str = "dev-insecure-change-me-0123456789abcdef-please-set-SECRET_KEY"
