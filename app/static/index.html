@@ -211,6 +211,9 @@
         if (canWrite()) btn = a.assigned_type
           ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
           : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
+        if (a.assigned_type === 'user')
+          btn += ` <button class="ghost" title="Zimmet fişi (PDF)"
+                     onclick="openPdf('/documents/zimmet/asset/${a.id}.pdf')">📄</button>`;
         return `<tr><td><b>${a.asset_tag}</b></td><td class="muted">${esc(a.demirbas_no)}</td>
           <td>${esc(a.name)}</td>
           <td class="muted">${esc(a.serial)}</td><td>${esc(statusMap[a.status_id])}</td>
@@ -266,6 +269,17 @@
           headers: { 'Content-Type': 'application/json' }, body: '{}' });
         loadAssets();
       } catch (e) { alert('⚠ ' + (e.detail || 'Hata')); }
+    }
+
+    // Korumalı PDF uçlarını token ile açar (yeni sekmede gösterir)
+    async function openPdf(path) {
+      try {
+        const r = await fetch(path, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
+        const url = URL.createObjectURL(await r.blob());
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) { alert('⚠ ' + (e.detail || 'PDF açılamadı')); }
     }
 
     async function downloadCsv(ev) {

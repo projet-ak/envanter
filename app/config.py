@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     # Veritabanı
     database_url: str = "sqlite:///./envanter.db"
 
+    # Kurum bilgileri (zimmet fişi / raporlarda görünür)
+    org_name: str = "Kurum Adı"
+
     # Kimlik doğrulama (JWT)
     # ÜRETİMDE mutlaka değiştir! (örn: `openssl rand -hex 32`)
     secret_key: str = "dev-insecure-change-me-0123456789abcdef-please-set-SECRET_KEY"

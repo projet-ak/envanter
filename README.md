@@ -146,6 +146,25 @@ alanlar (hepsi CSV içe/dışa aktarımda ve aramada desteklenir):
 Bunların dışında kalan her şey için `custom` (JSON) alanı var — şema
 değiştirmeden istediğin alanı ekleyebilirsin.
 
+## Zimmet / iade tutanağı (PDF)
+
+Personele cihaz teslim ederken imzalatılacak tutanağı sistem üretir — Türkçe
+karakterler gömülü fontla doğru basılır.
+
+```bash
+# Tek cihaz için zimmet fişi
+GET /documents/zimmet/asset/{asset_id}.pdf
+# Personele zimmetli tüm cihazlar tek tutanakta
+GET /documents/zimmet/user/{user_id}.pdf
+# İade tutanağı + not
+GET /documents/zimmet/user/{user_id}.pdf?doc_type=iade&note=Ekran%20çizik
+```
+
+Tutanakta: kurum başlığı (`ORG_NAME`), personel bilgileri (ad, sicil,
+departman, şube), cihaz tablosu (etiket, demirbaş no, seri, barkod), taahhüt
+metni, tarih ve **imza alanları** bulunur. Arayüzde zimmetli cihazın satırındaki
+📄 butonundan açılır.
+
 ## Doğal dil arama
 
 `ANTHROPIC_API_KEY` ayarlıysa, sorgular Claude ile yapısal filtreye çevrilir.
