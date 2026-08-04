@@ -22,9 +22,19 @@ COLUMNS = [
     "asset_tag", "name", "serial", "model_id", "status_id", "location_id",
     "supplier_id", "company_id", "purchase_date", "purchase_cost",
     "order_number", "warranty_months", "notes",
+    # Kuruma özel alanlar
+    "demirbas_no", "muhasebe_kodu", "fatura_no", "warranty_end",
+    "barkod", "imei", "mac_address", "ip_address", "hostname",
+    "telefon_no", "sim_no", "operator",
 ]
 _INT_FIELDS = {"model_id", "status_id", "location_id", "supplier_id",
                "company_id", "warranty_months"}
+_DATE_FIELDS = {"purchase_date", "warranty_end"}
+_TEXT_FIELDS = [
+    "name", "serial", "order_number", "notes", "demirbas_no", "muhasebe_kodu",
+    "fatura_no", "barkod", "imei", "mac_address", "ip_address", "hostname",
+    "telefon_no", "sim_no", "operator",
+]
 
 
 @router.get(
@@ -87,14 +97,13 @@ async def import_assets_csv(
             errors.append(f"Satır {i}: asset_tag boş")
             continue
 
-        values = {
-            "name": (row.get("name") or "").strip() or None,
-            "serial": (row.get("serial") or "").strip() or None,
-            "order_number": (row.get("order_number") or "").strip() or None,
-            "notes": (row.get("notes") or "").strip() or None,
-            "purchase_date": _to_date(row.get("purchase_date")),
-            "purchase_cost": _to_float(row.get("purchase_cost")),
-        }
+        values: dict = {"purchase_cost": _to_float(row.get("purchase_cost"))}
+        for field in _TEXT_FIELDS:
+            if field in row:
+                values[field] = (row.get(field) or "").strip() or None
+        for field in _DATE_FIELDS:
+            if field in row:
+                values[field] = _to_date(row.get(field))
         for field in _INT_FIELDS:
             if field in row:
                 values[field] = _to_int(row.get(field))

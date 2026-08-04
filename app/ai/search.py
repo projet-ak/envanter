@@ -34,6 +34,10 @@ Kurallar:
 - Marka adı (Dell, HP, Apple...) genelde 'manufacturer' alanıdır.
 - Model/cihaz türü adı 'model' veya serbest metin olabilir.
 - Göreli tarihleri ("geçen yıl", "2023'ten sonra") gerçek tarihe çevir.
+- Demirbaş no, barkod, IMEI, MAC adresi, hostname, telefon numarası gibi
+  tanımlayıcılar 'text' alanına yazılır (serbest metin araması bunları kapsar).
+- "garantisi biten/bitecek", "garanti süresi dolan" → warranty_expiring_before
+  alanına ilgili tarihi yaz (örn. "önümüzdeki ay bitenler" → bugünden 1 ay sonrası).
 """
 
 
@@ -92,6 +96,18 @@ def apply_filter(db: Session, f: SearchFilter):
             | models.Asset.serial.ilike(like)
             | models.Asset.name.ilike(like)
             | models.Asset.notes.ilike(like)
+            | models.Asset.demirbas_no.ilike(like)
+            | models.Asset.barkod.ilike(like)
+            | models.Asset.imei.ilike(like)
+            | models.Asset.mac_address.ilike(like)
+            | models.Asset.hostname.ilike(like)
+            | models.Asset.telefon_no.ilike(like)
+        )
+
+    if f.warranty_expiring_before:
+        stmt = stmt.where(
+            models.Asset.warranty_end.is_not(None),
+            models.Asset.warranty_end <= f.warranty_expiring_before,
         )
 
     if f.status:

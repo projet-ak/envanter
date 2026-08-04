@@ -131,6 +131,21 @@ bileşenler ve lisanslar**. Script birden çok kez çalıştırılabilir;
 | `--dry-run` | Yazmadan dener; her türden kaç kayıt aktarılacağını gösterir |
 | `--limit N` | Her türden en fazla N kayıt (hızlı deneme için) |
 
+## Kuruma özel alanlar
+
+Snipe-IT'in standart alanlarına ek olarak, kendi kullanımımıza göre eklenen
+alanlar (hepsi CSV içe/dışa aktarımda ve aramada desteklenir):
+
+| Grup | Alanlar |
+|---|---|
+| Demirbaş / muhasebe | `demirbas_no`, `muhasebe_kodu`, `fatura_no`, `warranty_end` |
+| Etiket / teknik | `barkod`, `imei`, `mac_address`, `ip_address`, `hostname` |
+| Telefon / hat | `telefon_no`, `sim_no`, `operator` |
+| Personel (kullanıcı) | `tckn`, `sube`, `telefon`, `ise_giris`, `employee_num`, `department` |
+
+Bunların dışında kalan her şey için `custom` (JSON) alanı var — şema
+değiştirmeden istediğin alanı ekleyebilirsin.
+
 ## Doğal dil arama
 
 `ANTHROPIC_API_KEY` ayarlıysa, sorgular Claude ile yapısal filtreye çevrilir.

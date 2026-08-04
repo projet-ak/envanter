@@ -188,13 +188,15 @@
             <input id="newTag" placeholder="Etiket (örn. BT-0001)" />
             <input id="newName" class="grow" placeholder="Ad" />
             <input id="newSerial" placeholder="Seri no" />
+            <input id="newDemirbas" placeholder="Demirbaş no" />
+            <input id="newBarkod" placeholder="Barkod" />
             <button class="primary" onclick="addAsset()">Ekle</button>
           </div>
           <div id="addInfo" class="note"></div>
         </div>` : ''}
         <div class="panel">
           <h2>Varlıklar (<span id="count">0</span>)</h2>
-          <table><thead><tr><th>Etiket</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr></thead>
+          <table><thead><tr><th>Etiket</th><th>Demirbaş</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr></thead>
           <tbody id="rows"></tbody></table>
         </div>`;
       loadAssets();
@@ -209,7 +211,8 @@
         if (canWrite()) btn = a.assigned_type
           ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
           : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
-        return `<tr><td><b>${a.asset_tag}</b></td><td>${esc(a.name)}</td>
+        return `<tr><td><b>${a.asset_tag}</b></td><td class="muted">${esc(a.demirbas_no)}</td>
+          <td>${esc(a.name)}</td>
           <td class="muted">${esc(a.serial)}</td><td>${esc(statusMap[a.status_id])}</td>
           <td>${assigned}</td><td>${btn}</td></tr>`;
       }).join('');
@@ -236,7 +239,9 @@
 
     async function addAsset() {
       const body = { asset_tag: newTag.value.trim(), name: newName.value.trim() || null,
-                     serial: newSerial.value.trim() || null };
+                     serial: newSerial.value.trim() || null,
+                     demirbas_no: newDemirbas.value.trim() || null,
+                     barkod: newBarkod.value.trim() || null };
       if (!body.asset_tag) { addInfo.textContent = 'Etiket zorunlu.'; return; }
       try {
         await api('/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' },

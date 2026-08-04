@@ -184,6 +184,12 @@ class User(Base, TimestampMixin, ExternalMixin):
     notes: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # --- Kuruma özel personel alanları ---
+    tckn: Mapped[str | None] = mapped_column(String(11), index=True)
+    sube: Mapped[str | None] = mapped_column(String(120))
+    telefon: Mapped[str | None] = mapped_column(String(40))
+    ise_giris: Mapped[dt.date | None] = mapped_column(Date)
+
     # Kimlik doğrulama (giriş yapabilen kullanıcılar için)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.viewer)
@@ -234,6 +240,24 @@ class Asset(Base, TimestampMixin, ExternalMixin):
     warranty_months: Mapped[int | None] = mapped_column(Integer)
     notes: Mapped[str | None] = mapped_column(Text)
     image_url: Mapped[str | None] = mapped_column(String(500))
+
+    # --- Kuruma özel: demirbaş / muhasebe ---
+    demirbas_no: Mapped[str | None] = mapped_column(String(120), index=True)
+    muhasebe_kodu: Mapped[str | None] = mapped_column(String(120))
+    fatura_no: Mapped[str | None] = mapped_column(String(120))
+    warranty_end: Mapped[dt.date | None] = mapped_column(Date, index=True)
+
+    # --- Etiketleme / teknik tanımlayıcılar ---
+    barkod: Mapped[str | None] = mapped_column(String(120), index=True)
+    imei: Mapped[str | None] = mapped_column(String(60), index=True)
+    mac_address: Mapped[str | None] = mapped_column(String(60), index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(60))
+    hostname: Mapped[str | None] = mapped_column(String(120))
+
+    # --- Telefon / hat ---
+    telefon_no: Mapped[str | None] = mapped_column(String(40))
+    sim_no: Mapped[str | None] = mapped_column(String(60))
+    operator: Mapped[str | None] = mapped_column(String(60))
 
     # Esnek özel alanlar (şema değiştirmeden alan ekle)
     custom: Mapped[dict] = mapped_column(JSON, default=dict)

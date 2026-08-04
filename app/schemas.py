@@ -178,6 +178,10 @@ class UserCreate(BaseModel):
     location_id: int | None = None
     manager_id: int | None = None
     notes: str | None = None
+    tckn: str | None = None
+    sube: str | None = None
+    telefon: str | None = None
+    ise_giris: dt.date | None = None
     active: bool = True
 
 
@@ -192,6 +196,10 @@ class UserUpdate(BaseModel):
     location_id: int | None = None
     manager_id: int | None = None
     notes: str | None = None
+    tckn: str | None = None
+    sube: str | None = None
+    telefon: str | None = None
+    ise_giris: dt.date | None = None
     active: bool | None = None
 
 
@@ -205,6 +213,11 @@ class UserRead(ORMModel):
     job_title: str | None = None
     department: str | None = None
     location_id: int | None = None
+    tckn: str | None = None
+    sube: str | None = None
+    telefon: str | None = None
+    ise_giris: dt.date | None = None
+    role: UserRole
     active: bool
 
 
@@ -254,6 +267,19 @@ class AssetBase(BaseModel):
     warranty_months: int | None = None
     notes: str | None = None
     image_url: str | None = None
+    # Kuruma özel alanlar
+    demirbas_no: str | None = None
+    muhasebe_kodu: str | None = None
+    fatura_no: str | None = None
+    warranty_end: dt.date | None = None
+    barkod: str | None = None
+    imei: str | None = None
+    mac_address: str | None = None
+    ip_address: str | None = None
+    hostname: str | None = None
+    telefon_no: str | None = None
+    sim_no: str | None = None
+    operator: str | None = None
     custom: dict = Field(default_factory=dict)
 
 
@@ -276,6 +302,19 @@ class AssetUpdate(BaseModel):
     warranty_months: int | None = None
     notes: str | None = None
     image_url: str | None = None
+    # Kuruma özel alanlar
+    demirbas_no: str | None = None
+    muhasebe_kodu: str | None = None
+    fatura_no: str | None = None
+    warranty_end: dt.date | None = None
+    barkod: str | None = None
+    imei: str | None = None
+    mac_address: str | None = None
+    ip_address: str | None = None
+    hostname: str | None = None
+    telefon_no: str | None = None
+    sim_no: str | None = None
+    operator: str | None = None
     custom: dict | None = None
 
 
@@ -295,6 +334,19 @@ class AssetRead(ORMModel):
     warranty_months: int | None = None
     notes: str | None = None
     image_url: str | None = None
+    # Kuruma özel alanlar
+    demirbas_no: str | None = None
+    muhasebe_kodu: str | None = None
+    fatura_no: str | None = None
+    warranty_end: dt.date | None = None
+    barkod: str | None = None
+    imei: str | None = None
+    mac_address: str | None = None
+    ip_address: str | None = None
+    hostname: str | None = None
+    telefon_no: str | None = None
+    sim_no: str | None = None
+    operator: str | None = None
     custom: dict = Field(default_factory=dict)
     assigned_type: AssignedType | None = None
     assigned_user_id: int | None = None
@@ -473,6 +525,9 @@ class SearchFilter(BaseModel):
     only_assigned: bool | None = Field(None, description="Sadece zimmetli varlıklar")
     purchased_after: dt.date | None = None
     purchased_before: dt.date | None = None
+    warranty_expiring_before: dt.date | None = Field(
+        None, description="Garantisi bu tarihten önce biten varlıklar"
+    )
     limit: int = Field(50, ge=1, le=500)
 
 
