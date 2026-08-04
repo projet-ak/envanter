@@ -10,9 +10,10 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import models
+from app import models, schemas
 from app.auth import get_current_user
 from app.database import get_db
+from app.pdf.etiket import labels_pdf, qr_png
 from app.pdf.zimmet import build_zimmet_pdf
 
 router = APIRouter(prefix="/documents", tags=["Belgeler"])
@@ -92,3 +93,66 @@ def zimmet_fisi_user(
     pdf = build_zimmet_pdf(assets=list(assets), user=user, doc_type=doc_type, note=note)
     ad = "-".join(filter(None, [user.first_name, user.last_name])) or str(user_id)
     return _pdf_response(pdf, f"{doc_type}-{ad}.pdf")
+
+
+# --------------------------------------------------------------------------- #
+# Barkod / QR etiketleri
+# --------------------------------------------------------------------------- #
+@router.get("/etiket/asset/{asset_id}.png",
+            dependencies=[Depends(get_current_user)])
+def qr_kod(asset_id: int, db: Session = Depends(get_db)):
+    """Varlık için tek QR kod görseli (PNG)."""
+    asset = db.get(models.Asset, asset_id)
+    if asset is None:
+        raise HTTPException(404, "Varlık bulunamadı")
+    data = asset.asset_tag or asset.demirbas_no or str(asset.id)
+    return Response(content=qr_png(data), media_type="image/png")
+
+
+@router.get("/etiket/asset/{asset_id}.pdf",
+            dependencies=[Depends(get_current_user)])
+def etiket_tek(asset_id: int, db: Session = Depends(get_db)):
+    """Tek varlık için yazdırılabilir etiket."""
+    asset = db.get(models.Asset, asset_id)
+    if asset is None:
+        raise HTTPException(404, "Varlık bulunamadı")
+    return _pdf_response(labels_pdf([asset]), f"etiket-{asset.asset_tag}.pdf")
+
+
+@router.post("/etiketler.pdf", dependencies=[Depends(get_current_user)])
+def etiket_toplu(payload: schemas.LabelRequest, db: Session = Depends(get_db)):
+    """Seçilen varlıklar için toplu etiket sayfası (A4, sayfa başına 24 etiket)."""
+    stmt = select(models.Asset)
+    if payload.asset_ids:
+        stmt = stmt.where(models.Asset.id.in_(payload.asset_ids))
+    if payload.location_id is not None:
+        stmt = stmt.where(models.Asset.location_id == payload.location_id)
+    assets = db.scalars(stmt.order_by(models.Asset.asset_tag).limit(500)).all()
+    if not assets:
+        raise HTTPException(404, "Etiket üretilecek varlık bulunamadı")
+
+    pdf = labels_pdf(list(assets), show_barcode=payload.show_barcode,
+                     start_offset=payload.start_offset)
+    return _pdf_response(pdf, "etiketler.pdf")
+
+
+@router.get("/tara", response_model=schemas.AssetRead,
+            dependencies=[Depends(get_current_user)])
+def barkod_tara(
+    kod: str = Query(..., min_length=1, description="Okutulan barkod/QR içeriği"),
+    db: Session = Depends(get_db),
+):
+    """Okutulan barkodu varlıkla eşleştirir (etiket, demirbaş, barkod, seri, IMEI)."""
+    kod = kod.strip()
+    asset = db.scalar(
+        select(models.Asset).where(
+            (models.Asset.asset_tag == kod)
+            | (models.Asset.demirbas_no == kod)
+            | (models.Asset.barkod == kod)
+            | (models.Asset.serial == kod)
+            | (models.Asset.imei == kod)
+        )
+    )
+    if asset is None:
+        raise HTTPException(404, f"'{kod}' ile eşleşen varlık bulunamadı")
+    return asset

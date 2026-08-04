@@ -172,6 +172,16 @@
     function renderAssetsView() {
       document.getElementById('view').innerHTML = `
         <div class="panel">
+          <h2>Barkod / QR okut</h2>
+          <div class="row">
+            <input id="scan" class="grow" placeholder="Barkod okuyucuyla okutun veya kodu yazıp Enter'a basın"
+                   onkeydown="if(event.key==='Enter')scanCode()" />
+            <button class="primary" onclick="scanCode()">Bul</button>
+            <button class="ghost" onclick="printLabels()">Etiket bas (tümü)</button>
+          </div>
+          <div id="scanInfo" class="note"></div>
+        </div>
+        <div class="panel">
           <h2>Doğal dil arama</h2>
           <div class="row">
             <input id="q" class="grow" placeholder="örn: depodaki boştaki Dell laptoplar"
@@ -214,6 +224,8 @@
         if (a.assigned_type === 'user')
           btn += ` <button class="ghost" title="Zimmet fişi (PDF)"
                      onclick="openPdf('/documents/zimmet/asset/${a.id}.pdf')">📄</button>`;
+        btn += ` <button class="ghost" title="Etiket bas (QR + barkod)"
+                   onclick="openPdf('/documents/etiket/asset/${a.id}.pdf')">🏷️</button>`;
         return `<tr><td><b>${a.asset_tag}</b></td><td class="muted">${esc(a.demirbas_no)}</td>
           <td>${esc(a.name)}</td>
           <td class="muted">${esc(a.serial)}</td><td>${esc(statusMap[a.status_id])}</td>
@@ -269,6 +281,41 @@
           headers: { 'Content-Type': 'application/json' }, body: '{}' });
         loadAssets();
       } catch (e) { alert('⚠ ' + (e.detail || 'Hata')); }
+    }
+
+    // Barkod/QR okutma — okuyucular genelde kodu yazıp Enter gönderir
+    async function scanCode() {
+      const el = document.getElementById('scan');
+      const kod = el.value.trim();
+      const info = document.getElementById('scanInfo');
+      if (!kod) return;
+      try {
+        const a = await api('/documents/tara?kod=' + encodeURIComponent(kod));
+        info.innerHTML = `✓ <b>${a.asset_tag}</b> — ${a.name ?? ''} ` +
+          `<span class="pill">${a.assigned_type ? 'zimmetli' : 'boşta'}</span>`;
+        renderAssets([a]);
+        document.getElementById('count').textContent = 1;
+      } catch (e) {
+        info.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Bulunamadı'}</span>`;
+      }
+      el.value = ''; el.focus();
+    }
+
+    // Listedeki tüm varlıklar için etiket sayfası
+    async function printLabels() {
+      const assets = await api('/assets?limit=500');
+      if (!assets.length) return alert('Etiket basılacak varlık yok.');
+      try {
+        const r = await fetch('/documents/etiketler.pdf', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asset_ids: assets.map(a => a.id) })
+        });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
+        const url = URL.createObjectURL(await r.blob());
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Etiket üretilemedi')); }
     }
 
     // Korumalı PDF uçlarını token ile açar (yeni sekmede gösterir)

@@ -165,6 +165,25 @@ departman, şube), cihaz tablosu (etiket, demirbaş no, seri, barkod), taahhüt
 metni, tarih ve **imza alanları** bulunur. Arayüzde zimmetli cihazın satırındaki
 📄 butonundan açılır.
 
+## Barkod / QR etiket
+
+Cihazlara yapıştırılacak etiketleri sistem üretir; okutunca cihaz anında bulunur.
+
+```bash
+GET  /documents/etiket/asset/{id}.png   # tek QR kod görseli
+GET  /documents/etiket/asset/{id}.pdf   # tek yazdırılabilir etiket
+POST /documents/etiketler.pdf           # toplu etiket sayfası (A4'te 24 etiket)
+GET  /documents/tara?kod=BT-0001        # okutulan kodu varlıkla eşleştir
+```
+
+Etikette: kurum adı, varlık etiketi, cihaz adı, demirbaş no, **QR kod** ve
+**Code128 barkod**. Toplu üretimde `asset_ids` veya `location_id` ile seçim,
+`start_offset` ile yarım kalmış etiket kağıdını kullanma desteği var.
+
+Okutma (`/documents/tara`) şu alanlarla eşleşir: varlık etiketi, demirbaş no,
+barkod, seri no, IMEI. Arayüzdeki "Barkod / QR okut" kutusuna el tipi okuyucuyla
+okutmak yeterli (okuyucu Enter gönderir, cihaz anında listelenir).
+
 ## Doğal dil arama
 
 `ANTHROPIC_API_KEY` ayarlıysa, sorgular Claude ile yapısal filtreye çevrilir.

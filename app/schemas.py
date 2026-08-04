@@ -536,6 +536,17 @@ class SearchRequest(BaseModel):
     limit: int = Field(50, ge=1, le=500)
 
 
+class LabelRequest(BaseModel):
+    """Toplu etiket üretimi isteği."""
+
+    asset_ids: list[int] = Field(default_factory=list,
+                                 description="Etiketi basılacak varlık id'leri")
+    location_id: int | None = Field(None, description="Lokasyondaki tüm varlıklar")
+    show_barcode: bool = Field(True, description="QR yanında Code128 barkod da bas")
+    start_offset: int = Field(0, ge=0, lt=24,
+                              description="Yarım kağıtta baştan atlanacak etiket sayısı")
+
+
 class SearchResponse(BaseModel):
     query: str
     interpreted_filter: SearchFilter
