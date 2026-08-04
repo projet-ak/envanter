@@ -11,8 +11,18 @@ from app.config import settings
 from app.database import Base
 
 config = context.config
-# URL'i .env'den (DATABASE_URL) al — alembic.ini'deki sabit değeri ezer.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+
+# URL önceliği:
+#   1) Programatik olarak verilen URL (testler: cfg.set_main_option(...))
+#   2) .env'deki DATABASE_URL
+# alembic.ini'deki şablon değer ("driver://...") yok sayılır.
+_ini_url = config.get_main_option("sqlalchemy.url", "") or ""
+if not _ini_url or _ini_url.startswith("driver://"):
+    config.set_main_option("sqlalchemy.url", settings.database_url)
+
+
+def _aktif_url() -> str:
+    return config.get_main_option("sqlalchemy.url") or settings.database_url
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -22,7 +32,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=_aktif_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

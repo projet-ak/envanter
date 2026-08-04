@@ -1,8 +1,19 @@
-"""Test fixtures — izole geçici sqlite + kimlik doğrulamalı istemciler."""
+"""Test fixtures — izole veritabanı + kimlik doğrulamalı istemciler.
+
+Varsayılan olarak geçici SQLite kullanılır (hızlı, kurulum gerektirmez).
+Üretimdeki PostgreSQL'e özgü hataları (ör. ENUM tipleri) yakalamak için
+testleri gerçek PostgreSQL'de de koşturabilirsin:
+
+    TEST_DATABASE_URL=postgresql+psycopg2://kullanici:parola@localhost/testdb \\
+    pytest
+"""
+
+import os
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app.auth import create_access_token, hash_password
@@ -11,11 +22,26 @@ from app.main import app
 from app.models import User, UserRole
 from app.seed import seed_defaults
 
+TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+
 
 @pytest.fixture
 def db_session_factory(tmp_path):
-    url = f"sqlite:///{tmp_path / 'test.db'}"
-    engine = create_engine(url, connect_args={"check_same_thread": False})
+    if TEST_DATABASE_URL:
+        # Her test kendi şemasında çalışsın (izolasyon + paralel koşuma uygun)
+        engine = create_engine(TEST_DATABASE_URL)
+        sema = f"t_{uuid.uuid4().hex[:12]}"
+        with engine.begin() as conn:
+            conn.execute(text(f'CREATE SCHEMA "{sema}"'))
+        engine.dispose()
+        engine = create_engine(
+            TEST_DATABASE_URL,
+            connect_args={"options": f"-csearch_path={sema}"},
+        )
+    else:
+        url = f"sqlite:///{tmp_path / 'test.db'}"
+        engine = create_engine(url, connect_args={"check_same_thread": False})
+
     Session = sessionmaker(bind=engine, autoflush=False)
     Base.metadata.create_all(engine)
     with Session() as db:
@@ -25,7 +51,16 @@ def db_session_factory(tmp_path):
         db.add(User(username="viewer", first_name="Viewer",
                     password_hash=hash_password("viewer-pass"), role=UserRole.viewer))
         db.commit()
-    return Session
+
+    yield Session
+
+    # PostgreSQL'de test şemasını temizle
+    if TEST_DATABASE_URL:
+        engine.dispose()
+        temiz = create_engine(TEST_DATABASE_URL)
+        with temiz.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA IF EXISTS "{sema}" CASCADE'))
+        temiz.dispose()
 
 
 @pytest.fixture

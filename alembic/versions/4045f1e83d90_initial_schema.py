@@ -279,4 +279,11 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_activity_logs_item_id'))
 
     op.drop_table('activity_logs')
-    # ### end Alembic commands ###
+
+    # PostgreSQL'de ENUM tipleri tablolardan bağımsız nesnelerdir; tablo
+    # silinince otomatik kalkmazlar. Temizlenmezse sonraki `upgrade`
+    # "type ... already exists" hatası verir.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        for tip in ("activityaction", "assignedtype", "statustype", "categorytype"):
+            sa.Enum(name=tip).drop(bind, checkfirst=True)
