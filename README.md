@@ -184,6 +184,19 @@ Okutma (`/documents/tara`) şu alanlarla eşleşir: varlık etiketi, demirbaş n
 barkod, seri no, IMEI. Arayüzdeki "Barkod / QR okut" kutusuna el tipi okuyucuyla
 okutmak yeterli (okuyucu Enter gönderir, cihaz anında listelenir).
 
+## Raporlar ve dashboard
+
+Arayüzdeki **Özet** sekmesi ve `/reports/*` uçları:
+
+| Uç | İçerik |
+|---|---|
+| `GET /reports/ozet` | Toplam varlık, zimmetli/boşta, toplam değer, personel/lisans sayıları |
+| `GET /reports/dagilim` | Kategori, lokasyon, üretici ve duruma göre dağılım |
+| `GET /reports/dusuk-stok` | Adedi minimumun altına düşen aksesuar/sarf/bileşenler |
+| `GET /reports/garanti?gun=90` | Garantisi biten/bitecek cihazlar (kalan gün ile) |
+| `GET /reports/personel-zimmet` | Personel başına zimmetli cihaz sayısı |
+| `GET /reports/lisans-kullanim` | Lisans koltukları ve süresi dolanlar |
+
 ## Doğal dil arama
 
 `ANTHROPIC_API_KEY` ayarlıysa, sorgular Claude ile yapısal filtreye çevrilir.

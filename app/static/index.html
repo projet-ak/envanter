@@ -54,6 +54,21 @@
     #login button { width:100%; }
     #loginErr { color:var(--err); font-size:13px; min-height:18px; margin-top:6px; }
     .hidden { display:none !important; }
+    /* Dashboard */
+    .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+             gap:12px; margin-bottom:20px; }
+    .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+            padding:14px 16px; }
+    .stat-v { font-size:24px; font-weight:700; color:var(--acc); }
+    .stat-l { font-size:12px; color:var(--mut); text-transform:uppercase;
+              letter-spacing:.05em; margin-top:2px; }
+    .two-col { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
+               gap:20px; }
+    .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:7px; font-size:13px; }
+    .bar-lbl { flex:0 0 40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .bar-track { flex:1; height:8px; background:#0b1220; border-radius:99px; overflow:hidden; }
+    .bar-fill { display:block; height:100%; background:var(--acc); border-radius:99px; }
+    .bar-num { flex:0 0 34px; text-align:right; color:var(--mut); }
   </style>
 </head>
 <body>
@@ -149,11 +164,12 @@
       buildTabs();
       const s = await api('/status-labels');
       statusMap = Object.fromEntries(s.map(x => [x.id, x.name]));
-      selectTab('assets');
+      selectTab('dashboard');
     }
 
     function buildTabs() {
-      const tabs = [['assets', 'Varlıklar'], ...Object.entries(STOCK).map(([k, v]) => [k, v.label])];
+      const tabs = [['dashboard', 'Özet'], ['assets', 'Varlıklar'],
+                    ...Object.entries(STOCK).map(([k, v]) => [k, v.label])];
       document.getElementById('tabs').innerHTML = tabs.map(([k, label]) =>
         `<button data-tab="${k}" onclick="selectTab('${k}')">${label}</button>`).join('');
     }
@@ -162,8 +178,77 @@
       activeTab = tab;
       document.querySelectorAll('#tabs button').forEach(b =>
         b.classList.toggle('active', b.dataset.tab === tab));
-      if (tab === 'assets') renderAssetsView();
+      if (tab === 'dashboard') renderDashboard();
+      else if (tab === 'assets') renderAssetsView();
       else renderStockView(tab);
+    }
+
+    // ---------- Özet / dashboard ----------
+    function statCard(label, value, extra = '') {
+      return `<div class="stat"><div class="stat-v">${value}</div>
+              <div class="stat-l">${label}</div>${extra}</div>`;
+    }
+
+    function barList(items, max) {
+      if (!items.length) return '<div class="muted">Kayıt yok</div>';
+      return items.slice(0, 8).map(x => {
+        const pct = max ? Math.round((x.adet / max) * 100) : 0;
+        return `<div class="bar-row"><span class="bar-lbl">${x.ad}</span>
+          <span class="bar-track"><span class="bar-fill" style="width:${pct}%"></span></span>
+          <span class="bar-num">${x.adet}</span></div>`;
+      }).join('');
+    }
+
+    async function renderDashboard() {
+      const view = document.getElementById('view');
+      view.innerHTML = '<div class="panel"><h2>Özet</h2><div class="muted">Yükleniyor…</div></div>';
+      const [ozet, dag, dusuk, garanti, personel] = await Promise.all([
+        api('/reports/ozet'), api('/reports/dagilim'), api('/reports/dusuk-stok'),
+        api('/reports/garanti?gun=90'), api('/reports/personel-zimmet'),
+      ]);
+      const tl = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY',
+        maximumFractionDigits: 0 }).format(ozet.toplam_deger || 0);
+      const maxK = Math.max(1, ...dag.kategori.map(x => x.adet));
+      const maxL = Math.max(1, ...dag.lokasyon.map(x => x.adet));
+
+      view.innerHTML = `
+        <div class="stats">
+          ${statCard('Toplam varlık', ozet.varlik_toplam)}
+          ${statCard('Zimmetli', ozet.zimmetli)}
+          ${statCard('Boşta', ozet.bosta)}
+          ${statCard('Toplam değer', tl)}
+          ${statCard('Personel', ozet.personel)}
+          ${statCard('Lisans', ozet.lisans)}
+        </div>
+        <div class="two-col">
+          <div class="panel"><h2>Kategoriye göre</h2>${barList(dag.kategori, maxK)}</div>
+          <div class="panel"><h2>Lokasyona göre</h2>${barList(dag.lokasyon, maxL)}</div>
+        </div>
+        <div class="panel">
+          <h2>Düşük stok (${dusuk.length})</h2>
+          ${dusuk.length ? `<table><thead><tr><th>Tür</th><th>Ad</th><th>Adet</th><th>Min</th></tr></thead>
+            <tbody>${dusuk.map(x => `<tr><td class="muted">${x.tur}</td><td>${x.ad}</td>
+              <td><span class="tag low">${x.adet}</span></td><td class="muted">${x.min}</td></tr>`).join('')}
+            </tbody></table>` : '<div class="muted">Kritik seviyede stok yok 👍</div>'}
+        </div>
+        <div class="panel">
+          <h2>Garantisi biten / bitecek (90 gün) — ${garanti.length}</h2>
+          ${garanti.length ? `<table><thead><tr><th>Etiket</th><th>Cihaz</th><th>Bitiş</th><th>Kalan</th></tr></thead>
+            <tbody>${garanti.slice(0, 15).map(x => `<tr><td><b>${x.asset_tag}</b></td>
+              <td>${x.ad ?? '<span class="muted">—</span>'}</td><td>${x.garanti_bitis}</td>
+              <td>${x.bitti ? '<span class="tag low">bitti</span>'
+                             : `<span class="muted">${x.kalan_gun} gün</span>`}</td></tr>`).join('')}
+            </tbody></table>` : '<div class="muted">Yaklaşan garanti bitişi yok</div>'}
+        </div>
+        <div class="panel">
+          <h2>Personel başına zimmet</h2>
+          ${personel.length ? `<table><thead><tr><th>Personel</th><th>Departman</th><th>Cihaz</th><th></th></tr></thead>
+            <tbody>${personel.slice(0, 15).map(x => `<tr><td>${x.ad}</td>
+              <td class="muted">${x.departman ?? '—'}</td><td>${x.cihaz_sayisi}</td>
+              <td><button class="ghost" title="Zimmet fişi (PDF)"
+                    onclick="openPdf('/documents/zimmet/user/${x.user_id}.pdf')">📄</button></td>
+              </tr>`).join('')}</tbody></table>` : '<div class="muted">Zimmetli cihaz yok</div>'}
+        </div>`;
     }
 
     const esc = (v) => v == null ? '<span class="muted">—</span>' : String(v);
