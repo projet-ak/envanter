@@ -84,6 +84,10 @@ sed -e "s|/www/wwwroot/ernsaha.com.tr/envanter|${PROJE_DIZIN}|g" \
     "${PROJE_DIZIN}/deploy/envanter.service" > "$SERVIS_DOSYA"
 
 chown -R "${SERVIS_KULLANICI}:${SERVIS_KULLANICI}" "$PROJE_DIZIN" 2>/dev/null || true
+# Sahiplik değişince git, root için "dubious ownership" hatası verir;
+# sonraki `git pull` çalışsın diye dizini güvenli listeye ekle.
+git config --global --add safe.directory "$PROJE_DIZIN" 2>/dev/null || true
+
 systemctl daemon-reload
 systemctl enable "$SERVIS_ADI" >/dev/null 2>&1
 systemctl restart "$SERVIS_ADI"

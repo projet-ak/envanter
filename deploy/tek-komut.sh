@@ -36,6 +36,9 @@ echo "   ✓ git, PostgreSQL hazır"
 
 # --------------------------------------------------------------------------- #
 renk "→ 2/6  Proje dosyaları"
+# Dizin servis kullanıcısına ait olabilir; git'in "dubious ownership"
+# hatası vermemesi için güvenli listeye ekle.
+git config --global --add safe.directory "$HEDEF" 2>/dev/null || true
 if [[ -d "$HEDEF/.git" ]]; then
     git -C "$HEDEF" fetch --quiet origin "$BRANCH"
     git -C "$HEDEF" checkout --quiet "$BRANCH"
