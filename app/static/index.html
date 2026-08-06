@@ -71,6 +71,30 @@
     .bar-track { flex:1; height:8px; background:#0b1220; border-radius:99px; overflow:hidden; }
     .bar-fill { display:block; height:100%; background:var(--acc); border-radius:99px; }
     .bar-num { flex:0 0 34px; text-align:right; color:var(--mut); }
+    /* Detay penceresi */
+    .modal-arka { position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:50;
+                  display:flex; align-items:flex-start; justify-content:center;
+                  padding:40px 16px; overflow:auto; }
+    .modal { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+             width:min(900px,100%); }
+    .modal-bas { display:flex; align-items:center; gap:12px; padding:16px 20px;
+                 border-bottom:1px solid var(--line); position:sticky; top:0;
+                 background:var(--panel); border-radius:12px 12px 0 0; }
+    .modal-bas h3 { margin:0; font-size:17px; flex:1; }
+    .modal-govde { padding:20px; }
+    .kapat { background:none; border:none; color:var(--mut); font-size:22px;
+             cursor:pointer; line-height:1; }
+    .alan-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+                 gap:10px 20px; }
+    .alan { display:flex; gap:8px; font-size:13.5px; padding:5px 0;
+            border-bottom:1px solid #24314a; }
+    .alan .et { color:var(--mut); flex:0 0 42%; }
+    .alan .dg { flex:1; word-break:break-word; }
+    .bolum { margin-top:20px; }
+    .bolum > h4 { margin:0 0 8px; font-size:13px; color:var(--acc);
+                  text-transform:uppercase; letter-spacing:.04em; }
+    tr.tikla { cursor:pointer; }
+    tr.tikla:hover { background:#243049; }
   </style>
 </head>
 <body>
@@ -211,6 +235,7 @@
                     ['personel', 'Personel'],
                     ...Object.entries(STOCK).map(([k, v]) => [k, v.label]),
                     ['tanimlar', 'Tanımlar']];
+      tabs.push(['excel', 'Excel']);
       if (canWrite()) tabs.push(['invoice', 'Fatura Oku']);
       document.getElementById('tabs').innerHTML = tabs.map(([k, label]) =>
         `<button data-tab="${k}" onclick="selectTab('${k}')">${label}</button>`).join('');
@@ -225,6 +250,7 @@
       else if (tab === 'invoice') renderInvoiceView();
       else if (tab === 'personel') renderPersonelView();
       else if (tab === 'tanimlar') renderTanimlarView();
+      else if (tab === 'excel') renderExcelView();
       else renderStockView(tab);
     }
 
@@ -272,7 +298,7 @@
         const fis = adet
           ? `<button class="ghost" title="Zimmet fişi (PDF)"
                onclick="openPdf('/documents/zimmet/user/${k.id}.pdf')">📄</button>` : '';
-        return `<tr>
+        return `<tr class="tikla" onclick="if(!event.target.closest('button'))kisiDetay(${k.id})">
           <td><b>${k.first_name} ${k.last_name ?? ''}</b></td>
           <td class="muted">${esc(k.employee_num)}</td>
           <td>${esc(k.department)}</td>
@@ -353,6 +379,128 @@
           headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         tanimInfo.textContent = '✓ Eklendi.'; loadTanim();
       } catch (e) { tanimInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
+    }
+
+    // ---------- Excel içe/dışa aktarım ----------
+    let excelVeri = null;
+
+    function renderExcelView() {
+      document.getElementById('view').innerHTML = `
+        <div class="panel">
+          <h2>Excel'den içe aktar</h2>
+          <p class="note" style="margin-top:0">
+            Kurum envanter dosyanı yükle. Önce önizleme gösterilir —
+            <b>onaylamadan hiçbir şey kaydedilmez.</b> Seri numarası eşleşen
+            cihazlar güncellenir, yeniler eklenir.</p>
+          ${canWrite() ? `<div class="row">
+            <input type="file" id="xlFile" accept=".xlsx,.xlsm" class="grow" />
+            <button class="primary" onclick="excelOku()">Önizle</button>
+          </div>
+          <div id="xlInfo" class="note"></div>`
+          : '<div class="muted">İçe aktarım için yazma yetkisi gerekir.</div>'}
+        </div>
+        <div class="panel">
+          <h2>Dışa aktar</h2>
+          <div class="row">
+            <button class="ghost" onclick="excelIndir('/excel/disa-aktar.xlsx','envanter.xlsx')">
+              📊 Tüm envanteri Excel indir</button>
+            <button class="ghost" onclick="excelIndir('/excel/sablon.xlsx','envanter-sablon.xlsx')">
+              📄 Boş şablon indir</button>
+            <button class="ghost" onclick="downloadCsv(event)">CSV indir</button>
+          </div>
+          <div class="note">Dışa aktarım, içe aktarımla aynı sütun düzenini kullanır —
+            indirip düzenleyip geri yükleyebilirsin.</div>
+        </div>
+        <div id="xlResult"></div>`;
+    }
+
+    async function excelIndir(yol, dosyaAdi) {
+      try {
+        const r = await fetch(url(yol), { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
+        const u = URL.createObjectURL(await r.blob());
+        const a = document.createElement('a'); a.href = u; a.download = dosyaAdi; a.click();
+        setTimeout(() => URL.revokeObjectURL(u), 30000);
+      } catch (e) { alert('⚠ ' + (e.detail || 'İndirilemedi')); }
+    }
+
+    async function excelOku() {
+      const f = document.getElementById('xlFile').files[0];
+      const bilgi = document.getElementById('xlInfo');
+      if (!f) { bilgi.textContent = 'Önce bir dosya seç.'; return; }
+      bilgi.textContent = '⏳ Dosya okunuyor…';
+      document.getElementById('xlResult').innerHTML = '';
+      const fd = new FormData(); fd.append('file', f);
+      try {
+        const r = await fetch(url('/excel/oku'), {
+          method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
+        excelVeri = await r.json();
+        bilgi.innerHTML = `✓ <b>${excelVeri.toplam}</b> satır okundu.`;
+        excelOnizle();
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Okunamadı'}</span>`;
+      }
+    }
+
+    function excelOnizle() {
+      const d = excelVeri;
+      const tipler = Object.entries(d.tipler)
+        .map(([t, n]) => `<span class="pill">${t}: <b>${n}</b></span>`).join(' ');
+      const uyarilar = (d.uyarilar || []).length
+        ? `<div class="panel" style="border-color:var(--warn)">
+             <h2>Uyarılar</h2>${d.uyarilar.map(u => `<div class="note">⚠ ${u}</div>`).join('')}
+           </div>` : '';
+      const ornek = d.ornekler.slice(0, 25).map(s => `<tr>
+        <td>${esc(s.asset_tag)}</td><td>${esc(s.cihaz_tipi)}</td>
+        <td>${esc([s.marka, s.model].filter(Boolean).join(' '))}</td>
+        <td class="muted">${esc(s.serial)}</td>
+        <td>${s.kullanici ? (s.kisi_mi ? s.kullanici
+             : `<span class="muted">${s.kullanici} (yer)</span>`) : '—'}</td>
+        <td class="muted">${Object.keys(s.ozellikler || {}).length} grup</td></tr>`).join('');
+
+      document.getElementById('xlResult').innerHTML = `
+        <div class="stats">
+          <div class="stat"><div class="stat-v">${d.toplam}</div>
+            <div class="stat-l">Satır</div></div>
+          <div class="stat"><div class="stat-v">${Object.keys(d.tipler).length}</div>
+            <div class="stat-l">Cihaz tipi</div></div>
+          <div class="stat"><div class="stat-v">${d.kisi_sayisi}</div>
+            <div class="stat-l">Kişi</div></div>
+        </div>
+        ${uyarilar}
+        <div class="panel"><h2>Cihaz tipleri</h2><div class="row">${tipler}</div></div>
+        <div class="panel">
+          <h2>Örnek satırlar (ilk 25)</h2>
+          <table><thead><tr><th>Cihaz NO</th><th>Tip</th><th>Marka/Model</th>
+            <th>Seri</th><th>Kullanıcı</th><th>Özellik</th></tr></thead>
+            <tbody>${ornek}</tbody></table>
+          <div class="row" style="margin-top:14px">
+            <button class="primary" onclick="excelAktar()">
+              ✓ Onayla ve ${d.toplam} satırı aktar</button>
+            <button class="ghost" onclick="renderExcelView()">Vazgeç</button>
+          </div>
+          <div id="xlAktarInfo" class="note"></div>
+        </div>`;
+    }
+
+    async function excelAktar() {
+      const bilgi = document.getElementById('xlAktarInfo');
+      bilgi.textContent = '⏳ Aktarılıyor, bu biraz sürebilir…';
+      try {
+        const r = await api('/excel/aktar', { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ satirlar: excelVeri.satirlar, guncelle: true }) });
+        bilgi.innerHTML = `✓ <b>${r.eklenen}</b> yeni cihaz eklendi, ` +
+          `<b>${r.guncellenen}</b> güncellendi` +
+          (r.atlanan ? `, <span style="color:var(--err)">${r.atlanan} atlandı</span>` : '') +
+          `. <a href="#" onclick="selectTab('assets');return false">Varlıklara git →</a>`;
+        if (r.hatalar?.length)
+          bilgi.innerHTML += '<br>' + r.hatalar.slice(0, 5)
+            .map(h => `<span class="muted">${h}</span>`).join('<br>');
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Aktarılamadı'}</span>`;
+      }
     }
 
     // ---------- Fatura okuma (Claude vision) ----------
@@ -506,7 +654,7 @@
         <div class="panel">
           <h2>Garantisi biten / bitecek (90 gün) — ${garanti.length}</h2>
           ${garanti.length ? `<table><thead><tr><th>Etiket</th><th>Cihaz</th><th>Bitiş</th><th>Kalan</th></tr></thead>
-            <tbody>${garanti.slice(0, 15).map(x => `<tr><td><b>${x.asset_tag}</b></td>
+            <tbody>${garanti.slice(0, 15).map(x => `<tr class="tikla" onclick="cihazDetay(${x.id})"><td><b>${x.asset_tag}</b></td>
               <td>${x.ad ?? '<span class="muted">—</span>'}</td><td>${x.garanti_bitis}</td>
               <td>${x.bitti ? '<span class="tag low">bitti</span>'
                              : `<span class="muted">${x.kalan_gun} gün</span>`}</td></tr>`).join('')}
@@ -515,7 +663,7 @@
         <div class="panel">
           <h2>Personel başına zimmet</h2>
           ${personel.length ? `<table><thead><tr><th>Personel</th><th>Departman</th><th>Cihaz</th><th></th></tr></thead>
-            <tbody>${personel.slice(0, 15).map(x => `<tr><td>${x.ad}</td>
+            <tbody>${personel.slice(0, 15).map(x => `<tr class="tikla" onclick="if(!event.target.closest('button'))kisiDetay(${x.user_id})"><td>${x.ad}</td>
               <td class="muted">${x.departman ?? '—'}</td><td>${x.cihaz_sayisi}</td>
               <td><button class="ghost" title="Zimmet fişi (PDF)"
                     onclick="openPdf('/documents/zimmet/user/${x.user_id}.pdf')">📄</button></td>
@@ -523,7 +671,176 @@
         </div>`;
     }
 
-    const esc = (v) => v == null ? '<span class="muted">—</span>' : String(v);
+    const esc = (v) => v == null || v === '' ? '<span class="muted">—</span>' : String(v);
+    const tl = (v) => v == null ? '—' : new Intl.NumberFormat('tr-TR',
+      { style:'currency', currency:'TRY', maximumFractionDigits:0 }).format(v);
+
+    // ---------- Detay penceresi (modal) ----------
+    function modalAc(baslik, govdeHtml, ekButonlar = '') {
+      modalKapat();
+      const d = document.createElement('div');
+      d.className = 'modal-arka';
+      d.id = 'modalArka';
+      d.onclick = (e) => { if (e.target === d) modalKapat(); };
+      d.innerHTML = `<div class="modal">
+        <div class="modal-bas"><h3>${baslik}</h3>${ekButonlar}
+          <button class="kapat" onclick="modalKapat()" title="Kapat">✕</button></div>
+        <div class="modal-govde">${govdeHtml}</div></div>`;
+      document.body.appendChild(d);
+    }
+    function modalKapat() { document.getElementById('modalArka')?.remove(); }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') modalKapat(); });
+
+    function alanlar(obj, etiketler) {
+      const parcalar = etiketler
+        .filter(([k]) => obj[k] != null && obj[k] !== '')
+        .map(([k, l]) => `<div class="alan"><span class="et">${l}</span>
+                          <span class="dg">${obj[k]}</span></div>`);
+      return parcalar.length ? `<div class="alan-grid">${parcalar.join('')}</div>`
+                             : '<div class="muted">Bilgi yok</div>';
+    }
+
+    // ---------- Cihaz detayı ----------
+    async function cihazDetay(id) {
+      let d;
+      try { d = await api('/detay/asset/' + id); }
+      catch (e) { return alert('⚠ ' + (e.detail || 'Detay alınamadı')); }
+      const k = d.kunye, z = d.zimmet;
+
+      const ozellikHtml = Object.entries(d.ozellikler || {}).map(([grup, degerler]) => {
+        if (!degerler || typeof degerler !== 'object') return '';
+        const satirlar = Object.entries(degerler)
+          .filter(([, v]) => v != null && v !== '')
+          .map(([a, v]) => `<div class="alan"><span class="et">${a}</span>
+                            <span class="dg">${v}</span></div>`).join('');
+        return satirlar ? `<div class="bolum"><h4>${grup}</h4>
+                           <div class="alan-grid">${satirlar}</div></div>` : '';
+      }).join('');
+
+      const gecmisHtml = (d.gecmis || []).length
+        ? `<table><thead><tr><th>İşlem</th><th>Not</th><th>Tarih</th></tr></thead><tbody>` +
+          d.gecmis.slice(0, 10).map(g => `<tr><td>${g.islem}</td>
+            <td class="muted">${g['not'] ?? '—'}</td>
+            <td class="muted">${g.tarih ? new Date(g.tarih).toLocaleString('tr-TR') : '—'}</td>
+            </tr>`).join('') + '</tbody></table>'
+        : '<div class="muted">Kayıt yok</div>';
+
+      const butonlar = `
+        <button class="ghost" onclick="openPdf('/documents/etiket/asset/${id}.pdf')"
+          title="Etiket bas">🏷️</button>` +
+        (z.kisi_id ? `<button class="ghost" title="Zimmet fişi"
+          onclick="openPdf('/documents/zimmet/asset/${id}.pdf')">📄</button>` : '') +
+        (canWrite() ? `<button class="ghost" onclick="cihazDuzenle(${id})">✏️ Düzenle</button>` : '');
+
+      modalAc(`${k.asset_tag} — ${k.name ?? ''}`, `
+        <div class="bolum"><h4>Künye</h4>${alanlar(k, [
+          ['asset_tag','Cihaz NO'],['demirbas_no','Demirbaş No'],['serial','Seri No'],
+          ['kategori','Cihaz Tipi'],['marka','Marka'],['model','Model'],
+          ['durum','Durum'],['lokasyon','Bulunduğu Yer'],['ip_address','IP'],
+          ['hostname','Hostname'],['mac_address','MAC'],['imei','IMEI'],
+          ['barkod','Barkod'],['muhasebe_kodu','IFS/Muhasebe Kodu'],
+          ['fatura_no','Fatura No'],['purchase_date','Alım Tarihi'],
+          ['tedarikci','Tedarikçi'],['sirket','Alınan Şirket'],
+          ['telefon_no','Telefon'],['sim_no','SIM'],['operator','Operatör'],
+          ['warranty_end','Garanti Bitiş'],['notes','Açıklama'],
+        ])}
+        ${k.purchase_cost != null ? `<div class="alan" style="margin-top:6px">
+          <span class="et">Alım Bedeli</span><span class="dg">${tl(k.purchase_cost)}</span></div>` : ''}
+        </div>
+        <div class="bolum"><h4>Zimmet</h4>${z.kisi || z.lokasyon ? alanlar(z, [
+          ['kisi','Kişi'],['departman','Departman'],['unvan','Unvan'],
+          ['lokasyon','Lokasyon'],['tarih','Zimmet Tarihi'],
+        ]) : '<div class="muted">Cihaz boşta</div>'}
+        ${z.kisi_id ? `<button class="ghost" style="margin-top:8px"
+            onclick="kisiDetay(${z.kisi_id})">👤 ${z.kisi} — tüm cihazları</button>` : ''}
+        </div>
+        ${ozellikHtml}
+        <div class="bolum"><h4>Geçmiş</h4>${gecmisHtml}</div>`, butonlar);
+    }
+
+    // ---------- Kişi detayı ----------
+    async function kisiDetay(id) {
+      let d;
+      try { d = await api('/detay/user/' + id); }
+      catch (e) { return alert('⚠ ' + (e.detail || 'Detay alınamadı')); }
+      const k = d.kisi;
+
+      const dagilim = Object.entries(d.tur_dagilimi || {})
+        .map(([t, n]) => `<span class="pill">${t}: <b>${n}</b></span>`).join(' ');
+
+      const tablo = d.cihazlar.length ? `
+        <table><thead><tr><th>Cihaz NO</th><th>Tip</th><th>Marka/Model</th>
+          <th>Seri No</th><th>Bedel</th></tr></thead><tbody>
+        ${d.cihazlar.map(c => `<tr class="tikla" onclick="cihazDetay(${c.id})">
+          <td><b>${c.asset_tag}</b></td><td>${esc(c.kategori)}</td>
+          <td>${esc([c.marka, c.model].filter(Boolean).join(' '))}</td>
+          <td class="muted">${esc(c.serial)}</td>
+          <td class="muted">${c.purchase_cost != null ? tl(c.purchase_cost) : '—'}</td>
+          </tr>`).join('')}</tbody></table>`
+        : '<div class="muted">Zimmetli cihaz yok</div>';
+
+      modalAc(`👤 ${k.ad}`, `
+        <div class="bolum"><h4>Personel</h4>${alanlar(k, [
+          ['employee_num','Sicil No'],['department','Departman'],['job_title','Unvan'],
+          ['sube','Şube'],['email','E-posta'],['telefon','Telefon'],
+          ['lokasyon','Lokasyon'],
+        ])}</div>
+        <div class="stats" style="margin-top:16px">
+          <div class="stat"><div class="stat-v">${d.cihaz_sayisi}</div>
+            <div class="stat-l">Zimmetli cihaz</div></div>
+          <div class="stat"><div class="stat-v">${tl(d.toplam_deger)}</div>
+            <div class="stat-l">Toplam bedel</div></div>
+        </div>
+        ${dagilim ? `<div class="row" style="margin-bottom:14px">${dagilim}</div>` : ''}
+        <div class="bolum"><h4>Cihazlar (${d.cihaz_sayisi})</h4>${tablo}</div>`,
+        d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
+          onclick="openPdf('/documents/zimmet/user/${id}.pdf')">📄</button>` : '');
+    }
+
+    // ---------- Cihaz düzenleme ----------
+    async function cihazDuzenle(id) {
+      const a = await api('/assets/' + id);
+      const alanlarListe = [
+        ['asset_tag','Cihaz NO','text'],['name','Ad','text'],['serial','Seri No','text'],
+        ['demirbas_no','Demirbaş No','text'],['muhasebe_kodu','IFS Kodu','text'],
+        ['barkod','Barkod','text'],['ip_address','IP','text'],['hostname','Hostname','text'],
+        ['mac_address','MAC','text'],['imei','IMEI','text'],
+        ['telefon_no','Telefon','text'],['sim_no','SIM','text'],['operator','Operatör','text'],
+        ['fatura_no','Fatura No','text'],['purchase_date','Alım Tarihi','date'],
+        ['warranty_end','Garanti Bitiş','date'],['purchase_cost','Bedel (TL)','number'],
+        ['notes','Açıklama','text'],
+      ];
+      modalAc(`✏️ ${a.asset_tag} düzenle`, `
+        <div class="alan-grid">
+          ${alanlarListe.map(([k, l, t]) => `<div>
+            <div class="stat-l" style="margin-bottom:3px">${l}</div>
+            <input id="e_${k}" type="${t}" style="width:100%"
+              value="${a[k] ?? ''}" /></div>`).join('')}
+        </div>
+        <div class="row" style="margin-top:16px">
+          <button class="primary" onclick="cihazKaydet(${id})">Kaydet</button>
+          <button class="ghost" onclick="cihazDetay(${id})">Vazgeç</button>
+        </div>
+        <div id="duzInfo" class="note"></div>`);
+    }
+
+    async function cihazKaydet(id) {
+      const govde = {};
+      for (const el of document.querySelectorAll('[id^="e_"]')) {
+        const k = el.id.slice(2);
+        const v = el.value.trim();
+        govde[k] = v === '' ? null : (el.type === 'number' ? Number(v) : v);
+      }
+      try {
+        await api('/assets/' + id, { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
+        cihazDetay(id);
+        if (activeTab === 'assets') loadAssets();
+      } catch (e) {
+        document.getElementById('duzInfo').innerHTML =
+          `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
+      }
+    }
 
     // ---------- Varlıklar ----------
     function renderAssetsView() {
@@ -583,7 +900,8 @@
                      onclick="openPdf('/documents/zimmet/asset/${a.id}.pdf')">📄</button>`;
         btn += ` <button class="ghost" title="Etiket bas (QR + barkod)"
                    onclick="openPdf('/documents/etiket/asset/${a.id}.pdf')">🏷️</button>`;
-        return `<tr><td><b>${a.asset_tag}</b></td><td class="muted">${esc(a.demirbas_no)}</td>
+        return `<tr class="tikla" onclick="if(!event.target.closest('button'))cihazDetay(${a.id})">
+          <td><b>${a.asset_tag}</b></td><td class="muted">${esc(a.demirbas_no)}</td>
           <td>${esc(a.name)}</td>
           <td class="muted">${esc(a.serial)}</td><td>${esc(statusMap[a.status_id])}</td>
           <td>${assigned}</td><td>${btn}</td></tr>`;

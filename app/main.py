@@ -11,7 +11,8 @@ from app import __version__
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.routers import (
-    assets, auth, csv_io, documents, invoices, lookups, reports, search,
+    assets, auth, csv_io, detay, documents, excel_io, invoices, lookups,
+    reports, search,
 )
 from app.seed import seed_defaults
 
@@ -52,6 +53,8 @@ app.include_router(csv_io.router)
 app.include_router(documents.router)
 app.include_router(reports.router)
 app.include_router(invoices.router)
+app.include_router(excel_io.router)
+app.include_router(detay.router)
 
 
 @app.get("/", include_in_schema=False)
