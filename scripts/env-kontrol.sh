@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # .env dosyasını DEĞERLERİ GİZLEYEREK denetler.
 # Kullanım:  bash scripts/env-kontrol.sh [dosya]
+#
+# Bağlantı dizelerindeki (DATABASE_URL vb.) parolalar da maskelenir.
 DOSYA="${1:-.env}"
 [[ -f "$DOSYA" ]] || { echo "✗ Dosya yok: $DOSYA"; exit 1; }
 
@@ -18,25 +20,37 @@ awk '
   }
 }
 END {
+  print ""
   if (hata) {
-    print ""
-    print "⚠ Geçersiz satırlar python-dotenv tarafından atlanır ve ayarlar yüklenmez."
-    print "  Bu satırları sil:  nano " ARGV[1]
+    print "⚠ Geçersiz satırlar python-dotenv tarafından atlanır; ayarlar yüklenmez."
+    print "  Bu satırları sil, sonra tekrar çalıştır."
   } else {
-    print ""
     print "✓ Tüm satırlar geçerli"
   }
 }' "$DOSYA"
 
+# --------------------------------------------------------------------------- #
+# Kritik ayarların durumu — sırlar ASLA tam gösterilmez.
+# --------------------------------------------------------------------------- #
+maskele() {
+    # Bağlantı dizesindeki parolayı gizler:
+    #   sema://kullanici:PAROLA@sunucu/vt  ->  sema://kullanici:***@sunucu/vt
+    sed -E 's#(://[^:/@]+):[^@]*@#\1:***@#'
+}
+
 echo ""
 echo "=== Kritik ayarlar ==="
-for anahtar in DATABASE_URL SECRET_KEY ROOT_PATH ORG_NAME SNIPEIT_URL SNIPEIT_TOKEN ANTHROPIC_API_KEY; do
+for anahtar in DATABASE_URL SECRET_KEY ROOT_PATH ORG_NAME \
+               SNIPEIT_URL SNIPEIT_TOKEN ANTHROPIC_API_KEY ADMIN_PASSWORD; do
     deger="$(grep -E "^${anahtar}=" "$DOSYA" | head -1 | cut -d= -f2-)"
     if [[ -z "$deger" ]]; then
         printf "  %-20s \033[33meksik/boş\033[0m\n" "$anahtar"
-    elif [[ "$anahtar" == *TOKEN* || "$anahtar" == *KEY* || "$anahtar" == *SECRET* ]]; then
+    elif [[ "$anahtar" == *TOKEN* || "$anahtar" == *KEY* || \
+            "$anahtar" == *SECRET* || "$anahtar" == *PASSWORD* ]]; then
+        # Tamamen gizli — yalnızca varlığı ve uzunluğu
         printf "  %-20s \033[32mvar\033[0m (%d karakter)\n" "$anahtar" "${#deger}"
     else
-        printf "  %-20s %s\n" "$anahtar" "$deger"
+        # Görünebilir ama içindeki parola maskelenir
+        printf "  %-20s %s\n" "$anahtar" "$(printf '%s' "$deger" | maskele)"
     fi
 done
