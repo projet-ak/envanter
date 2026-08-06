@@ -116,12 +116,46 @@ def test_sadece_yonlendirme_tespiti():
 
 def test_blok_gerekli_ayarlari_icerir():
     sonuc = nginx_ekle.server_bloguna_ekle(TEK_SERVER)
-    # Alt yol desteği ve dosya yükleme sınırı olmazsa uygulama bozulur
     assert "proxy_pass http://127.0.0.1:8901;" in sonuc
     assert "X-Forwarded-Prefix /envanter" in sonuc
     assert "client_max_body_size 12m" in sonuc
-    # proxy_pass sonunda eğik çizgi OLMAMALI (yoksa /envanter ön eki kırpılır)
-    assert "proxy_pass http://127.0.0.1:8901/;" not in sonuc
+
+
+def test_onek_kirpiliyor():
+    """/envanter ön eki uygulamaya iletilmeden ÖNCE kırpılmalı.
+
+    Uygulama --root-path /envanter ile çalışsa bile kendi yolları /ui/,
+    /assets şeklindedir; ön ek kırpılmazsa her istek 404 döner.
+    (Bu davranış uvicorn üzerinde ölçülerek doğrulanmıştır.)
+    """
+    sonuc = nginx_ekle.server_bloguna_ekle(TEK_SERVER)
+    assert sonuc.count("rewrite ^/envanter/?(.*)$ /$1 break;") == 2, \
+        "Hem prefix hem regex location'da ön ek kırpılmalı"
+
+
+def test_statik_uzantilar_vekile_yonlenir():
+    """QR (.png), etiket/tutanak (.pdf) ve dışa aktarım (.csv) uygulamadan gelir.
+
+    aaPanel'in `location ~ .*\\.(png|jpg)$` gibi regex kuralları prefix
+    location'dan önce eşleşir; bu blok olmazsa üretilen dosyalar 404 olur.
+    """
+    sonuc = nginx_ekle.server_bloguna_ekle(TEK_SERVER)
+    regex_satiri = next(
+        s for s in sonuc.splitlines() if s.strip().startswith("location ~ ^/envanter/")
+    )
+    for uzanti in ("pdf", "png", "csv"):
+        assert uzanti in regex_satiri, f"{uzanti} regex bloğunda yok"
+
+
+def test_regex_location_proxy_pass_uri_icermez():
+    """Nginx, regex location'da URI'li proxy_pass'i reddeder.
+
+    `proxy_pass http://host/;` (sondaki eğik çizgi) regex location'da
+    "cannot have URI part" hatası verir; bu yüzden kırpma rewrite ile yapılır.
+    """
+    sonuc = nginx_ekle.server_bloguna_ekle(TEK_SERVER)
+    assert "proxy_pass http://127.0.0.1:8901/;" not in sonuc, \
+        "Regex location'da URI'li proxy_pass nginx -t hatası verir"
 
 
 @pytest.mark.parametrize("konf", [TEK_SERVER, CIFT_SERVER])

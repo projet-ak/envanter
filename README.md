@@ -88,9 +88,15 @@ Sonra aaPanel → Website → Config'e `deploy/nginx-envanter.conf` içeriğini 
 
 ### Alt klasörde yayın
 
-Uygulama alt klasörde çalışabilir (örn. `https://site.com/envanter/`):
-`.env` içinde `ROOT_PATH=/envanter` yeter — arayüz API adreslerini kendi
-bulunduğu yoldan türetir, ek ayar gerekmez.
+Uygulama alt klasörde çalışabilir (örn. `https://site.com/envanter/`).
+**İki parça birlikte** çalışır:
+
+1. **`.env` → `ROOT_PATH=/envanter`** — uygulamanın *ürettiği* adreslere ön ek
+   ekler (yönlendirmeler, OpenAPI). Arayüz API adreslerini zaten bulunduğu
+   yoldan türetir.
+2. **Nginx ön eki kırpar** — `rewrite ^/envanter/?(.*)$ /$1 break;`
+   Uygulamanın kendi yolları `/ui/`, `/assets` şeklindedir; ön ek kırpılmazsa
+   **tüm istekler 404 döner**. `deploy/nginx-envanter.conf` bunu içerir.
 
 ## PostgreSQL (önerilen, üretim)
 

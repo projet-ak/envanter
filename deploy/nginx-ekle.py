@@ -29,6 +29,7 @@ ISARET_SON = "# <<< ENVANTER BITIS <<<"
 BLOK = """
 {isaret}
 location /envanter {{
+    rewrite ^/envanter/?(.*)$ /$1 break;
     proxy_pass http://127.0.0.1:8901;
 
     proxy_http_version 1.1;
@@ -47,12 +48,16 @@ location /envanter {{
     proxy_buffering off;
 }}
 
-location ~ ^/envanter/.*\\.(pdf|png|csv)$ {{
+location ~ ^/envanter/.*\\.(pdf|png|csv|jpg|jpeg|gif|svg|ico)$ {{
+    rewrite ^/envanter/?(.*)$ /$1 break;
     proxy_pass http://127.0.0.1:8901;
+
+    proxy_http_version 1.1;
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;
     proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Prefix /envanter;
     proxy_read_timeout 180s;
 }}
 {isaret_son}

@@ -89,8 +89,9 @@ aaPanel → **Website** → `ernsaha.com.tr` → **Config** (Yapılandırma).
 Açılan `server { ... }` bloğunun **içine**, `deploy/nginx-envanter.conf`
 dosyasındaki `location` bloklarını yapıştır → **Save**.
 
-> ⚠️ `proxy_pass http://127.0.0.1:8901;` satırının sonunda **eğik çizgi yok**.
-> Eğik çizgi eklersen Nginx `/envanter` ön ekini kırpar ve bağlantılar bozulur.
+> ⚠️ Blok içindeki `rewrite ^/envanter/?(.*)$ /$1 break;` satırı **şart**.
+> Uygulama kendi içinde `/ui/`, `/assets` yollarını sunar; `/envanter` ön eki
+> Nginx tarafından kırpılmazsa her istek 404 döner.
 
 Nginx'i yenile:
 
@@ -167,8 +168,20 @@ nano .env      # SNIPEIT_URL ve SNIPEIT_TOKEN ekle
 Uygulama çalışmıyordur: `systemctl status envanter` ve `journalctl -u envanter -n 50`.
 Genelde `.env` içindeki `DATABASE_URL` hatalıdır.
 
-**Sayfa açılıyor ama "Yükleniyor" da kalıyor / butonlar çalışmıyor**
-Nginx `proxy_pass` satırının sonunda eğik çizgi vardır — kaldır, `systemctl reload nginx`.
+**Her şey 404 veriyor**
+Nginx `/envanter` ön ekini kırpmıyordur. Blokta
+`rewrite ^/envanter/?(.*)$ /$1 break;` satırı bulunmalı. Ayrım için:
+
+```bash
+curl -s -o /dev/null -w "uygulama: %{http_code}\n" http://127.0.0.1:8901/ui/
+```
+
+200 dönüyorsa uygulama sağlamdır, sorun Nginx yapılandırmasındadır.
+
+**Arayüz açılıyor ama QR kodu / PDF / CSV 404 veriyor**
+aaPanel'in statik dosya regex kuralı (`location ~ .*\.(png|jpg)$`) bu
+uzantıları yakalıyordur. Yapılandırmada
+`location ~ ^/envanter/.*\.(pdf|png|csv|...)$` bloğunun bulunduğundan emin ol.
 
 **PDF'lerde Türkçe karakterler bozuk (□□□)**
 DejaVu fontu eksik: `apt install -y fonts-dejavu-core && systemctl restart envanter`.
