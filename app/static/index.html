@@ -29,6 +29,7 @@
                             border:1px solid var(--line); background:#0b1220; color:var(--txt); }
     button.primary { background:var(--acc); color:#03263a; border:none; cursor:pointer; font-weight:600; }
     button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); cursor:pointer; }
+    button.ghost.sec { border-color:var(--acc); color:var(--acc); font-weight:600; }
     button:hover { opacity:.9; }
     .row { display:flex; gap:8px; flex-wrap:wrap; }
     .grow { flex:1; min-width:160px; }
@@ -125,6 +126,30 @@
         lowStock: false },
     };
 
+    // Referans (tanım) tabloları — Lokasyon, Kategori, Üretici vb.
+    const TANIMLAR = {
+      locations:     { label: 'Lokasyonlar',  endpoint: '/locations',
+        cols: [['name','Ad'],['city','Şehir'],['address','Adres']],
+        add: [['name','Ad','text'],['city','Şehir','text'],['address','Adres','text']] },
+      categories:    { label: 'Kategoriler',  endpoint: '/categories',
+        cols: [['name','Ad'],['type','Tür']],
+        add: [['name','Ad','text']] },
+      manufacturers: { label: 'Üreticiler',   endpoint: '/manufacturers',
+        cols: [['name','Ad'],['support_phone','Destek Tel'],['support_email','Destek E-posta']],
+        add: [['name','Ad','text'],['support_phone','Destek Tel','text']] },
+      models:        { label: 'Modeller',     endpoint: '/models',
+        cols: [['name','Ad'],['model_number','Model No']],
+        add: [['name','Ad','text'],['model_number','Model No','text']] },
+      suppliers:     { label: 'Tedarikçiler', endpoint: '/suppliers',
+        cols: [['name','Ad'],['phone','Telefon'],['email','E-posta']],
+        add: [['name','Ad','text'],['phone','Telefon','text'],['email','E-posta','text']] },
+      companies:     { label: 'Şirketler',    endpoint: '/companies',
+        cols: [['name','Ad']], add: [['name','Ad','text']] },
+      'status-labels': { label: 'Durumlar',   endpoint: '/status-labels',
+        cols: [['name','Ad'],['type','Tür']], add: [['name','Ad','text']] },
+    };
+    let aktifTanim = 'locations';
+
     // Uygulama alt klasörde de yayınlanabilir (örn. https://site.com/envanter/).
     // Arayüz /ui/ altında sunulduğu için, taban yolu adresten türetiyoruz:
     //   /ui/           -> ''           (kök dizin)
@@ -183,7 +208,9 @@
 
     function buildTabs() {
       const tabs = [['dashboard', 'Özet'], ['assets', 'Varlıklar'],
-                    ...Object.entries(STOCK).map(([k, v]) => [k, v.label])];
+                    ['personel', 'Personel'],
+                    ...Object.entries(STOCK).map(([k, v]) => [k, v.label]),
+                    ['tanimlar', 'Tanımlar']];
       if (canWrite()) tabs.push(['invoice', 'Fatura Oku']);
       document.getElementById('tabs').innerHTML = tabs.map(([k, label]) =>
         `<button data-tab="${k}" onclick="selectTab('${k}')">${label}</button>`).join('');
@@ -196,7 +223,136 @@
       if (tab === 'dashboard') renderDashboard();
       else if (tab === 'assets') renderAssetsView();
       else if (tab === 'invoice') renderInvoiceView();
+      else if (tab === 'personel') renderPersonelView();
+      else if (tab === 'tanimlar') renderTanimlarView();
       else renderStockView(tab);
+    }
+
+    // ---------- Personel ----------
+    async function renderPersonelView() {
+      document.getElementById('view').innerHTML = `
+        ${canWrite() ? `<div class="panel">
+          <h2>Personel ekle</h2>
+          <div class="row">
+            <input id="p_ad" placeholder="Ad" />
+            <input id="p_soyad" placeholder="Soyad" />
+            <input id="p_sicil" placeholder="Sicil no" />
+            <input id="p_dept" placeholder="Departman" />
+            <input id="p_sube" placeholder="Şube" />
+            <input id="p_eposta" class="grow" placeholder="E-posta" />
+            <button class="primary" onclick="addPersonel()">Ekle</button>
+          </div>
+          <div id="pInfo" class="note"></div>
+        </div>` : ''}
+        <div class="panel">
+          <h2>Personel (<span id="pCount">0</span>)</h2>
+          <div class="row" style="margin-bottom:12px">
+            <input id="pAra" class="grow" placeholder="Ada göre ara…"
+                   oninput="loadPersonel()" />
+          </div>
+          <table><thead><tr><th>Ad Soyad</th><th>Sicil</th><th>Departman</th>
+            <th>Şube</th><th>E-posta</th><th>Zimmet</th><th></th></tr></thead>
+            <tbody id="pRows"></tbody></table>
+        </div>`;
+      loadPersonel();
+    }
+
+    async function loadPersonel() {
+      const q = (document.getElementById('pAra')?.value || '').trim().toLowerCase();
+      const [kisiler, zimmetler] = await Promise.all([
+        api('/users?limit=500'), api('/reports/personel-zimmet'),
+      ]);
+      const sayac = Object.fromEntries(zimmetler.map(z => [z.user_id, z.cihaz_sayisi]));
+      const liste = kisiler.filter(k =>
+        !q || `${k.first_name} ${k.last_name ?? ''} ${k.employee_num ?? ''}`
+                .toLowerCase().includes(q));
+      document.getElementById('pCount').textContent = liste.length;
+      document.getElementById('pRows').innerHTML = liste.map(k => {
+        const adet = sayac[k.id] || 0;
+        const fis = adet
+          ? `<button class="ghost" title="Zimmet fişi (PDF)"
+               onclick="openPdf('/documents/zimmet/user/${k.id}.pdf')">📄</button>` : '';
+        return `<tr>
+          <td><b>${k.first_name} ${k.last_name ?? ''}</b></td>
+          <td class="muted">${esc(k.employee_num)}</td>
+          <td>${esc(k.department)}</td>
+          <td class="muted">${esc(k.sube)}</td>
+          <td class="muted">${esc(k.email)}</td>
+          <td>${adet ? `<span class="tag used">${adet} cihaz</span>`
+                     : '<span class="muted">—</span>'}</td>
+          <td>${fis}</td></tr>`;
+      }).join('');
+    }
+
+    async function addPersonel() {
+      const body = {
+        first_name: p_ad.value.trim(),
+        last_name: p_soyad.value.trim() || null,
+        employee_num: p_sicil.value.trim() || null,
+        department: p_dept.value.trim() || null,
+        sube: p_sube.value.trim() || null,
+        email: p_eposta.value.trim() || null,
+      };
+      if (!body.first_name) { pInfo.textContent = 'Ad zorunlu.'; return; }
+      try {
+        await api('/users', { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        p_ad.value = p_soyad.value = p_sicil.value = p_dept.value =
+          p_sube.value = p_eposta.value = '';
+        pInfo.textContent = '✓ Eklendi.'; loadPersonel();
+      } catch (e) { pInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
+    }
+
+    // ---------- Tanımlar (lokasyon, kategori, üretici…) ----------
+    function renderTanimlarView() {
+      const alt = Object.entries(TANIMLAR).map(([k, v]) =>
+        `<button class="ghost ${k === aktifTanim ? 'sec' : ''}"
+           onclick="secTanim('${k}')">${v.label}</button>`).join(' ');
+      document.getElementById('view').innerHTML = `
+        <div class="panel"><h2>Tanım tablosu seç</h2>
+          <div class="row">${alt}</div></div>
+        <div id="tanimIcerik"></div>`;
+      loadTanim();
+    }
+
+    function secTanim(k) { aktifTanim = k; renderTanimlarView(); }
+
+    async function loadTanim() {
+      const cfg = TANIMLAR[aktifTanim];
+      const items = await api(cfg.endpoint + '?limit=500');
+      const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('');
+      const rows = items.map(it => '<tr>' +
+        cfg.cols.map(([k]) => `<td>${esc(it[k])}</td>`).join('') + '</tr>').join('');
+      document.getElementById('tanimIcerik').innerHTML = `
+        ${canWrite() ? `<div class="panel">
+          <h2>${cfg.label} — ekle</h2>
+          <div class="row">
+            ${cfg.add.map(([k, l, t]) =>
+              `<input id="t_${k}" type="${t}" placeholder="${l}"
+                 class="${k === 'name' ? 'grow' : ''}" />`).join('')}
+            <button class="primary" onclick="addTanim()">Ekle</button>
+          </div>
+          <div id="tanimInfo" class="note"></div>
+        </div>` : ''}
+        <div class="panel">
+          <h2>${cfg.label} (${items.length})</h2>
+          <table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
+        </div>`;
+    }
+
+    async function addTanim() {
+      const cfg = TANIMLAR[aktifTanim];
+      const body = {};
+      for (const [k, , t] of cfg.add) {
+        const v = document.getElementById('t_' + k).value.trim();
+        if (v !== '') body[k] = t === 'number' ? Number(v) : v;
+      }
+      if (!body.name) { tanimInfo.textContent = 'Ad zorunlu.'; return; }
+      try {
+        await api(cfg.endpoint, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        tanimInfo.textContent = '✓ Eklendi.'; loadTanim();
+      } catch (e) { tanimInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
     }
 
     // ---------- Fatura okuma (Claude vision) ----------
