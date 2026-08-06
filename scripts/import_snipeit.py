@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app import models  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.database import Base, SessionLocal, engine  # noqa: E402
+from app.ortam_uyari import uyar  # noqa: E402
 
 
 # --------------------------------------------------------------------------- #
@@ -120,6 +121,7 @@ def id_map(db: Session, model) -> dict[int, int]:
 # İçe aktarım adımları
 # --------------------------------------------------------------------------- #
 def run(dry_run: bool = False, limit: int | None = None) -> None:
+    uyar()
     Base.metadata.create_all(bind=engine)
     client = _client()
     db = SessionLocal()
