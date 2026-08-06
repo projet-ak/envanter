@@ -35,6 +35,38 @@ if [[ "$DB_URL" == postgresql* ]]; then
     PG_URL="${DB_URL/postgresql+psycopg2:/postgresql:}"
     pg_dump -Fc "$PG_URL" > "$DOSYA"
 
+elif [[ "$DB_URL" == mysql* ]]; then
+    command -v mysqldump >/dev/null || command -v mariadb-dump >/dev/null \
+        || { echo "✗ mysqldump/mariadb-dump yok. Kur: apt install -y mariadb-client" >&2; exit 1; }
+    DUMP="$(command -v mariadb-dump || command -v mysqldump)"
+    # URL'i Python ile ayrıştır: parolada '@' veya ':' gibi karakterler
+    # olabilir; bash ile bölmek hatalı sonuç verir.
+    PY="${PROJE_DIZIN}/.venv/bin/python"
+    [[ -x "$PY" ]] || PY="$(command -v python3 || true)"
+    [[ -x "$PY" ]] || { echo "✗ python3 bulunamadı" >&2; exit 1; }
+    mapfile -t PARCA < <("$PY" - "$DB_URL" <<'PYEOF'
+import sys
+from urllib.parse import urlsplit, unquote
+u = urlsplit(sys.argv[1])
+print(unquote(u.username or ""))
+print(unquote(u.password or ""))
+print(u.hostname or "localhost")
+print(u.port or 3306)
+print((u.path or "/").lstrip("/"))
+PYEOF
+)
+    KULLANICI="${PARCA[0]}"; PAROLA="${PARCA[1]}"
+    SUNUCU="${PARCA[2]}"; PORT="${PARCA[3]}"; VT="${PARCA[4]}"
+    [[ -n "$VT" ]] || { echo "✗ DATABASE_URL içinde veritabanı adı yok" >&2; exit 1; }
+    DOSYA="${YEDEK_DIZIN}/envanter_${TARIH}.sql"
+    # Parola komut satırında görünmesin diye geçici seçenek dosyası kullan
+    KONF="$(mktemp)"; chmod 600 "$KONF"
+    printf '[client]\nuser=%s\npassword=%s\nhost=%s\nport=%s\n' \
+        "$KULLANICI" "$PAROLA" "$SUNUCU" "$PORT" > "$KONF"
+    "$DUMP" --defaults-extra-file="$KONF" --single-transaction \
+        --default-character-set=utf8mb4 "$VT" > "$DOSYA"
+    rm -f "$KONF"
+
 elif [[ "$DB_URL" == sqlite* ]]; then
     SQLITE_YOL="${DB_URL#sqlite:///}"
     [[ "$SQLITE_YOL" = /* ]] || SQLITE_YOL="${PROJE_DIZIN}/${SQLITE_YOL#./}"
