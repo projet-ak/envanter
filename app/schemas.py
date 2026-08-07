@@ -322,6 +322,23 @@ class AssetUpdate(BaseModel):
     custom: dict | None = None
 
 
+class AgUrunEkle(BaseModel):
+    """Ağ ürünü ekleme — kategori/marka/model adla verilir, yoksa açılır."""
+
+    tur: str = Field(description="switch, sfp, access_point, router, kabinet, diger")
+    asset_tag: str | None = None
+    serial: str | None = None
+    marka: str | None = None
+    model: str | None = None
+    ad: str | None = None
+    demirbas_no: str | None = None
+    ip_address: str | None = None
+    location_id: int | None = None
+    status_id: int | None = None
+    notes: str | None = None
+    ozellikler: dict[str, str] = Field(default_factory=dict)
+
+
 class OzellikYaz(BaseModel):
     """Tek bir teknik özellik: hangi grupta, hangi alan, hangi değer."""
 

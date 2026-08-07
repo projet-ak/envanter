@@ -262,6 +262,12 @@
     .bolum > h4 { margin:0 0 8px; font-size:11.5px; color:var(--acc);
                   text-transform:uppercase; letter-spacing:.07em; }
 
+    /* Ağ ürünleri listesindeki küçük görseller */
+    .ag-kucuk { width:44px; height:34px; object-fit:cover; border-radius:6px;
+                border:1px solid var(--cizgi); display:block; }
+    .ag-kucuk.bos { display:grid; place-items:center; font-size:15px;
+                    background:var(--cizgi2); color:var(--mut); }
+
     /* Cihaz görselleri */
     .gorsel-serit { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
     .gorsel-serit figure { margin:0; position:relative; }
@@ -459,6 +465,7 @@
     const MENU_ANA = [
       ['dashboard', 'Kontrol Paneli', '📊'],
       ['assets', 'Varlıklar', '💻'],
+      ['ag', 'Ağ Ürünleri', '🌐'],
       ['personel', 'Personel', '👥'],
       ['accessories', 'Aksesuarlar', '🎧'],
       ['consumables', 'Sarf Malzeme', '📦'],
@@ -499,6 +506,7 @@
       else if (tab === 'personel') renderPersonelView();
       else if (tab === 'tanimlar') renderTanimlarView();
       else if (tab === 'excel') renderExcelView();
+      else if (tab === 'ag') renderAgView();
       else if (tab === 'ayarlar') renderAyarlarView();
       else renderStockView(tab);
     }
@@ -2492,6 +2500,253 @@
         alert('⚠ ' + (e.detail || 'Yetki değiştirilemedi'));
         secim.value = onceki;    // eski yetkiye dön
         secim.disabled = false;
+      }
+    }
+
+    // ---------- Ağ ürünleri ----------
+    let agSablon = null;        // tür/alan tanımları (sunucudan bir kez)
+    let agTur = '';             // seçili alt kategori ('' = tümü)
+    let agAraZaman = null;
+
+    async function renderAgView() {
+      if (!agSablon) {
+        try { agSablon = await api('/ag/sablon'); }
+        catch { agSablon = []; }
+      }
+      const ozet = await api('/ag/ozet').catch(() => null);
+      const turBilgi = (k) => agSablon.find(s => s.tur === k) || {};
+
+      const sekmeler = [['', '🌐 Tümü' + (ozet ? ` (${ozet.toplam})` : '')]]
+        .concat((ozet?.tur_dagilimi || []).map(d =>
+          [d.tur, `${d.ikon} ${d.ad} (${d.adet})`]));
+      // Henüz ürünü olmayan türler de eklenebilsin diye listede dursun
+      for (const s of agSablon) {
+        if (!sekmeler.some(([k]) => k === s.tur)) {
+          sekmeler.push([s.tur, `${s.ikon} ${s.ad} (0)`]);
+        }
+      }
+
+      document.getElementById('view').innerHTML =
+        sayfaBasligi('🌐', 'Ağ Ürünleri',
+          'Switch, SFP modül, access point ve diğer ağ donanımı') + `
+        ${ozet ? `<div class="stats">
+          ${statCard('Toplam ağ ürünü', ozet.toplam, '🌐')}
+          ${statCard('Toplam port', ozet.toplam_port, '🔀', 'mavi')}
+          ${statCard('PoE besleyen', ozet.poe_cihaz, '⚡', 'sari')}
+          ${statCard('Lokasyon', ozet.lokasyon_dagilimi.length, '📍', 'mor')}
+        </div>` : ''}
+        <div class="panel">
+          <div class="row" style="align-items:center; margin-bottom:10px">
+            <h2 style="margin:0; flex:1">Alt kategoriler</h2>
+            ${canWrite() ? `<button class="primary" onclick="agUrunEkleAc()">
+              + Ağ ürünü ekle</button>` : ''}
+            <button class="ghost" onclick="agTransferler()">🔄 Transferler</button>
+          </div>
+          <div class="row">${sekmeler.map(([k, l]) =>
+            `<button class="ghost ${k === agTur ? 'sec' : ''}"
+               onclick="agTurSec('${k}')">${l}</button>`).join('')}</div>
+          <div class="row" style="margin-top:12px">
+            <input id="agAra" class="grow" autocomplete="off"
+                   placeholder="Marka, model, parça no, seri no, özellik ara…"
+                   oninput="agAraGecikmeli()" />
+            <select id="agLokasyon" onchange="agListele()">
+              <option value="">Tüm lokasyonlar</option></select>
+          </div>
+        </div>
+        <div id="agListe"><div class="panel">Yükleniyor…</div></div>
+        ${ozet && ozet.lokasyon_dagilimi.length ? `<div class="panel">
+          <h2>Lokasyona göre</h2>
+          ${barList(ozet.lokasyon_dagilimi.map(d => ({ ad: d.lokasyon, adet: d.adet })),
+                    Math.max(...ozet.lokasyon_dagilimi.map(d => d.adet)))}
+        </div>` : ''}`;
+
+      // Lokasyon listesi
+      api('/locations?limit=500').then(lok => {
+        const el = document.getElementById('agLokasyon');
+        if (!el) return;
+        const secili = el.value;
+        el.innerHTML = '<option value="">Tüm lokasyonlar</option>' + lok
+          .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+          .map(l => `<option value="${l.id}">${kacir(l.name)}</option>`).join('');
+        el.value = secili;
+      }).catch(() => {});
+
+      agListele();
+    }
+
+    function agTurSec(tur) { agTur = tur; renderAgView(); }
+
+    function agAraGecikmeli() {
+      clearTimeout(agAraZaman);
+      agAraZaman = setTimeout(agListele, 200);
+    }
+
+    async function agListele() {
+      const kutu = document.getElementById('agListe');
+      if (!kutu) return;
+      const p = new URLSearchParams();
+      if (agTur) p.set('tur', agTur);
+      const q = document.getElementById('agAra')?.value.trim();
+      if (q) p.set('q', q);
+      const lok = document.getElementById('agLokasyon')?.value;
+      if (lok) p.set('location_id', lok);
+
+      let liste;
+      try { liste = await api('/ag/urunler?' + p.toString()); }
+      catch (e) {
+        kutu.innerHTML = `<div class="panel">⚠ ${e.detail || 'Alınamadı'}</div>`;
+        return;
+      }
+      if (!liste.length) {
+        kutu.innerHTML = '<div class="panel"><div class="muted">Eşleşen ağ ürünü yok.</div></div>';
+        return;
+      }
+
+      // Seçili türün alanlarından sütun üret; "Tümü"nde genel sütunlar
+      const s = agSablon.find(x => x.tur === agTur);
+      const sutunlar = s ? s.alanlar.slice(0, 5).map(a => a.ad) : [];
+
+      kutu.innerHTML = `<div class="panel">
+        <h2>${liste.length} ürün</h2>
+        <table><thead><tr>
+          <th></th><th>Cihaz No</th><th>Marka / Model</th><th>Seri No</th>
+          ${sutunlar.map(a => `<th>${kacir(a)}</th>`).join('')}
+          <th>Lokasyon</th><th>Durum</th></tr></thead><tbody>
+        ${liste.map(u => `<tr class="tikla" onclick="cihazDetay(${u.id})">
+          <td>${u.gorsel_id
+                ? `<img class="ag-kucuk" data-dosya="${u.gorsel_id}" alt="" />`
+                : '<span class="ag-kucuk bos">📷</span>'}</td>
+          <td><b>${kacir(u.asset_tag)}</b>
+              ${u.tur && !agTur ? `<div class="muted" style="font-size:11.5px">${
+                kacir((agSablon.find(x => x.tur === u.tur) || {}).ad || u.tur)}</div>` : ''}</td>
+          <td>${kacir([u.marka, u.model].filter(Boolean).join(' '))}
+              ${u.ozellikler['Parça No'] ? `<div class="muted" style="font-size:11.5px">${
+                kacir(u.ozellikler['Parça No'])}</div>` : ''}</td>
+          <td class="muted">${esc(u.serial)}</td>
+          ${sutunlar.map(a => `<td class="muted">${esc(u.ozellikler[a])}</td>`).join('')}
+          <td>${esc(u.lokasyon)}${u.proje_kodu
+                ? ` <span class="pill">${kacir(u.proje_kodu)}</span>` : ''}</td>
+          <td>${u.zimmetli ? `<span class="tag used">${kacir(u.zimmetli)}</span>`
+                           : esc(u.durum)}</td>
+        </tr>`).join('')}</tbody></table></div>`;
+      gorselleriYukle();
+    }
+
+    async function agTransferler() {
+      let liste;
+      try { liste = await api('/ag/transferler?limit=200'); }
+      catch (e) { return alert('⚠ ' + (e.detail || 'Alınamadı')); }
+
+      modalAc('🔄 Lokasyon transferleri', liste.length ? `
+        <div class="note" style="margin-top:0">Hangi cihaz hangi şantiyeden
+          hangisine gitti — en yeniler üstte.</div>
+        <table><thead><tr><th>Cihaz</th><th>Nereden</th><th></th><th>Nereye</th>
+          <th>Tarih</th></tr></thead><tbody>
+        ${liste.map(t => `<tr class="tikla" onclick="cihazDetay(${t.asset_id})">
+          <td><b>${esc(t.asset_tag)}</b></td>
+          <td>${esc(t.nereden)}</td>
+          <td class="muted">→</td>
+          <td>${esc(t.nereye)}</td>
+          <td class="muted">${t.tarih
+              ? new Date(t.tarih).toLocaleDateString('tr-TR') : '—'}</td>
+        </tr>`).join('')}</tbody></table>`
+        : '<div class="muted">Henüz kayıtlı lokasyon değişikliği yok.</div>');
+    }
+
+    // Ağ ürünü ekleme — türe göre alanlar
+    function agUrunEkleAc(tur = agTur || 'switch') {
+      const s = agSablon.find(x => x.tur === tur) || agSablon[0];
+      if (!s) return alert('⚠ Tür şablonu alınamadı.');
+
+      // Kimlik alan adından değil indeksten üretilir: alan adları boşluk ve
+      // Türkçe karakter içeriyor, CSS seçicisinde kullanılamıyor.
+      const alanKutu = (a, i) => a.tip === 'secim'
+        ? `<label>${kacir(a.etiket)}
+             <select id="af_${i}" data-alan="${kacir(a.ad)}">
+               <option value="">— seçilmedi —</option>
+               ${a.secenekler.map(o => `<option value="${kacir(o)}">${kacir(o)}</option>`).join('')}
+             </select></label>`
+        : `<label>${kacir(a.etiket)}
+             <input id="af_${i}" data-alan="${kacir(a.ad)}"
+                    ${a.tip === 'number' ? 'type="number"' : ''}
+                    placeholder="${kacir(a.ipucu || '')}" /></label>`;
+
+      modalAc('Ağ ürünü ekle', `
+        <div class="row" style="margin-bottom:14px">
+          ${agSablon.map(x => `<button class="ghost ${x.tur === tur ? 'sec' : ''}"
+             onclick="agUrunEkleAc('${x.tur}')">${x.ikon} ${kacir(x.ad)}</button>`).join('')}
+        </div>
+        <div class="note" style="margin-top:0">${kacir(s.aciklama)}</div>
+        <div class="bolum"><h4>Künye</h4>
+          <div class="form-grid">
+            <label>Cihaz No / Etiket <input id="auEtiket"
+                   placeholder="boş bırakılırsa seri no kullanılır" /></label>
+            <label>Seri No <input id="auSeri" /></label>
+            <label>Marka <input id="auMarka" placeholder="örn. HUAWEI" /></label>
+            <label>Model <input id="auModel" placeholder="örn. S5735-L24T4S-A" /></label>
+            <label>Demirbaş No <input id="auDemirbas" /></label>
+            <label>Yönetim IP <input id="auIp" placeholder="örn. 10.0.0.2" /></label>
+            <label>Lokasyon <select id="auLokasyon"></select></label>
+            <label>Durum <select id="auDurum"></select></label>
+          </div>
+        </div>
+        <div class="bolum"><h4>${kacir(s.ad)} özellikleri</h4>
+          <div class="form-grid">${s.alanlar.map(alanKutu).join('')}</div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="primary" onclick="agUrunKaydet('${s.tur}')">Kaydet</button>
+          <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+          <span id="auBilgi" class="note"></span>
+        </div>`);
+
+      // Lokasyon ve durum listeleri
+      api('/locations?limit=500').then(l => {
+        const el = document.getElementById('auLokasyon');
+        if (el) el.innerHTML = secenekler(l, null);
+      }).catch(() => {});
+      api('/status-labels').then(l => {
+        const el = document.getElementById('auDurum');
+        if (el) el.innerHTML = secenekler(l, null);
+      }).catch(() => {});
+      setTimeout(() => document.getElementById('auSeri')?.focus(), 60);
+    }
+
+    async function agUrunKaydet(tur) {
+      const bilgi = document.getElementById('auBilgi');
+      const s = agSablon.find(x => x.tur === tur);
+      const deger = (id) => document.getElementById(id)?.value.trim() || '';
+
+      const ozellikler = {};
+      document.querySelectorAll('[data-alan]').forEach(el => {
+        const v = el.value.trim();
+        if (v) ozellikler[el.dataset.alan] = v;
+      });
+      const govde = {
+        tur,
+        asset_tag: deger('auEtiket') || null,
+        serial: deger('auSeri') || null,
+        marka: deger('auMarka') || null,
+        model: deger('auModel') || null,
+        demirbas_no: deger('auDemirbas') || null,
+        ip_address: deger('auIp') || null,
+        location_id: Number(deger('auLokasyon')) || null,
+        status_id: Number(deger('auDurum')) || null,
+        ozellikler,
+      };
+      if (!govde.asset_tag && !govde.serial) {
+        bilgi.innerHTML = '<span style="color:var(--err)">⚠ Cihaz no ya da seri no zorunlu.</span>';
+        return;
+      }
+      try {
+        await api('/ag/urunler', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(govde),
+        });
+        modalKapat();
+        agTur = tur;
+        renderAgView();
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Eklenemedi'}</span>`;
       }
     }
 

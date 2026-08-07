@@ -43,7 +43,8 @@ python scripts/create_admin.py --username admin --password "GucluParola"
 ## Arayüz
 
 Sol menü + üst bar düzeni. Menü iki bölümdür: günlük işler (Kontrol Paneli,
-Varlıklar, Personel, Aksesuar/Sarf/Bileşen/Lisans) ve **Yönetim** (Tanımlar,
+Varlıklar, **Ağ Ürünleri**, Personel, Aksesuar/Sarf/Bileşen/Lisans) ve
+**Yönetim** (Tanımlar,
 Excel Aktarım, Fatura Oku, Ayarlar). Üst barda her yerden çalışan arama
 kutusu, oturum sayacı, koyu/açık tema düğmesi ve kullanıcı kartı bulunur.
 
@@ -250,6 +251,64 @@ alanlar (hepsi CSV içe/dışa aktarımda ve aramada desteklenir):
 
 Bunların dışında kalan her şey için `custom` (JSON) alanı var — şema
 değiştirmeden istediğin alanı ekleyebilirsin.
+
+## Ağ ürünleri
+
+Sol menüdeki **Ağ Ürünleri** bölümü switch, SFP modül, access point ve diğer
+ağ donanımını türe özel alanlarla takip eder. Ayrı bir tablo değildir —
+normal varlıklardır, bu yüzden zimmet, dosya eki, etiket basma ve arama
+aynen çalışır.
+
+| Alt kategori | Türe özel alanlar |
+|---|---|
+| 🔀 Switch | Port sayısı, port hızı, **PoE** (yok/PoE/PoE+/PoE++), PoE bütçesi, **ağdaki yeri** (erişim/dağıtım/**omurga**), yönetilebilirlik, uplink, stack, VLAN, rack U |
+| 🔌 SFP / Modül | Hız, dalga boyu, mesafe, mod (single/multi), konnektör |
+| 📶 Access Point | Wi-Fi standardı, bantlar, PoE, anten, montaj |
+| 🛡️ Router / Firewall | Port sayısı, WAN portu, throughput, VPN, ağdaki yeri |
+| 🗄️ Kabinet / Patch Panel | Boyut (U), port sayısı, kablo kategorisi, derinlik |
+
+Ekranın üstünde toplam ürün, **toplam port**, PoE besleyen cihaz sayısı ve
+lokasyon dağılımı; listede her ürünün **görseli**, lokasyonu, proje kodu ve
+kullanım durumu (boşta / kimde) görünür.
+
+```bash
+curl -H "Authorization: Bearer $T" "$API/ag/urunler?tur=switch&proje_kodu=U030"
+curl -H "Authorization: Bearer $T" "$API/ag/ozet"
+```
+
+Kategori adından tür otomatik çıkarılır; Excel'den gelmiş
+"POE Switch 8 Port" gibi kayıtlar da bu ekranda listelenir.
+
+### Transferler
+
+**🔄 Transferler** düğmesi lokasyonu değişen cihazları gösterir — hangi
+şantiyeden hangisine, ne zaman. Bilgi cihaz geçmişindeki lokasyon
+değişikliğinden okunur; ayrıca bir kayıt tutulmaz.
+
+### Listeden toplu ekleme
+
+Elinizdeki tabloyu doğrudan içe aktarabilirsiniz (sekme ya da 2+ boşlukla
+ayrılmış sütunlar):
+
+```
+Marka       Model / Parça No           Seri Numarası     Hız / Mesafe / Mod
+HIKVISION   HK-SFP-1.25G-1310-DF-MM    30004735548       1.25G / 1310nm / Multi-Mode
+HUAWEI      SFP-GE-LX-SM1310           HB19481072030     1.25G / 10km / Single-Mode
+```
+
+```bash
+# Önce ne olacağını gör (hiçbir şey yazılmaz):
+./.venv/bin/python scripts/ag-urun-aktar.py liste.txt --tur sfp --dry-run
+
+# Uygula: ürünleri hedef şantiyeye koy, transferi geçmişe yaz
+./.venv/bin/python scripts/ag-urun-aktar.py liste.txt --tur sfp \
+    --lokasyon "ŞANTİYE U030-U031" --nereden "ŞANTİYE U025"
+```
+
+"Hız / Mesafe / Mod" sütunu ayrıştırılır: `1.25G / 1310nm / Multi-Mode` →
+Hız `1.25G`, Dalga Boyu `1310nm`, Mod `Multi-Mode`. Seri no zaten kayıtlıysa
+satır atlanır — script tekrar çalıştırılabilir.
+Örnek dosya: `ornek-veri/ag-sfp-u025-u030.txt`
 
 ## Şantiyeler ve proje kodları
 
@@ -553,6 +612,11 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/assets/{id}/history` | Varlık geçmişi |
 | `GET` | `/assets/sayi` | Filtrelere uyan toplam sayı (sayfalamadan bağımsız) |
 | `GET` | `/assets/proje-kodlari` | Proje kodları + cihaz sayıları |
+| `GET/POST` | `/ag/urunler` | Ağ ürünlerini listele / ekle |
+| `GET` | `/ag/sablon` | Ağ türleri ve teknik alanları |
+| `GET` | `/ag/ozet` | Tür/lokasyon dağılımı, toplam port, PoE |
+| `GET` | `/ag/transferler` | Lokasyonu değişen cihazlar |
+| `PUT` | `/ag/urunler/{id}/ozellikler` | Ağ özelliklerini topluca yaz |
 | `GET` | `/assets/ara` | Yazdıkça arama (cihaz + personel + lokasyon, Türkçe duyarlı) |
 | `GET` | `/users/ara` | Zimmet için personel arama (cihaz sayılarıyla) |
 | `GET/PUT` | `/auth/me` | Kendi bilgilerini gör / güncelle |
@@ -610,6 +674,7 @@ app/
   santiye.py         # Cihazları proje koduna göre şantiyelere dağıtma
   yedek.py           # Veritabanı dökümü + dosya arşivi
   arama.py           # Türkçe duyarlı yazdıkça arama (cihaz/personel/lokasyon)
+  ag.py              # Ağ ürünleri: tür şablonları, özet, transferler
   pdf/               # Zimmet formu ve barkod/QR etiket üretimi
   ai/search.py       # Doğal dil → yapısal filtre (Claude)
   excel/             # Excel içe/dışa aktarım (sütun şeması + aktarım)
@@ -622,5 +687,6 @@ scripts/
   create_admin.py    # Admin kullanıcı oluştur/yükselt
   santiye-ayir.py    # Eski veriyi şantiyelere ayır (tekrar çalıştırılabilir)
   kurulum-kontrol.sh # Güncelleme sonrası sağlık kontrolü (hiçbir şey değiştirmez)
+  ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```
