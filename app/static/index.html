@@ -467,6 +467,7 @@
       ['assets', 'Varlıklar', '💻'],
       ['ag', 'Ağ Ürünleri', '🌐'],
       ['yangin', 'Yangın Sistemleri', '🔥'],
+      ['alarm', 'Alarm Sistemleri', '🔐'],
       ['personel', 'Personel', '👥'],
       ['accessories', 'Aksesuarlar', '🎧'],
       ['consumables', 'Sarf Malzeme', '📦'],
@@ -507,7 +508,7 @@
       else if (tab === 'personel') renderPersonelView();
       else if (tab === 'tanimlar') renderTanimlarView();
       else if (tab === 'excel') renderExcelView();
-      else if (tab === 'ag' || tab === 'yangin') renderAgView(tab);
+      else if (AILE_BILGI[tab]) renderAgView(tab);
       else if (tab === 'ayarlar') renderAyarlarView();
       else renderStockView(tab);
     }
@@ -1265,7 +1266,10 @@
                <button class="ghost mini" title="Sil"
                  onclick="ozellikSil(${id}, '${g}', '${encodeURIComponent(a)}')">🗑</button>` : ''}
               </span></div>`).join('');
-        return satirlar ? `<div class="bolum"><h4>${esc(grup)}</h4>
+        // "Ağ" grubu tarihsel bir addır: yangın ve alarm ürünlerinin özellikleri
+        // de bu grupta durur (veri taşımamak için yalnızca başlık değiştirilir).
+        const baslik = grup === 'Ağ' ? 'Sistem Özellikleri' : grup;
+        return satirlar ? `<div class="bolum"><h4>${esc(baslik)}</h4>
                            <div class="alan-grid">${satirlar}</div></div>` : '';
       }).join('');
 
@@ -2504,8 +2508,8 @@
       }
     }
 
-    // ---------- Ağ ürünleri ----------
-    // Aynı ekran iki aileye hizmet eder: "ag" (ağ ürünleri) ve "yangin"
+    // ---------- Sistem ürünleri (ağ / yangın / alarm) ----------
+    // Aynı ekran her aileye hizmet eder; menü girişleri AILE_BILGI'den okunur
     let agSablon = null;        // seçili ailenin tür/alan tanımları
     let agAile = 'ag';          // hangi aile gösteriliyor
     let agTur = '';             // seçili alt kategori ('' = tümü)
@@ -2513,9 +2517,17 @@
 
     const AILE_BILGI = {
       ag: { ikon: '🌐', ad: 'Ağ Ürünleri',
-            alt: 'Switch, SFP modül, access point ve diğer ağ donanımı' },
+            alt: 'Switch, SFP modül, access point ve diğer ağ donanımı',
+            marka: 'HUAWEI', model: 'S5735-L24T4S-A' },
       yangin: { ikon: '🔥', ad: 'Yangın Sistemleri',
-                alt: 'Yangın alarm paneli, dedektörler, butonlar ve sirenler' },
+                alt: 'Yangın alarm paneli, dedektörler, butonlar ve sirenler',
+                ekle: 'Yangın ekipmanı', ilk: 'dedektor',
+                marka: 'Mavigard', model: 'MG-1130' },
+      alarm: { ikon: '🔐', ad: 'Alarm Sistemleri',
+               alt: 'Hırsız alarm panelleri, kablolu/kablosuz dedektörler, '
+                    + 'tuş takımları, sirenler ve modüller',
+               ekle: 'Alarm ekipmanı', ilk: 'alarm_dedektor',
+               marka: 'Paradox', model: 'SP6000' },
     };
 
     async function renderAgView(aile = agAile) {
@@ -2556,7 +2568,7 @@
           <div class="row" style="align-items:center; margin-bottom:10px">
             <h2 style="margin:0; flex:1">Alt kategoriler</h2>
             ${canWrite() ? `<button class="primary" onclick="agUrunEkleAc()">
-              + ${agAile === 'yangin' ? 'Yangın ekipmanı' : 'Ağ ürünü'} ekle</button>` : ''}
+              + ${bilgi.ekle || 'Ağ ürünü'} ekle</button>` : ''}
             <button class="ghost" onclick="agTransferler()">🔄 Transferler</button>
           </div>
           <div class="row">${sekmeler.map(([k, l]) =>
@@ -2615,7 +2627,7 @@
         return;
       }
       if (!liste.length) {
-        kutu.innerHTML = '<div class="panel"><div class="muted">Eşleşen ağ ürünü yok.</div></div>';
+        kutu.innerHTML = '<div class="panel"><div class="muted">Eşleşen ürün yok.</div></div>';
         return;
       }
 
@@ -2670,8 +2682,8 @@
         : '<div class="muted">Henüz kayıtlı lokasyon değişikliği yok.</div>');
     }
 
-    // Ağ ürünü ekleme — türe göre alanlar
-    function agUrunEkleAc(tur = agTur || (agAile === 'yangin' ? 'dedektor' : 'switch')) {
+    // Sistem ürünü ekleme — türe göre alanlar
+    function agUrunEkleAc(tur = agTur || AILE_BILGI[agAile].ilk || 'switch') {
       const s = agSablon.find(x => x.tur === tur) || agSablon[0];
       if (!s) return alert('⚠ Tür şablonu alınamadı.');
 
@@ -2699,8 +2711,10 @@
             <label>Cihaz No / Etiket <input id="auEtiket"
                    placeholder="boş bırakılırsa seri no kullanılır" /></label>
             <label>Seri No <input id="auSeri" /></label>
-            <label>Marka <input id="auMarka" placeholder="örn. HUAWEI" /></label>
-            <label>Model <input id="auModel" placeholder="örn. S5735-L24T4S-A" /></label>
+            <label>Marka <input id="auMarka"
+                   placeholder="örn. ${AILE_BILGI[agAile].marka}" /></label>
+            <label>Model <input id="auModel"
+                   placeholder="örn. ${AILE_BILGI[agAile].model}" /></label>
             <label>Demirbaş No <input id="auDemirbas" /></label>
             <label>Yönetim IP <input id="auIp" placeholder="örn. 10.0.0.2" /></label>
             <label>Lokasyon <select id="auLokasyon"></select></label>

@@ -1,9 +1,11 @@
 """Teknik sistem ürünleri — tür şablonları ve sorgular.
 
 Başlangıçta yalnızca ağ ürünleri içindi (modül adı ve /ag uçları bu yüzden),
-sonradan yangın algılama sistemleri de eklendi. Türler **ailelere** ayrılır:
+sonradan yangın algılama ve alarm sistemleri de eklendi. Türler **ailelere**
+ayrılır:
 
-    AILELER = {"ag": Ağ Ürünleri, "yangin": Yangın Sistemleri}
+    AILELER = {"ag": Ağ Ürünleri, "yangin": Yangın Sistemleri,
+               "alarm": Alarm Sistemleri}
 
 Bu ürünler ayrı bir tablo değildir: normal varlıklardır, ama kategorileri
 sistem türlerinden biridir ve teknik özellikleri `Asset.custom["Ağ"]` altında
@@ -55,12 +57,21 @@ AILELER = {
            "aciklama": "Switch, SFP modül, access point ve diğer ağ donanımı"},
     "yangin": {"ad": "Yangın Sistemleri", "ikon": "🔥",
                "aciklama": "Yangın alarm paneli, dedektörler, butonlar ve sirenler"},
+    "alarm": {"ad": "Alarm Sistemleri", "ikon": "🔐",
+              "aciklama": "Hırsız alarm panelleri, kablolu/kablosuz dedektörler, "
+                          "tuş takımları, sirenler ve modüller"},
 }
 
 POE_SECENEKLERI = ["Yok", "PoE", "PoE+ (802.3at)", "PoE++ (802.3bt)", "Pasif PoE"]
 ADRESLI_SECENEKLERI = ["Adresli", "Konvansiyonel"]
 IP_SINIFI = ["IP20", "IP42", "IP54", "IP65", "IP66", "IP67"]
 KATMAN_SECENEKLERI = ["Erişim (Access)", "Dağıtım (Distribution)", "Omurga (Core)"]
+
+# Alarm tarafında kablolu/kablosuz ayrımı her türde sorulur
+BAGLANTI_SECENEKLERI = ["Kablolu", "Kablosuz", "Hibrit (kablolu + kablosuz)"]
+FREKANS_SECENEKLERI = ["433 MHz", "868 MHz", "915 MHz", "2.4 GHz"]
+PIL_SECENEKLERI = ["Yok (kablolu besleme)", "CR123A", "CR2032", "AA (kalem)",
+                   "AAA (ince kalem)", "9V", "Lityum (dahili)"]
 
 # Ağ ürün türleri: anahtar -> (görünen ad, ikon, alanlar)
 TURLER: dict[str, dict] = {
@@ -297,9 +308,132 @@ TURLER: dict[str, dict] = {
             Alan("Açıklama", "Teknik Açıklama"),
         ],
     },
+
+    # ----------------------------------------------------------------- #
+    # Alarm (hırsız ihbar) sistemleri — kablolu ve kablosuz
+    # ----------------------------------------------------------------- #
+    "alarm_panel": {
+        "aile": "alarm",
+        "ad": "Alarm Paneli",
+        "ikon": "🔐",
+        "aciklama": "Hırsız ihbar kontrol panelleri (kablolu, kablosuz, hibrit)",
+        "alanlar": [
+            Alan("Bağlantı Tipi", "Bağlantı Tipi", "secim", BAGLANTI_SECENEKLERI),
+            Alan("Zon Sayısı", "Kablolu Zon Sayısı", "number", ipucu="örn. 8"),
+            Alan("Kablosuz Zon", "Kablosuz Zon Sayısı", "number", ipucu="örn. 32"),
+            Alan("Genişletilebilir Zon", "Genişletme ile Azami Zon", "number"),
+            Alan("Bölme", "Bölme (Partition) Sayısı", "number", ipucu="örn. 2"),
+            Alan("Kullanıcı Sayısı", "Kullanıcı Kodu Sayısı", "number"),
+            Alan("Frekans", "Kablosuz Frekans", "secim", FREKANS_SECENEKLERI),
+            Alan("Haberleşme", "Haberleşme", "secim",
+                 ["Yok", "PSTN (telefon hattı)", "GSM/GPRS", "IP (Ethernet)",
+                  "GSM + IP", "Wi-Fi"]),
+            Alan("Uygulama", "Mobil Uygulama Desteği", "secim", ["Var", "Yok"]),
+            Alan("Çıkış Sayısı", "Programlanabilir Çıkış (PGM)", "number"),
+            Alan("Batarya", "Yedek Batarya", ipucu="örn. 12V 7Ah"),
+            Alan("Yedek Süre", "Yedekleme Süresi", ipucu="örn. 24 saat"),
+            Alan("Sertifika", "Sertifika", "secim",
+                 ["EN 50131", "CE", "TSE", "Belirtilmemiş"]),
+        ],
+    },
+    "alarm_dedektor": {
+        "aile": "alarm",
+        "ad": "Alarm Dedektörü",
+        "ikon": "🚶",
+        "aciklama": "Hareket (PIR), manyetik kontak, cam kırılma ve titreşim "
+                    "dedektörleri",
+        "alanlar": [
+            Alan("Algılama Tipi", "Algılama Tipi", "secim",
+                 ["PIR (Hareket)", "Dual (PIR + Mikrodalga)", "Manyetik Kontak",
+                  "Cam Kırılma", "Titreşim / Şok", "Perde Tipi",
+                  "Dış Mekan (Bariyer)", "Su Baskını", "Panik / Sabotaj"]),
+            Alan("Bağlantı Tipi", "Bağlantı Tipi", "secim", BAGLANTI_SECENEKLERI),
+            Alan("Frekans", "Kablosuz Frekans", "secim", FREKANS_SECENEKLERI),
+            Alan("Menzil", "Algılama Menzili (m)", "number", ipucu="örn. 12"),
+            Alan("Algılama Açısı", "Algılama Açısı (°)", "number", ipucu="örn. 110"),
+            Alan("Evcil Hayvan", "Evcil Hayvan Bağışıklığı", "secim",
+                 ["Yok", "Var (25 kg'a kadar)", "Var (45 kg'a kadar)"]),
+            Alan("Pil Tipi", "Pil Tipi", "secim", PIL_SECENEKLERI),
+            Alan("Pil Ömrü", "Pil Ömrü", ipucu="örn. 2 yıl"),
+            Alan("Zon", "Bağlı Olduğu Zon", ipucu="örn. Zon 3"),
+            Alan("Montaj", "Montaj", "secim",
+                 ["İç Mekan (duvar)", "İç Mekan (köşe)", "Tavan", "Dış Mekan"]),
+            Alan("Tamper", "Sabotaj (tamper) Koruması", "secim", ["Var", "Yok"]),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "alarm_keypad": {
+        "aile": "alarm",
+        "ad": "Tuş Takımı / Kumanda",
+        "ikon": "🔢",
+        "aciklama": "Keypad, uzaktan kumanda, etiket okuyucu ve panik butonları",
+        "alanlar": [
+            Alan("Cihaz Tipi", "Cihaz Tipi", "secim",
+                 ["Tuş Takımı (LED)", "Tuş Takımı (LCD)", "Dokunmatik Tuş Takımı",
+                  "Uzaktan Kumanda", "Etiket / Proximity Okuyucu", "Panik Butonu"]),
+            Alan("Bağlantı Tipi", "Bağlantı Tipi", "secim", BAGLANTI_SECENEKLERI),
+            Alan("Frekans", "Kablosuz Frekans", "secim", FREKANS_SECENEKLERI),
+            Alan("Buton Sayısı", "Buton Sayısı", "number", ipucu="kumandalar için"),
+            Alan("Bölme Desteği", "Bölme (Partition) Desteği", "secim",
+                 ["Var", "Yok"]),
+            Alan("Pil Tipi", "Pil Tipi", "secim", PIL_SECENEKLERI),
+            Alan("Tamper", "Sabotaj (tamper) Koruması", "secim", ["Var", "Yok"]),
+            Alan("Montaj", "Montaj", "secim", ["Duvar", "Taşınabilir"]),
+        ],
+    },
+    "alarm_siren": {
+        "aile": "alarm",
+        "ad": "Alarm Sireni",
+        "ikon": "📢",
+        "aciklama": "İç/dış mekan alarm sirenleri ve flaşörler",
+        "alanlar": [
+            Alan("Cihaz Tipi", "Cihaz Tipi", "secim",
+                 ["İç Mekan Siren", "Dış Mekan Siren", "Siren + Flaşör", "Flaşör"]),
+            Alan("Bağlantı Tipi", "Bağlantı Tipi", "secim", BAGLANTI_SECENEKLERI),
+            Alan("Frekans", "Kablosuz Frekans", "secim", FREKANS_SECENEKLERI),
+            Alan("Ses Seviyesi", "Ses Seviyesi (dB)", "number", ipucu="örn. 110"),
+            Alan("Besleme", "Besleme", "secim",
+                 ["Panelden (12V DC)", "24V DC", "Pil", "Panelden + Pil"]),
+            Alan("Batarya", "Yedek Batarya", ipucu="örn. 12V 1.2Ah"),
+            Alan("Tamper", "Sabotaj (tamper) Koruması", "secim", ["Var", "Yok"]),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "alarm_modul": {
+        "aile": "alarm",
+        "ad": "Alarm Modülü",
+        "ikon": "🧩",
+        "aciklama": "Zon genişletici, kablosuz alıcı, GSM/IP haberleşme, röle ve "
+                    "tekrarlayıcı modülleri",
+        "alanlar": [
+            Alan("Modül Tipi", "Modül Tipi", "secim",
+                 ["Zon Genişletme Modülü", "Kablosuz Alıcı (receiver)",
+                  "GSM / GPRS Haberleşme", "IP Haberleşme", "Wi-Fi Modülü",
+                  "Röle / Çıkış Modülü", "Güç Kaynağı Modülü",
+                  "Tekrarlayıcı (repeater)", "Ses / Konuşma Modülü", "Diğer"]),
+            Alan("Bağlantı Tipi", "Bağlantı Tipi", "secim", BAGLANTI_SECENEKLERI),
+            Alan("Frekans", "Kablosuz Frekans", "secim", FREKANS_SECENEKLERI),
+            Alan("Kanal Sayısı", "Zon / Kanal Sayısı", "number", ipucu="örn. 8"),
+            Alan("Menzil", "Menzil", ipucu="örn. 100 m (açık alan)"),
+            Alan("Besleme", "Besleme", "secim",
+                 ["Panelden (12V DC)", "24V DC", "220V AC", "Pil"]),
+            Alan("Uyumlu Panel", "Uyumlu Panel", ipucu="örn. Paradox SP serisi"),
+            Alan("Açıklama", "Teknik Açıklama"),
+        ],
+    },
 }
 
-# Kategori adından tür anahtarına: içe aktarılmış kayıtları da yakalamak için
+# Kategori adından tür anahtarına: içe aktarılmış kayıtları da yakalamak için.
+#
+# SIRA ÖNEMLİDİR — ilk eşleşen kural kazanır. Üç aile aynı kelimeleri
+# paylaşıyor ("alarm", "panel", "dedektör", "siren", "kablosuz"), bu yüzden
+# daha dar kural daha geniş olanın ÜSTÜNDE durmak zorunda:
+#   • "Yangın Alarm Paneli" → yangın (alarm kuralından önce gelir)
+#   • "Kablosuz Alarm Paneli" → alarm (access_point'in "kablosuz"undan önce)
+#   • "Kablosuz Link" → ptp (yine "kablosuz"tan önce)
+#   • yalın "Siren" → yangın butonu (eski davranış korunur); "Alarm Sireni"
+#     ise alarm ailesine düşer.
+# Bir anahtar boşlukla çevrelenirse (" pir ") tam kelime olarak aranır.
 _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
     # Yaygın yazım hataları da dahil ("swich", "swtich" gerçek veride görüldü)
     (("switch", "swich", "swtich", "anahtar"), "switch"),
@@ -308,15 +442,36 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
     # noktadan noktaya bağlantı. access_point'ten ÖNCE eşleşmeliler.
     (("wifi dongle", "wi-fi dongle", "wireless dongle", "wireless adapter",
       "wireless bridge", "wifi bridge", "kablosuz kopru"), "diger"),
+
+    # --- Yangın paneli: "alarm" kelimesini alarm ailesine kaptırmamalı ---
+    (("yangin alarm panel", "yangin panel", "yangin santral", "yangin alarm santral",
+      "yangin ihbar panel", "yangin kontrol panel"), "yangin_panel"),
+
+    # --- Alarm (hırsız ihbar) sistemleri ---
+    (("hirsiz alarm", "hirsiz ihbar", "soygun alarm", "guvenlik alarm",
+      "alarm panel", "alarm santral", "alarm kontrol panel"), "alarm_panel"),
+    ((" pir ", "pir dedektor", "pir sensor", "alarm dedektor", "alarm sensor",
+      "hareket dedektor", "hareket sensor",
+      "manyetik kontak", "kapi kontak", "cam kirilma", "titresim dedektor",
+      "titresim sensor", "perde dedektor", "perde tipi",
+      "bariyer dedektor"), "alarm_dedektor"),
+    (("tus takimi", "keypad", "uzaktan kumanda", "alarm kumanda",
+      "etiket okuyucu", "proximity okuyucu", "panik butonu"), "alarm_keypad"),
+    (("alarm siren", "harici siren", "ic mekan siren", "dis mekan siren",
+      "kablosuz siren"), "alarm_siren"),
+    (("zon genisletici", "zon genisletme", "kablosuz alici", "alarm modul",
+      "gsm modul", "gprs modul", "ip haberlesme", "haberlesme modul",
+      "role modul", "tekrarlayici modul"), "alarm_modul"),
+
+    # "Kablosuz Link" access_point değildir: ptp önce gelir
+    (("noktadan noktaya", "point to point", "ptp", "ptmp", "kablosuz link",
+      "radyo link", "airfiber", "airmax", "nanostation"), "ptp"),
     (("access point", "accesspoint", "erisim noktasi", "wifi", "wi-fi",
       "kablosuz"), "access_point"),
     (("firewall", "guvenlik duvari", "utm", "guvenlik geciti"), "firewall"),
-    (("noktadan noktaya", "point to point", "ptp", "ptmp", "kablosuz link",
-      "radyo link", "airfiber", "airmax", "nanostation"), "ptp"),
     (("router", "modem", "yonlendirici"), "router"),
-    # --- Yangın algılama ---
-    (("yangin alarm panel", "yangin panel", "yangin santral", "alarm santral",
-      "ihbar panel"), "yangin_panel"),
+
+    # --- Yangın algılama (kalan türler) ---
     (("beam dedektor", "isinli dedektor", "yansitici", "prizma",
       "lineer duman"), "beam"),
     (("dedektor", "detektor", "duman sensor", "isi sensor", "alev sensor",
@@ -328,14 +483,15 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
     (("nvr", "dvr", "kayit cihazi", "kamera kayit"), "nvr"),
     (("kabinet", "kabin", "patch panel", "patchpanel", "rack"), "kabinet"),
     # Ağ altyapısı ama yukarıdakilere girmeyenler
-    (("media converter", "medya donusturucu", "kvm", "konsol sunucu"), "diger"),
+    (("media converter", "medya donusturucu", "kvm", "konsol sunucu",
+      "diger ag urunu"), "diger"),
 ]
 
 
 # Ağ cihazının YEDEK PARÇASI olan kategoriler ağ ürünü sayılmaz:
 # "NVR Diski" bir disktir, "Switch Fanı" bir fandır.
 _PARCA_KELIMELERI = ("disk", "harddisk", "hdd", "ssd", "fan", "adaptor",
-                     "kablo", "raf", "vida", "guc")
+                     "kablo", "raf", "vida", "guc", "batarya", "pil")
 
 
 def _parca_mi(sade: str) -> bool:
@@ -358,8 +514,16 @@ def tur_bul(kategori_adi: str | None) -> str | None:
     if not kategori_adi:
         return None
     sade = _sadelestir(kategori_adi)
+    # Baş/son boşluk: " pir " gibi anahtarlar tam kelime arayabilsin
+    # ("spiral" içindeki "pir"e takılmasın); diğer anahtarlar etkilenmez.
+    bosluklu = f" {sade} "
+    # "Yangın Alarm Sireni" bir alarm ürünü değil, yangın ekipmanıdır:
+    # adında "yangın" geçen hiçbir kayıt alarm ailesine düşmez.
+    yangin_metni = "yangin" in sade
     for anahtarlar, tur in _KATEGORI_IPUCU:
-        if any(a in sade for a in anahtarlar):
+        if yangin_metni and tur.startswith("alarm_"):
+            continue
+        if any(a in bosluklu for a in anahtarlar):
             # "SFP / Modül" kendisi bir modüldür; parça denetimi ona uygulanmaz
             if tur != "sfp" and _parca_mi(sade):
                 return None

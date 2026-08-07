@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Hangi kategoriler ağ ürünü sayılıyor, hangileri kaçıyor?
+"""Hangi kategoriler sistem ürünü sayılıyor, hangileri kaçıyor?
 
-Ağ Ürünleri ekranı, kategori adından tür çıkarır (bkz. app/ag.py: tur_bul).
-Bu script tüm kategorileri cihaz sayılarıyla listeler ve hangisinin hangi ağ
-türüne eşlendiğini gösterir — eşleşmeyenler ayrı başlık altında toplanır.
+Ağ / Yangın / Alarm ekranları kategori adından tür çıkarır (bkz. app/ag.py:
+tur_bul). Bu script tüm kategorileri cihaz sayılarıyla listeler, hangisinin
+hangi türe ve aileye eşlendiğini gösterir — eşleşmeyenler ayrı başlık altında
+toplanır.
 
 Kullanım:
     ./.venv/bin/python scripts/ag-kategori-kontrol.py
@@ -26,11 +27,15 @@ from app import ag, models  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.ortam_uyari import uyar  # noqa: E402
 
-# Ağ donanımı olma ihtimali yüksek ama eşleşmemiş kategorileri işaretle
+# Sistem donanımı olma ihtimali yüksek ama eşleşmemiş kategorileri işaretle
 SUPHELI = ("switch", "swich", "swtich", "ap", "access", "wifi", "wi-fi", "kablosuz",
            "router", "modem", "firewall", "sfp", "fiber", "optik", "transceiver",
            "gbic", "patch", "kabinet", "kabin", "rack", "utp", "kablo", "hub",
-           "nvr", "poe", "media", "converter", "omurga", "ethernet", "network", "ağ")
+           "nvr", "poe", "media", "converter", "omurga", "ethernet", "network", "ağ",
+           # yangın ve alarm tarafı
+           "yangın", "dedektör", "detektör", "sensör", "siren", "flaşör", "buton",
+           "alarm", "pir", "hareket", "kontak", "kumanda", "keypad", "tuş takımı",
+           "panel", "santral", "modül", "zon")
 
 
 def main() -> int:
@@ -56,13 +61,21 @@ def main() -> int:
 
         M, Y, S, N = '\033[36m', '\033[32m', '\033[33m', '\033[0m'
 
-        print(f"\n{M}Ağ ürünü sayılan kategoriler{N}")
         if eslesen:
-            for ad, adet, tur in sorted(eslesen, key=lambda x: -x[1]):
-                print(f"  {Y}✓{N} {ad:<42} {adet:>4} cihaz  →  {ag.TURLER[tur]['ad']}")
+            for aile, bilgi in ag.AILELER.items():
+                grup = [e for e in eslesen
+                        if ag.TURLER[e[2]]["aile"] == aile]
+                if not grup:
+                    continue
+                print(f"\n{M}{bilgi['ikon']} {bilgi['ad']} sayılan kategoriler{N}")
+                for ad, adet, tur in sorted(grup, key=lambda x: -x[1]):
+                    print(f"  {Y}✓{N} {ad:<42} {adet:>4} cihaz  →  "
+                          f"{ag.TURLER[tur]['ad']}")
+                print(f"  ── {len(grup)} kategori, "
+                      f"{sum(a for _, a, _ in grup)} cihaz")
             print(f"\n  Toplam: {sum(a for _, a, _ in eslesen)} cihaz")
         else:
-            print("  (yok)")
+            print(f"\n{M}Sistem ürünü sayılan kategoriler{N}\n  (yok)")
 
         # Eşleşmeyenler: önce şüpheliler, cihaz sayısına göre
         supheli = [(a, n) for a, n, _ in kacan
@@ -71,14 +84,14 @@ def main() -> int:
                      if not any(s in (a or "").lower() for s in SUPHELI)]
 
         if supheli:
-            print(f"\n{S}Ağ ürünü OLABİLİR ama eşleşmedi{N}")
+            print(f"\n{S}Sistem ürünü OLABİLİR ama eşleşmedi{N}")
             for ad, adet in sorted(supheli, key=lambda x: -x[1]):
                 print(f"  ! {ad:<42} {adet:>4} cihaz")
-            print("\n  Bunları Ağ Ürünleri ekranına almak için kategoriyi yeniden")
+            print("\n  Bunları ilgili ekrana almak için kategoriyi yeniden")
             print("  adlandırın ya da app/ag.py içindeki _KATEGORI_IPUCU'na ekleyin.")
 
         if digerleri:
-            print(f"\n{M}Ağ dışı kategoriler{N}")
+            print(f"\n{M}Sistem dışı kategoriler{N}")
             for ad, adet in sorted(digerleri, key=lambda x: -x[1])[:30]:
                 print(f"    {ad:<42} {adet:>4} cihaz")
             if len(digerleri) > 30:

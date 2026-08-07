@@ -43,8 +43,8 @@ python scripts/create_admin.py --username admin --password "GucluParola"
 ## Arayüz
 
 Sol menü + üst bar düzeni. Menü iki bölümdür: günlük işler (Kontrol Paneli,
-Varlıklar, **Ağ Ürünleri**, **Yangın Sistemleri**, Personel,
-Aksesuar/Sarf/Bileşen/Lisans) ve
+Varlıklar, **Ağ Ürünleri**, **Yangın Sistemleri**, **Alarm Sistemleri**,
+Personel, Aksesuar/Sarf/Bileşen/Lisans) ve
 **Yönetim** (Tanımlar,
 Excel Aktarım, Fatura Oku, Ayarlar). Üst barda her yerden çalışan arama
 kutusu, oturum sayacı, koyu/açık tema düğmesi ve kullanıcı kartı bulunur.
@@ -253,12 +253,12 @@ alanlar (hepsi CSV içe/dışa aktarımda ve aramada desteklenir):
 Bunların dışında kalan her şey için `custom` (JSON) alanı var — şema
 değiştirmeden istediğin alanı ekleyebilirsin.
 
-## Sistem ürünleri (ağ ve yangın)
+## Sistem ürünleri (ağ, yangın ve alarm)
 
-Sol menüde iki bölüm vardır: **Ağ Ürünleri** ve **Yangın Sistemleri**. İkisi de
-aynı makineyi kullanır — ayrı bir tablo değildir, normal varlıklardır; bu
-yüzden zimmet, dosya eki, etiket basma ve arama aynen çalışır. Fark, her türün
-kendi teknik alan listesi olmasıdır.
+Sol menüde üç bölüm vardır: **Ağ Ürünleri**, **Yangın Sistemleri** ve
+**Alarm Sistemleri**. Üçü de aynı makineyi kullanır — ayrı bir tablo değildir,
+normal varlıklardır; bu yüzden zimmet, dosya eki, etiket basma ve arama aynen
+çalışır. Fark, her türün kendi teknik alan listesi olmasıdır.
 
 ### 🌐 Ağ Ürünleri
 
@@ -283,15 +283,30 @@ kendi teknik alan listesi olmasıdır.
 | 📡 Beam Dedektör / Yansıtıcı | Parça tipi (verici-alıcı / verici / alıcı / **yansıtıcı prizma**), menzil, yansıtıcı sayısı, hizalama, adres, montaj yüksekliği |
 | 🧯 Diğer Yangın Ekipmanı | Giriş/çıkış modülü, izolatör, tekrarlayıcı panel, yangın dolabı/tüpü, duman damperi |
 
+### 🔐 Alarm Sistemleri
+
+Hırsız ihbar (intrusion) tarafı. Her türde **Bağlantı Tipi**
+(kablolu / kablosuz / hibrit) ve **Frekans** (433 / 868 / 915 MHz, 2.4 GHz)
+sorulur; kablosuz cihazlarda ayrıca pil tipi ve pil ömrü tutulur.
+
+| Alt kategori | Türe özel alanlar |
+|---|---|
+| 🔐 Alarm Paneli | Kablolu/kablosuz zon sayısı, genişletme ile azami zon, **bölme (partition)**, kullanıcı kodu, haberleşme (PSTN / GSM / IP / Wi-Fi), mobil uygulama, PGM çıkışı, batarya ve yedekleme süresi, sertifika (EN 50131) |
+| 🚶 Alarm Dedektörü | Algılama tipi (**PIR**, dual PIR+mikrodalga, manyetik kontak, cam kırılma, titreşim, perde tipi, dış mekan bariyer, su baskını), menzil, algılama açısı, **evcil hayvan bağışıklığı**, pil tipi/ömrü, zon, montaj, tamper, IP sınıfı |
+| 🔢 Tuş Takımı / Kumanda | Cihaz tipi (LED/LCD/dokunmatik keypad, uzaktan kumanda, proximity okuyucu, panik butonu), buton sayısı, bölme desteği, pil, tamper |
+| 📢 Alarm Sireni | İç/dış mekan siren, siren+flaşör, ses seviyesi (dB), besleme, yedek batarya, tamper, IP sınıfı |
+| 🧩 Alarm Modülü | Modül tipi (zon genişletme, **kablosuz alıcı**, GSM/GPRS, IP, Wi-Fi, röle/çıkış, güç kaynağı, tekrarlayıcı), zon/kanal sayısı, menzil, besleme, uyumlu panel |
+
 Ekranın üstünde toplam ürün, ağ tarafında **toplam port** ve PoE besleyen
-cihaz sayısı, yangın tarafında ürün çeşidi ve lokasyon dağılımı; listede her
-ürünün **görseli**, lokasyonu, proje kodu ve kullanım durumu (boşta / kimde)
-görünür.
+cihaz sayısı, yangın ve alarm tarafında ürün çeşidi ve lokasyon dağılımı;
+listede her ürünün **görseli**, lokasyonu, proje kodu ve kullanım durumu
+(boşta / kimde) görünür.
 
 ```bash
 curl -H "Authorization: Bearer $T" "$API/ag/urunler?tur=switch&proje_kodu=U030"
 curl -H "Authorization: Bearer $T" "$API/ag/urunler?aile=yangin"
-curl -H "Authorization: Bearer $T" "$API/ag/ozet?aile=yangin"
+curl -H "Authorization: Bearer $T" "$API/ag/ozet?aile=alarm"
+curl -H "Authorization: Bearer $T" "$API/ag/urunler?tur=alarm_dedektor"
 ```
 
 > Uç adresleri tarihsel olarak `/ag` ile başlar (bölüm önce yalnızca ağ
@@ -303,7 +318,12 @@ ayıklanır: **"NVR Diski"** bir disktir, NVR değil — Türkçede tamlamanın 
 sonda olduğu için son kelimeye bakılır ("Switch Kablosu" parça, "Kablosuz
 Erişim Noktası" cihaz).
 
-Hangi kategorilerin ağ ürünü sayıldığını görmek için:
+Üç aile aynı kelimeleri paylaştığı için eşleştirme sırası önemlidir:
+**"Yangın Alarm Paneli"** yangın, **"Kablosuz Alarm Paneli"** alarm,
+**"Kablosuz Erişim Noktası"** ağ ürünüdür. Adında "yangın" geçen hiçbir kayıt
+alarm ailesine düşmez.
+
+Hangi kategorilerin hangi aileye/türe düştüğünü görmek için:
 
 ```bash
 ./.venv/bin/python scripts/ag-kategori-kontrol.py

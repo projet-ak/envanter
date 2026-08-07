@@ -358,7 +358,7 @@ def test_tamlama_basi_sonda_kuralı(kategori, beklenen):
 # --------------------------------------------------------------------------- #
 def test_aileler_listelenir(client):
     a = {x["aile"] for x in client.get("/ag/aileler").json()}
-    assert a == {"ag", "yangin"}
+    assert a == {"ag", "yangin", "alarm"}
 
 
 def test_sablon_aileye_gore_filtrelenir(client):
@@ -366,14 +366,19 @@ def test_sablon_aileye_gore_filtrelenir(client):
                                               params={"aile": "ag"}).json()}
     yangin_turler = {x["tur"] for x in client.get("/ag/sablon",
                                                   params={"aile": "yangin"}).json()}
+    alarm_turler = {x["tur"] for x in client.get("/ag/sablon",
+                                                 params={"aile": "alarm"}).json()}
     assert {"switch", "sfp", "firewall", "ptp"} <= ag_turler
     assert {"yangin_panel", "dedektor", "yangin_buton", "beam"} <= yangin_turler
+    assert {"alarm_panel", "alarm_dedektor", "alarm_keypad", "alarm_siren",
+            "alarm_modul"} <= alarm_turler
     assert not (ag_turler & yangin_turler), "türler iki aileye birden giremez"
+    assert not (alarm_turler & (ag_turler | yangin_turler))
 
 
 def test_her_turun_ailesi_var(client):
     for s in client.get("/ag/sablon").json():
-        assert s["aile"] in ("ag", "yangin"), f"{s['tur']} ailesiz"
+        assert s["aile"] in ("ag", "yangin", "alarm"), f"{s['tur']} ailesiz"
 
 
 def test_bilinmeyen_aile_reddedilir(client):
@@ -508,3 +513,152 @@ def test_yangin_kategorileri_dogru_aileye_duser():
                      "Beam Dedektör", "Yangın Tüpü"):
         tur = ag.tur_bul(kategori)
         assert ag.TURLER[tur]["aile"] == "yangin", f"{kategori} yanlış ailede"
+
+
+# --------------------------------------------------------------------------- #
+# Alarm sistemleri (kablolu / kablosuz)
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def alarm_sahne(client):
+    lok = client.post("/locations", json={"name": "ŞANTİYE U050",
+                                          "proje_kodu": "U050"}).json()
+    client.post("/ag/urunler", json={
+        "tur": "alarm_panel", "asset_tag": "AP-1", "marka": "Paradox",
+        "model": "SP6000", "location_id": lok["id"],
+        "ozellikler": {"Bağlantı Tipi": "Hibrit (kablolu + kablosuz)",
+                       "Zon Sayısı": "8", "Kablosuz Zon": "32",
+                       "Frekans": "433 MHz", "Haberleşme": "GSM + IP",
+                       "Bölme": "2"}})
+    client.post("/ag/urunler", json={
+        "tur": "alarm_dedektor", "asset_tag": "AD-1", "marka": "Paradox",
+        "model": "NV5", "location_id": lok["id"],
+        "ozellikler": {"Algılama Tipi": "PIR (Hareket)",
+                       "Bağlantı Tipi": "Kablolu", "Menzil": "12",
+                       "Algılama Açısı": "110",
+                       "Evcil Hayvan": "Var (25 kg'a kadar)"}})
+    client.post("/ag/urunler", json={
+        "tur": "alarm_dedektor", "asset_tag": "AD-2", "location_id": lok["id"],
+        "ozellikler": {"Algılama Tipi": "Manyetik Kontak",
+                       "Bağlantı Tipi": "Kablosuz", "Frekans": "868 MHz",
+                       "Pil Tipi": "CR123A", "Pil Ömrü": "2 yıl"}})
+    client.post("/ag/urunler", json={
+        "tur": "alarm_keypad", "asset_tag": "AK-1", "location_id": lok["id"],
+        "ozellikler": {"Cihaz Tipi": "Tuş Takımı (LCD)",
+                       "Bağlantı Tipi": "Kablolu"}})
+    client.post("/ag/urunler", json={
+        "tur": "alarm_siren", "asset_tag": "AS-1", "location_id": lok["id"],
+        "ozellikler": {"Cihaz Tipi": "Dış Mekan Siren", "Ses Seviyesi": "110",
+                       "IP Sınıfı": "IP65"}})
+    client.post("/ag/urunler", json={
+        "tur": "alarm_modul", "asset_tag": "AM-1", "location_id": lok["id"],
+        "ozellikler": {"Modül Tipi": "Kablosuz Alıcı (receiver)",
+                       "Frekans": "433 MHz", "Kanal Sayısı": "32",
+                       "Uyumlu Panel": "Paradox SP serisi"}})
+    return {"lok": lok}
+
+
+def test_alarm_urunleri_diger_ailelerde_gorunmez(client, sahne, yangin_sahne,
+                                                 alarm_sahne):
+    alarm = {u["asset_tag"] for u in
+             client.get("/ag/urunler", params={"aile": "alarm"}).json()}
+    agl = {u["asset_tag"] for u in
+           client.get("/ag/urunler", params={"aile": "ag"}).json()}
+    yng = {u["asset_tag"] for u in
+           client.get("/ag/urunler", params={"aile": "yangin"}).json()}
+    assert alarm == {"AP-1", "AD-1", "AD-2", "AK-1", "AS-1", "AM-1"}
+    assert not (alarm & agl) and not (alarm & yng)
+    assert not ({"YP-1", "DD-1"} & alarm), "yangın ürünü alarm ekranına düşmemeli"
+
+
+def test_alarm_ozeti(client, alarm_sahne):
+    o = client.get("/ag/ozet", params={"aile": "alarm"}).json()
+    assert o["toplam"] == 6
+    turler = {d["tur"]: d["adet"] for d in o["tur_dagilimi"]}
+    assert turler == {"alarm_panel": 1, "alarm_dedektor": 2, "alarm_keypad": 1,
+                      "alarm_siren": 1, "alarm_modul": 1}
+    assert o["lokasyon_dagilimi"] == [{"lokasyon": "ŞANTİYE U050", "adet": 6}]
+
+
+def test_kablosuz_alarm_alanlari(client):
+    """Kablosuz cihazlarda frekans, pil ve menzil sorulabilmeli."""
+    for tur in ("alarm_panel", "alarm_dedektor", "alarm_keypad", "alarm_siren",
+                "alarm_modul"):
+        s = next(x for x in client.get("/ag/sablon").json() if x["tur"] == tur)
+        adlar = {a["ad"] for a in s["alanlar"]}
+        assert "Bağlantı Tipi" in adlar, f"{tur}: kablolu/kablosuz ayrımı yok"
+        assert "Frekans" in adlar, f"{tur}: kablosuz frekans alanı yok"
+    ded = next(x for x in client.get("/ag/sablon").json()
+               if x["tur"] == "alarm_dedektor")
+    adlar = {a["ad"] for a in ded["alanlar"]}
+    assert {"Pil Tipi", "Pil Ömrü", "Menzil", "Algılama Açısı",
+            "Evcil Hayvan", "Tamper"} <= adlar
+
+
+def test_alarm_ozellikleri_aranabilir(client, alarm_sahne):
+    r = client.get("/ag/urunler", params={"aile": "alarm",
+                                          "q": "manyetik kontak"}).json()
+    assert [u["asset_tag"] for u in r] == ["AD-2"]
+    r2 = client.get("/ag/urunler", params={"q": "868 MHz"}).json()
+    assert [u["asset_tag"] for u in r2] == ["AD-2"]
+
+
+def test_alarm_dedektoru_kablosuz_kaydedilir(client, alarm_sahne):
+    u = next(x for x in client.get("/ag/urunler",
+                                   params={"tur": "alarm_dedektor"}).json()
+             if x["asset_tag"] == "AD-2")
+    assert u["ozellikler"]["Bağlantı Tipi"] == "Kablosuz"
+    assert u["ozellikler"]["Frekans"] == "868 MHz"
+    assert u["ozellikler"]["Pil Tipi"] == "CR123A"
+
+
+@pytest.mark.parametrize("kategori,beklenen", [
+    # Alarm tarafı
+    ("Alarm Paneli", "alarm_panel"),
+    ("Kablosuz Alarm Paneli", "alarm_panel"),
+    ("Hırsız Alarm Paneli", "alarm_panel"),
+    ("Alarm Santrali", "alarm_panel"),
+    ("PIR", "alarm_dedektor"),
+    ("PIR Dedektörü", "alarm_dedektor"),
+    ("Hareket Dedektörü", "alarm_dedektor"),
+    ("Kablosuz Manyetik Kontak", "alarm_dedektor"),
+    ("Cam Kırılma Dedektörü", "alarm_dedektor"),
+    ("Perde Tipi Dedektör", "alarm_dedektor"),
+    ("Tuş Takımı", "alarm_keypad"),
+    ("Uzaktan Kumanda", "alarm_keypad"),
+    ("Panik Butonu", "alarm_keypad"),
+    ("Alarm Sireni", "alarm_siren"),
+    ("Dış Mekan Siren", "alarm_siren"),
+    ("Zon Genişletme Modülü", "alarm_modul"),
+    ("Kablosuz Alıcı", "alarm_modul"),
+    ("GSM Modülü", "alarm_modul"),
+    # Yangın tarafı alarm kurallarına kapılmamalı
+    ("Yangın Alarm Paneli", "yangin_panel"),
+    ("Yangın Alarm Sireni", "yangin_buton"),
+    ("Siren", "yangin_buton"),
+    ("Duman Dedektörü", "dedektor"),
+    ("Isı Dedektörü", "dedektor"),
+    # Ağ tarafı da bozulmamalı
+    ("Kablosuz Erişim Noktası", "access_point"),
+    ("Kablosuz Link", "ptp"),
+    ("Wi-Fi Dongle", "diger"),
+    # Yedek parçalar hiçbir aileye girmez
+    ("Alarm Paneli Bataryası", None),
+    ("Dedektör Pili", None),
+])
+def test_alarm_kategorileri_dogru_ture_duser(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen
+
+
+def test_alarm_kategorileri_dogru_aileye_duser():
+    for kategori in ("Alarm Paneli", "PIR Dedektörü", "Tuş Takımı",
+                     "Alarm Sireni", "GSM Modülü"):
+        tur = ag.tur_bul(kategori)
+        assert ag.TURLER[tur]["aile"] == "alarm", f"{kategori} yanlış ailede"
+
+
+def test_her_turun_kendi_kategori_adi_kendine_doner():
+    """Ürün eklenince kategori `kategori_adi(tur)` ile açılır; o ad geri
+    okununca aynı türü vermezse ürün yanlış ailede listelenir."""
+    for tur in ag.TURLER:
+        assert ag.tur_bul(ag.kategori_adi(tur)) == tur, \
+            f"{tur}: '{ag.kategori_adi(tur)}' → {ag.tur_bul(ag.kategori_adi(tur))}"

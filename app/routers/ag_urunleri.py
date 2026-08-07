@@ -21,12 +21,12 @@ WRITE = [Depends(require_editor)]
 
 @router.get("/aileler", dependencies=READ)
 def aileler():
-    """Ürün aileleri (Ağ Ürünleri, Yangın Sistemleri) — menü bunlardan üretilir."""
+    """Ürün aileleri (Ağ, Yangın, Alarm) — menü bunlardan üretilir."""
     return [{"aile": k, **v} for k, v in ag.AILELER.items()]
 
 
 @router.get("/sablon", dependencies=READ)
-def sablon(aile: str | None = Query(None, description="ag | yangin")):
+def sablon(aile: str | None = Query(None, description="ag | yangin | alarm")):
     """Ürün türleri ve her türün teknik alanları (arayüz formu bundan üretilir)."""
     if aile and aile not in ag.AILELER:
         raise HTTPException(400, f"Bilinmeyen aile: {aile}")
@@ -35,7 +35,7 @@ def sablon(aile: str | None = Query(None, description="ag | yangin")):
 
 @router.get("/urunler", dependencies=READ)
 def urunler(
-    aile: str | None = Query(None, description="ag | yangin"),
+    aile: str | None = Query(None, description="ag | yangin | alarm"),
     tur: str | None = Query(None, description="switch, sfp, dedektor, yangin_panel…"),
     location_id: int | None = None,
     proje_kodu: str | None = None,
@@ -52,7 +52,7 @@ def urunler(
 
 
 @router.get("/ozet", dependencies=READ)
-def ozet(aile: str | None = Query(None, description="ag | yangin"),
+def ozet(aile: str | None = Query(None, description="ag | yangin | alarm"),
          db: Session = Depends(get_db)):
     if aile and aile not in ag.AILELER:
         raise HTTPException(400, f"Bilinmeyen aile: {aile}")

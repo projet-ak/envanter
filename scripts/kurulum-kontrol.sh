@@ -237,23 +237,28 @@ print(f"      Zimmetli cihaz : {say(models.Asset, models.Asset.assigned_type.is_
 print(f"      Lokasyon       : {say(models.Location)}")
 print(f"      Yüklenen dosya : {say(models.AssetFile)}")
 
-# Ağ ürünleri (kategori adından tür çıkarılır)
+# Sistem ürünleri: ağ, yangın, alarm (kategori adından tür çıkarılır)
 try:
     from app import ag
-    agler = ag.urunler(db)
-    if agler:
-        sayac = {}
-        for u in agler:
-            ad = ag.TURLER.get(u["tur"], {}).get("ad", u["tur"])
-            sayac[ad] = sayac.get(ad, 0) + 1
-        ozet_ag = ", ".join(f"{k}({v})" for k, v in
-                            sorted(sayac.items(), key=lambda x: -x[1]))
-        print(f"      Ağ ürünü       : {len(agler)} — {ozet_ag}")
+    hepsi = ag.urunler(db)
+    if hepsi:
+        for aile, bilgi in ag.AILELER.items():
+            liste = [u for u in hepsi
+                     if ag.TURLER.get(u["tur"], {}).get("aile") == aile]
+            if not liste:
+                continue
+            sayac = {}
+            for u in liste:
+                ad = ag.TURLER.get(u["tur"], {}).get("ad", u["tur"])
+                sayac[ad] = sayac.get(ad, 0) + 1
+            ozet = ", ".join(f"{k}({v})" for k, v in
+                             sorted(sayac.items(), key=lambda x: -x[1]))
+            print(f"      {bilgi['ad']:<15}: {len(liste)} — {ozet}")
         print(f"      Transfer kaydı : {len(ag.transferler(db))}")
     else:
-        print("      Ağ ürünü       : yok")
+        print("      Sistem ürünü   : yok")
 except Exception as e:
-    print(f"      Ağ ürünü       : okunamadı ({type(e).__name__})")
+    print(f"      Sistem ürünü   : okunamadı ({type(e).__name__})")
 
 kodlar = db.execute(
     select(models.Location.proje_kodu, func.count(models.Asset.id))
