@@ -89,6 +89,47 @@ def cihaz_idleri(db: Session, q: str) -> list[int]:
     ]
 
 
+def personel_ara(db: Session, q: str, *, limit: int = 20) -> list[dict]:
+    """Zimmet verirken personel seçmek için ada/sicile göre arama.
+
+    Terim boşsa en çok cihaz taşıyanlardan başlayarak liste döner; böylece
+    kutu açılır açılmaz seçilebilecek isimler görünür.
+    """
+    from sqlalchemy import func
+
+    sayilar = dict(db.execute(
+        select(models.Asset.assigned_user_id, func.count(models.Asset.id))
+        .where(models.Asset.assigned_user_id.is_not(None))
+        .group_by(models.Asset.assigned_user_id)
+    ).all())
+
+    terim = normalle(q)
+    kisiler = db.scalars(
+        select(models.User).where(models.User.active.is_(True)).limit(ARAMA_TAVANI)
+    ).all()
+    if terim:
+        kisiler = [
+            k for k in kisiler
+            if _eslesir(terim, _kisi_adi(k), k.employee_num, k.department,
+                        k.sube, k.email)
+        ]
+        kisiler.sort(key=lambda k: normalle(_kisi_adi(k)))
+    else:
+        kisiler = sorted(kisiler, key=lambda k: -sayilar.get(k.id, 0))
+
+    return [
+        {
+            "id": k.id,
+            "ad": _kisi_adi(k),
+            "employee_num": k.employee_num,
+            "department": k.department,
+            "sube": k.sube,
+            "cihaz_sayisi": sayilar.get(k.id, 0),
+        }
+        for k in kisiler[:limit]
+    ]
+
+
 def hizli_ara(db: Session, q: str, *, limit: int = 10) -> dict:
     """Genel arama: cihazlar + personel, tek çağrıda.
 

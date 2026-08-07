@@ -1034,12 +1034,17 @@
             </tr>`).join('') + '</tbody></table>'
         : '<div class="muted">Kayıt yok</div>';
 
-      const butonlar = `
+      const butonlar =
+        (yaz ? (z.tur
+          ? `<button class="ghost" onclick="cihazIadeAl(${id})">↩ İade al</button>`
+          : `<button class="primary" onclick="checkoutPrompt(${id}, '${
+              encodeURIComponent(k.asset_tag)}', () => cihazDetay(${id}))">
+             Zimmetle</button>`) : '') + `
         <button class="ghost" onclick="openPdf('/documents/etiket/asset/${id}.pdf')"
           title="Etiket bas">🏷️</button>` +
         (z.kisi_id ? `<button class="ghost" title="Zimmet fişi"
           onclick="openPdf('/documents/zimmet/asset/${id}.pdf')">📄</button>` : '') +
-        (canWrite() ? `<button class="ghost" onclick="cihazDuzenle(${id})">✏️ Düzenle</button>` : '');
+        (yaz ? `<button class="ghost" onclick="cihazDuzenle(${id})">✏️ Düzenle</button>` : '');
 
       modalAc(`${k.asset_tag} — ${k.name ?? ''}`, `
         <div class="bolum"><h4>Künye</h4>${alanlar(k, [
@@ -1653,7 +1658,8 @@
         let btn = '';
         if (canWrite()) btn = a.assigned_type
           ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
-          : `<button class="ghost" onclick="checkoutPrompt(${a.id})">Zimmetle</button>`;
+          : `<button class="ghost" onclick="checkoutPrompt(${a.id}, '${
+              encodeURIComponent(a.asset_tag)}')">Zimmetle</button>`;
         if (a.assigned_type === 'user')
           btn += ` <button class="ghost" title="Zimmet fişi (PDF)"
                      onclick="openPdf('/documents/zimmet/asset/${a.id}.pdf')">📄</button>`;
@@ -1737,14 +1743,145 @@
       } catch (e) { addInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
     }
 
-    async function checkoutPrompt(id) {
-      const uid = prompt('Zimmetlenecek kullanıcı ID:'); if (!uid) return;
+    // ---------- Zimmetleme: kişi seçme penceresi ----------
+    // Kimse kullanıcı kimliğini ezbere bilmez; kişi ada göre aranıp seçilir.
+    let zimmetCihaz = null;      // {id, etiket}
+    let zimmetSonra = null;      // işlem bitince çağrılacak tazeleme
+    let kisiAraZaman = null;
+
+    async function checkoutPrompt(id, etiketKodlu = '', sonra = null) {
+      const etiket = decodeURIComponent(etiketKodlu);
+      zimmetCihaz = { id, etiket };
+      zimmetSonra = sonra || (() => loadAssets());
+      modalAc(`Zimmetle${etiket ? ' — ' + kacir(etiket) : ''}`, `
+        <div class="row">
+          <input id="zkAra" class="grow" autocomplete="off"
+                 placeholder="Personel ara: ad soyad, sicil no, departman…"
+                 oninput="kisiAraGecikmeli()" />
+          ${canWrite() ? `<button class="ghost" onclick="zimmetYeniPersonel()">
+             + Yeni personel</button>` : ''}
+        </div>
+        <div id="zkSonuc" class="note">Yükleniyor…</div>
+        <div class="bolum">
+          <h4>Kişi yerine yere zimmetle</h4>
+          <div class="row">
+            <select id="zkLokasyon" class="grow"><option value="">— lokasyon seç —</option></select>
+            <button class="ghost" onclick="zimmetLokasyona()">Lokasyona zimmetle</button>
+          </div>
+        </div>`);
+      setTimeout(() => document.getElementById('zkAra')?.focus(), 60);
+      kisiAra();
+      // Lokasyon listesini doldur
+      api('/locations?limit=500').then(lok => {
+        const el = document.getElementById('zkLokasyon');
+        if (!el) return;
+        el.innerHTML = '<option value="">— lokasyon seç —</option>' + lok
+          .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+          .map(l => `<option value="${l.id}">${kacir(l.name)}${
+            l.proje_kodu ? ' (' + kacir(l.proje_kodu) + ')' : ''}</option>`).join('');
+      }).catch(() => {});
+    }
+
+    function kisiAraGecikmeli() {
+      clearTimeout(kisiAraZaman);
+      kisiAraZaman = setTimeout(kisiAra, 180);
+    }
+
+    async function kisiAra() {
+      const kutu = document.getElementById('zkSonuc');
+      if (!kutu) return;
+      const q = document.getElementById('zkAra')?.value.trim() || '';
+      let liste;
+      try { liste = await api('/users/ara?limit=15&q=' + encodeURIComponent(q)); }
+      catch { kutu.textContent = 'Personel listesi alınamadı.'; return; }
+
+      if (!liste.length) {
+        kutu.innerHTML = `<div class="muted">Eşleşen personel yok.
+          ${canWrite() ? '“+ Yeni personel” ile ekleyebilirsin.' : ''}</div>`;
+        return;
+      }
+      kutu.innerHTML = `<div class="muted" style="margin-bottom:6px">
+          ${q ? 'Sonuçlar' : 'En çok cihaz taşıyanlar'} — seçmek için tıkla</div>
+        <table><tbody>${liste.map(k => `
+          <tr class="tikla" onclick="zimmetKisiye(${k.id})">
+            <td><b>👤 ${kacir(k.ad)}</b></td>
+            <td class="muted">${esc(k.employee_num)}</td>
+            <td class="muted">${esc(k.department || k.sube)}</td>
+            <td class="muted">${k.cihaz_sayisi} cihaz</td>
+            <td><button class="primary">Seç</button></td>
+          </tr>`).join('')}</tbody></table>`;
+    }
+
+    async function zimmetKisiye(kisiId) {
+      await zimmetVerGenel('user', kisiId);
+    }
+
+    async function zimmetLokasyona() {
+      const el = document.getElementById('zkLokasyon');
+      if (!el?.value) return alert('⚠ Önce bir lokasyon seç.');
+      await zimmetVerGenel('location', Number(el.value));
+    }
+
+    async function zimmetVerGenel(tur, hedefId) {
+      if (!zimmetCihaz) return;
       try {
-        await api(`/assets/${id}/checkout`, { method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ assigned_type: 'user', assigned_id: Number(uid) }) });
-        loadAssets();
-      } catch (e) { alert('⚠ ' + (e.detail || 'Hata')); }
+        await api(`/assets/${zimmetCihaz.id}/checkout`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assigned_type: tur, assigned_id: hedefId }),
+        });
+        modalKapat();
+        zimmetSonra?.();
+      } catch (e) { alert('⚠ ' + (e.detail || 'Zimmet verilemedi')); }
+    }
+
+    // Aranan kişi kayıtlı değilse pencereden çıkmadan ekle.
+    // Arama kutusuna yazılan metin ad/soyad olarak hazır gelir.
+    function zimmetYeniPersonel() {
+      const tam = (document.getElementById('zkAra')?.value || '').trim();
+      const parca = tam.split(/\s+/).filter(Boolean);
+      const kutu = document.getElementById('zkSonuc');
+      if (!kutu) return;
+      kutu.innerHTML = `
+        <div class="bolum"><h4>Yeni personel</h4>
+        <div class="form-grid">
+          <label>Ad <input id="ypAd" value="${kacir(parca[0] || '')}" /></label>
+          <label>Soyad <input id="ypSoyad"
+                 value="${kacir(parca.slice(1).join(' '))}" /></label>
+          <label>Sicil No <input id="ypSicil" /></label>
+          <label>Departman <input id="ypDepartman" /></label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" onclick="yeniPersonelKaydet()">
+            Ekle ve zimmetle</button>
+          <button class="ghost" onclick="kisiAra()">Vazgeç</button>
+        </div></div>`;
+      setTimeout(() => document.getElementById('ypAd')?.focus(), 60);
+    }
+
+    async function yeniPersonelKaydet() {
+      const ad = document.getElementById('ypAd').value.trim();
+      if (!ad) return alert('⚠ Ad zorunlu.');
+      try {
+        const k = await api('/users', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: ad,
+            last_name: document.getElementById('ypSoyad').value.trim() || null,
+            employee_num: document.getElementById('ypSicil').value.trim() || null,
+            department: document.getElementById('ypDepartman').value.trim() || null,
+          }),
+        });
+        await zimmetKisiye(k.id);       // eklenen kişiye hemen zimmetle
+      } catch (e) { alert('⚠ ' + (e.detail || 'Personel eklenemedi')); }
+    }
+
+    // Detay penceresinden iade — pencere açık kalsın, içerik tazelensin
+    async function cihazIadeAl(id) {
+      try {
+        await api(`/assets/${id}/checkin`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        cihazDetay(id);
+      } catch (e) { alert('⚠ ' + (e.detail || 'İade alınamadı')); }
     }
 
     async function checkin(id) {

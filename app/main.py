@@ -12,7 +12,7 @@ from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.routers import (
     assets, auth, csv_io, detay, documents, dosyalar, excel_io, invoices,
-    lookups, reports, search,
+    lookups, personel, reports, search,
 )
 from app.seed import seed_defaults
 
@@ -45,6 +45,8 @@ app = FastAPI(
 )
 
 app.include_router(auth.router)
+# /users/ara, lookups'ın /users/{item_id} yolundan ÖNCE kayıtlanmalı
+app.include_router(personel.router)
 for router in lookups.routers:
     app.include_router(router)
 app.include_router(assets.router)

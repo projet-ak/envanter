@@ -288,6 +288,24 @@ dosya adındaki `../` gibi ifadeler zarar veremez.
 > **Yedeklemede `yuklemeler/` klasörünü de al** — veritabanı yedeği bu
 > dosyaları içermez.
 
+## Zimmet verme
+
+**Zimmetle** düğmesi kişi seçme penceresi açar — kimlik numarası sorulmaz.
+Pencere açılır açılmaz en çok cihaz taşıyan personel listelenir; yazdıkça
+ad soyad, sicil no, departman veya şubeye göre süzülür (Türkçe duyarlı:
+`atesoglu` → **Ateşoğlu**). Her satırda kişinin kaç cihaz taşıdığı görünür.
+
+```bash
+curl -H "Authorization: Bearer $T" "$API/users/ara?q=ertekin"
+```
+
+Pencereden ayrıca:
+
+- **+ Yeni personel** — kayıtlı olmayan kişiyi oradan ekleyip aynı anda
+  zimmetleyebilirsin (arama kutusuna yazdığın ad forma hazır gelir).
+- **Lokasyona zimmetle** — cihaz kişiye değil bir yere (depo, şantiye)
+  verilecekse.
+
 ## Demirbaş zimmet formu (PDF)
 
 Personele cihaz teslim ederken imzalatılacak form, kurumun kullandığı
@@ -404,6 +422,7 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/assets/sayi` | Filtrelere uyan toplam sayı (sayfalamadan bağımsız) |
 | `GET` | `/assets/proje-kodlari` | Proje kodları + cihaz sayıları |
 | `GET` | `/assets/ara` | Yazdıkça arama (cihaz + personel + lokasyon, Türkçe duyarlı) |
+| `GET` | `/users/ara` | Zimmet için personel arama (cihaz sayılarıyla) |
 | `PUT/DELETE` | `/assets/{id}/ozellik` | Teknik özellik ekle-güncelle / sil |
 | `GET` | `/assets/ozellik-sablonu` | Bilinen özellik grupları ve alan adları |
 | `GET/POST` | `/assets/{id}/dosyalar` | Cihaz dosyalarını listele / yükle |
@@ -451,7 +470,7 @@ app/
   crud_factory.py    # Referans tabloları için jenerik CRUD
   seed.py            # Varsayılan durum etiketleri
   santiye.py         # Cihazları proje koduna göre şantiyelere dağıtma
-  arama.py           # Türkçe duyarlı yazdıkça arama
+  arama.py           # Türkçe duyarlı yazdıkça arama (cihaz/personel/lokasyon)
   pdf/               # Zimmet formu ve barkod/QR etiket üretimi
   ai/search.py       # Doğal dil → yapısal filtre (Claude)
   excel/             # Excel içe/dışa aktarım (sütun şeması + aktarım)
