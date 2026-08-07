@@ -110,6 +110,25 @@ TURLER: dict[str, dict] = {
             Alan("Katman", "Ağdaki Yeri", "secim", KATMAN_SECENEKLERI),
         ],
     },
+    "nvr": {
+        "ad": "NVR / Kayıt Cihazı",
+        "ikon": "🎥",
+        "aciklama": "Ağ üzerinden kamera kaydı yapan cihazlar (NVR / DVR)",
+        "alanlar": [
+            Alan("Kanal Sayısı", "Kanal Sayısı", "number", ipucu="örn. 16"),
+            Alan("PoE Portu", "PoE Portu", "number",
+                 ipucu="kameraları besleyen port sayısı"),
+            Alan("PoE Bütçesi (W)", "PoE Bütçesi (W)", "number"),
+            Alan("Disk Yuvası", "Disk Yuvası", "number", ipucu="örn. 4"),
+            Alan("Disk Kapasitesi", "Takılı Disk Kapasitesi", ipucu="örn. 4x4 TB"),
+            Alan("RAID", "RAID", "secim",
+                 ["Yok", "RAID 0", "RAID 1", "RAID 5", "RAID 6", "RAID 10"]),
+            Alan("Çözünürlük", "Azami Çözünürlük", "secim",
+                 ["2 MP (1080p)", "4 MP", "5 MP", "8 MP (4K)", "12 MP"]),
+            Alan("Kayıt Süresi", "Kayıt Süresi", ipucu="örn. 30 gün"),
+            Alan("Rack U", "Rack Yüksekliği (U)", "number"),
+        ],
+    },
     "kabinet": {
         "ad": "Kabinet / Patch Panel",
         "ikon": "🗄️",
@@ -142,10 +161,32 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
     (("access point", "accesspoint", "erisim noktasi", "wifi", "wi-fi",
       "kablosuz"), "access_point"),
     (("router", "firewall", "guvenlik duvari", "modem", "yonlendirici"), "router"),
+    (("nvr", "dvr", "kayit cihazi", "kamera kayit"), "nvr"),
     (("kabinet", "kabin", "patch panel", "patchpanel", "rack"), "kabinet"),
     # Ağ altyapısı ama yukarıdakilere girmeyenler
     (("media converter", "medya donusturucu", "kvm", "konsol sunucu"), "diger"),
 ]
+
+
+# Ağ cihazının YEDEK PARÇASI olan kategoriler ağ ürünü sayılmaz:
+# "NVR Diski" bir disktir, "Switch Fanı" bir fandır.
+_PARCA_KELIMELERI = ("disk", "harddisk", "hdd", "ssd", "fan", "adaptor",
+                     "kablo", "raf", "vida", "guc")
+
+
+def _parca_mi(sade: str) -> bool:
+    """Ad bir yedek parçayı mı anlatıyor?
+
+    Türkçede tamlamanın başı SONDA olur: "Switch Kablosu"nun konusu kablodur,
+    "Kablosuz Erişim Noktası"nınki noktadır. Bu yüzden yalnızca SON kelimeye
+    bakılır — metnin herhangi bir yerinde aramak "kablosuz" içindeki "kablo"ya
+    takılıp erişim noktalarını eliyordu.
+    """
+    kelimeler = sade.replace("/", " ").split()
+    if not kelimeler:
+        return False
+    son = kelimeler[-1]
+    return any(son.startswith(p) for p in _PARCA_KELIMELERI)
 
 
 def tur_bul(kategori_adi: str | None) -> str | None:
@@ -155,6 +196,9 @@ def tur_bul(kategori_adi: str | None) -> str | None:
     sade = _sadelestir(kategori_adi)
     for anahtarlar, tur in _KATEGORI_IPUCU:
         if any(a in sade for a in anahtarlar):
+            # "SFP / Modül" kendisi bir modüldür; parça denetimi ona uygulanmaz
+            if tur != "sfp" and _parca_mi(sade):
+                return None
             return tur
     return None
 

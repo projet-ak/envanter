@@ -294,3 +294,60 @@ def test_yazim_varyantlari_da_yakalanir(kategori, beklenen):
 ])
 def test_dongle_ve_bridge_dogru_siniflanir(kategori, beklenen):
     assert ag.tur_bul(kategori) == beklenen
+
+
+# --------------------------------------------------------------------------- #
+# NVR / kayıt cihazı
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("kategori,beklenen", [
+    ("NVR", "nvr"),
+    ("NVR Kayıt Cihazı", "nvr"),
+    ("DVR", "nvr"),
+    ("Kamera Kayıt Cihazı", "nvr"),
+    # Ağ cihazının yedek parçası ağ ürünü sayılmaz
+    ("NVR Diski", None),
+    ("Switch Fanı", None),
+    ("Access Point Adaptörü", None),
+    # SFP'nin kendisi bir modül; parça denetimi onu elemez
+    ("SFP / Modül", "sfp"),
+    ("Fiber Modül", "sfp"),
+])
+def test_nvr_ve_yedek_parca_ayrimi(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen
+
+
+def test_nvr_alanlari_kanal_ve_disk_icerir(client):
+    s = next(x for x in client.get("/ag/sablon").json() if x["tur"] == "nvr")
+    alanlar = {a["ad"] for a in s["alanlar"]}
+    assert {"Kanal Sayısı", "Disk Yuvası", "PoE Portu", "RAID"} <= alanlar
+
+
+def test_nvr_urunu_eklenir_ve_listelenir(client):
+    r = client.post("/ag/urunler", json={
+        "tur": "nvr", "asset_tag": "NVR-01", "marka": "HIKVISION",
+        "model": "DS-7616NI-K2/16P",
+        "ozellikler": {"Kanal Sayısı": "16", "PoE Portu": "16",
+                       "Disk Yuvası": "2", "Çözünürlük": "8 MP (4K)"}})
+    assert r.status_code == 201
+    u = client.get("/ag/urunler", params={"tur": "nvr"}).json()[0]
+    assert u["asset_tag"] == "NVR-01"
+    assert u["ozellikler"]["Kanal Sayısı"] == "16"
+
+
+def test_nvr_ozette_ayri_tur_olarak_sayilir(client):
+    client.post("/ag/urunler", json={"tur": "nvr", "asset_tag": "NVR-A"})
+    client.post("/ag/urunler", json={"tur": "nvr", "asset_tag": "NVR-B"})
+    turler = {d["tur"]: d["adet"] for d in client.get("/ag/ozet").json()["tur_dagilimi"]}
+    assert turler["nvr"] == 2
+
+
+@pytest.mark.parametrize("kategori,beklenen", [
+    # Tamlamanın başı sonda: konu kablo/disk ise parça, değilse cihaz
+    ("Switch Kablosu", None),
+    ("Kablosuz Erişim Noktası", "access_point"),
+    ("Kablosuz Access Point", "access_point"),
+    ("NVR Güç Adaptörü", None),
+    ("Switch Rafı", None),
+])
+def test_tamlama_basi_sonda_kuralı(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen

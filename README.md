@@ -265,6 +265,7 @@ aynen çalışır.
 | 🔌 SFP / Modül | Hız, dalga boyu, mesafe, mod (single/multi), konnektör |
 | 📶 Access Point | Wi-Fi standardı, bantlar, PoE, anten, montaj |
 | 🛡️ Router / Firewall | Port sayısı, WAN portu, throughput, VPN, ağdaki yeri |
+| 🎥 NVR / Kayıt Cihazı | Kanal sayısı, PoE portu, PoE bütçesi, disk yuvası, takılı disk, RAID, azami çözünürlük, kayıt süresi |
 | 🗄️ Kabinet / Patch Panel | Boyut (U), port sayısı, kablo kategorisi, derinlik |
 
 Ekranın üstünde toplam ürün, **toplam port**, PoE besleyen cihaz sayısı ve
@@ -277,7 +278,20 @@ curl -H "Authorization: Bearer $T" "$API/ag/ozet"
 ```
 
 Kategori adından tür otomatik çıkarılır; Excel'den gelmiş
-"POE Switch 8 Port" gibi kayıtlar da bu ekranda listelenir.
+"POE Switch 8 Port" gibi kayıtlar da bu ekranda listelenir. Yedek parçalar
+ayıklanır: **"NVR Diski"** bir disktir, NVR değil — Türkçede tamlamanın başı
+sonda olduğu için son kelimeye bakılır ("Switch Kablosu" parça, "Kablosuz
+Erişim Noktası" cihaz).
+
+Hangi kategorilerin ağ ürünü sayıldığını görmek için:
+
+```bash
+./.venv/bin/python scripts/ag-kategori-kontrol.py
+```
+
+Eşleşmeyen bir kategoriyi dahil etmek için ya Tanımlar'dan yeniden
+adlandırın ya da `app/ag.py` içindeki `_KATEGORI_IPUCU`'na anahtar kelime
+ekleyin.
 
 ### Transferler
 
@@ -688,5 +702,6 @@ scripts/
   santiye-ayir.py    # Eski veriyi şantiyelere ayır (tekrar çalıştırılabilir)
   kurulum-kontrol.sh # Güncelleme sonrası sağlık kontrolü (hiçbir şey değiştirmez)
   ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
+  ag-kategori-kontrol.py # Hangi kategoriler ağ ürünü sayılıyor
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```
