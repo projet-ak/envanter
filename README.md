@@ -82,8 +82,17 @@ Giriş JWT ile yapılır. Üç rol vardır:
 | Parola | herkes | Kendi parolasını değiştirir (mevcut parola sorulur) |
 | Kullanıcı hesapları | yalnızca `admin` | Kullanıcı adı, yetki, parola sıfırlama, hesap açma/kapatma |
 
-Personel kaydına kullanıcı adı + parola verilerek giriş yetkisi açılır —
-ayrı bir kullanıcı tablosu yoktur, aynı kişi hem personel hem kullanıcıdır.
+Ayrı bir kullanıcı tablosu yoktur — aynı kişi hem personel hem kullanıcıdır.
+**+ Kullanıcı ekle** penceresi iki yol sunar:
+
+| Yol | Ne zaman |
+|---|---|
+| Kayıtlı personele yetki ver | Kişi zaten sistemde: ara, seç, kullanıcı adı + parola + yetki gir |
+| Yeni kişi oluştur | Kişi sistemde yok: kişi bilgileri ve giriş bilgileri tek formda |
+
+Yeni kişi formunda giriş bilgilerini boş bırakırsan kişi yalnızca personel
+olarak eklenir (zimmet alabilir ama sisteme giremez). Kullanıcı adı çakışırsa
+oluşturulan kişi kaydı geri alınır — yarım kalmış kayıt birikmez.
 
 ```bash
 curl -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/json" \

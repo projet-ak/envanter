@@ -2438,7 +2438,7 @@
         <div class="panel">
           <div class="row" style="align-items:center; margin-bottom:12px">
             <h2 style="margin:0; flex:1">Kullanıcı hesapları (${liste.length})</h2>
-            <button class="primary" onclick="hesapAc()">+ Giriş yetkisi ver</button>
+            <button class="primary" onclick="hesapAc()">+ Kullanıcı ekle</button>
           </div>
           <table><thead><tr>
             <th>Kullanıcı adı</th><th>Ad Soyad</th><th>E-posta</th>
@@ -2461,16 +2461,119 @@
     }
 
     // Personel kaydına giriş yetkisi verme (kişi arayarak)
-    function hesapAc() {
-      modalAc('Giriş yetkisi ver', `
+    // İki yol tek pencerede: kayıtlı personele yetki ver, ya da kişiyi de
+    // burada oluştur. Aranan kişi sistemde yoksa çıkmaza girilmesin.
+    function hesapAc(mod = 'mevcut') {
+      modalAc('Kullanıcı ekle', `
+        <div class="row" style="margin-bottom:14px">
+          <button class="ghost ${mod === 'mevcut' ? 'sec' : ''}"
+                  onclick="hesapAc('mevcut')">👤 Kayıtlı personele yetki ver</button>
+          <button class="ghost ${mod === 'yeni' ? 'sec' : ''}"
+                  onclick="hesapAc('yeni')">➕ Yeni kişi oluştur</button>
+        </div>
+        <div id="hyGovde"></div>`);
+      if (mod === 'yeni') return hesapYeniKisiFormu();
+
+      document.getElementById('hyGovde').innerHTML = `
         <div class="row">
           <input id="hyAra" class="grow" autocomplete="off"
                  placeholder="Personel ara: ad soyad, sicil no, departman…"
                  oninput="hesapKisiAra()" />
         </div>
-        <div id="hySonuc" class="note">Yükleniyor…</div>`);
+        <div id="hySonuc" class="note">Yükleniyor…</div>`;
       setTimeout(() => document.getElementById('hyAra')?.focus(), 60);
       hesapKisiAra();
+    }
+
+    // Kişi kaydı + giriş bilgileri tek formda
+    function hesapYeniKisiFormu() {
+      document.getElementById('hyGovde').innerHTML = `
+        <div class="bolum" style="margin-top:0"><h4>Kişi bilgileri</h4>
+          <div class="form-grid">
+            <label>Ad <input id="ykAd" /></label>
+            <label>Soyad <input id="ykSoyad" /></label>
+            <label>Sicil No <input id="ykSicil" /></label>
+            <label>Departman <input id="ykDepartman" /></label>
+            <label>E-posta <input id="ykMail" type="email" /></label>
+            <label>Telefon <input id="ykTelefon" /></label>
+          </div>
+        </div>
+        <div class="bolum"><h4>Giriş bilgileri</h4>
+          <div class="form-grid">
+            <label>Kullanıcı adı <input id="ykKadi" autocomplete="off"
+                   placeholder="örn. mehmet" /></label>
+            <label>Parola (en az 8 karakter) <input id="ykParola" type="password"
+                   autocomplete="new-password" /></label>
+            <label>Yetki
+              <select id="ykRol">
+                <option value="viewer">Görüntüleyici — yalnızca okur</option>
+                <option value="editor" selected>Düzenleyici — kayıt ekler/değiştirir</option>
+                <option value="admin">Yönetici — her şey + kullanıcı yönetimi</option>
+              </select></label>
+          </div>
+          <div class="note">Giriş bilgilerini boş bırakırsan kişi yalnızca
+            personel olarak eklenir, sisteme giriş yapamaz.</div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="primary" onclick="yeniKullaniciKaydet()">Kaydet</button>
+          <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+          <span id="ykBilgi" class="note"></span>
+        </div>`;
+      setTimeout(() => document.getElementById('ykAd')?.focus(), 60);
+    }
+
+    async function yeniKullaniciKaydet() {
+      const bilgi = document.getElementById('ykBilgi');
+      const deger = (id) => document.getElementById(id).value.trim();
+      const hata = (m) => {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${m}</span>`;
+      };
+
+      // Pencere kapandıktan sonra alanlar DOM'dan silinir; değerleri şimdi al
+      const ad = deger('ykAd');
+      const kadi = deger('ykKadi');
+      const parola = document.getElementById('ykParola').value;
+      const rol = document.getElementById('ykRol').value;
+      if (!ad) return hata('Ad zorunlu.');
+      if (kadi && parola.length < 8) return hata('Parola en az 8 karakter olmalı.');
+      if (parola && !kadi) return hata('Parola için kullanıcı adı da gerekli.');
+
+      let kisi;
+      try {
+        kisi = await api('/users', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: ad,
+            last_name: deger('ykSoyad') || null,
+            employee_num: deger('ykSicil') || null,
+            department: deger('ykDepartman') || null,
+            email: deger('ykMail') || null,
+            telefon: deger('ykTelefon') || null,
+          }),
+        });
+      } catch (e) { return hata(e.detail || 'Personel eklenemedi'); }
+
+      const bitir = () => { modalKapat(); ayarBolum = 'hesaplar'; renderAyarlarView(); };
+
+      // Giriş bilgisi verilmediyse kişi yalnızca personel olarak eklendi
+      if (!kadi) {
+        bitir();
+        alert(`✓ ${ad} personel olarak eklendi (giriş yetkisi yok).`);
+        return;
+      }
+      try {
+        await api(`/users/${kisi.id}/hesap`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: kadi, yeni_parola: parola, role: rol }),
+        });
+        bitir();
+      } catch (e) {
+        // Hesap açılamadı (ör. kullanıcı adı alınmış). Yeni açılan kişi kaydını
+        // geri al ki yetim personel kalmasın; form açık kalsın, düzeltip
+        // yeniden denesin.
+        await api(`/users/${kisi.id}`, { method: 'DELETE' }).catch(() => {});
+        hata(`${e.detail || 'Hesap açılamadı'} — düzeltip tekrar deneyin.`);
+      }
     }
 
     let hyZaman = null;
