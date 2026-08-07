@@ -207,7 +207,9 @@ done
 
 # Yeni uçlar giriş ister; 401 dönmesi "uç var ve korumalı" demektir
 for yol in "/assets/ara:Hızlı arama" "/users/ara:Personel arama" \
-           "/users/hesaplar:Hesap yönetimi" "/assets/ozellik-sablonu:Özellik şablonu"; do
+           "/users/hesaplar:Hesap yönetimi" "/assets/ozellik-sablonu:Özellik şablonu" \
+           "/yedek:Yedekleme" "/ag/urunler:Ağ ürünleri" "/ag/sablon:Ağ tür şablonu" \
+           "/ag/transferler:Transferler"; do
     y="${yol%%:*}"; ad="${yol#*:}"
     k="$(kod "${YEREL}${y}")"
     case "$k" in
@@ -234,6 +236,24 @@ print(f"      Personel       : {say(models.User)}")
 print(f"      Zimmetli cihaz : {say(models.Asset, models.Asset.assigned_type.is_not(None))}")
 print(f"      Lokasyon       : {say(models.Location)}")
 print(f"      Yüklenen dosya : {say(models.AssetFile)}")
+
+# Ağ ürünleri (kategori adından tür çıkarılır)
+try:
+    from app import ag
+    agler = ag.urunler(db)
+    if agler:
+        sayac = {}
+        for u in agler:
+            ad = ag.TURLER.get(u["tur"], {}).get("ad", u["tur"])
+            sayac[ad] = sayac.get(ad, 0) + 1
+        ozet_ag = ", ".join(f"{k}({v})" for k, v in
+                            sorted(sayac.items(), key=lambda x: -x[1]))
+        print(f"      Ağ ürünü       : {len(agler)} — {ozet_ag}")
+        print(f"      Transfer kaydı : {len(ag.transferler(db))}")
+    else:
+        print("      Ağ ürünü       : yok")
+except Exception as e:
+    print(f"      Ağ ürünü       : okunamadı ({type(e).__name__})")
 
 kodlar = db.execute(
     select(models.Location.proje_kodu, func.count(models.Asset.id))
