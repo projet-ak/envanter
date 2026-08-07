@@ -468,6 +468,8 @@
       ['ag', 'Ağ Ürünleri', '🌐'],
       ['yangin', 'Yangın Sistemleri', '🔥'],
       ['alarm', 'Alarm Sistemleri', '🔐'],
+      ['gecis', 'Geçiş Sistemleri', '🚧'],
+      ['kantar', 'Kantar Sistemi', '⚖️'],
       ['personel', 'Personel', '👥'],
       ['accessories', 'Aksesuarlar', '🎧'],
       ['consumables', 'Sarf Malzeme', '📦'],
@@ -2528,6 +2530,16 @@
                     + 'tuş takımları, sirenler ve modüller',
                ekle: 'Alarm ekipmanı', ilk: 'alarm_dedektor',
                marka: 'Paradox', model: 'SP6000' },
+      gecis: { ikon: '🚧', ad: 'Geçiş Sistemleri',
+               alt: 'Kart okuyucu ve yazıcıları, bariyerler ve parçaları, '
+                    + 'plaka tanıma sistemi ve kameraları',
+               ekle: 'Geçiş ekipmanı', ilk: 'kart_okuyucu',
+               marka: 'CAME', model: 'Gard 4040' },
+      kantar: { ikon: '⚖️', ad: 'Kantar Sistemi',
+                alt: 'Araç kantarları, yük hücreleri, terminaller ve '
+                     + 'yardımcı ekipman',
+                ekle: 'Kantar ekipmanı', ilk: 'kantar_platform',
+                marka: 'Baykon', model: 'BX24' },
     };
 
     async function renderAgView(aile = agAile) {
@@ -2634,11 +2646,15 @@
       // Seçili türün alanlarından sütun üret; "Tümü"nde genel sütunlar
       const s = agSablon.find(x => x.tur === agTur);
       const sutunlar = s ? s.alanlar.slice(0, 5).map(a => a.ad) : [];
+      // SIM'li cihazlarda hat künyesi özellik değil, kaydın kendi alanı
+      const hatSutun = s?.hat ? [['Operatör', 'operator'], ['Hat No', 'telefon_no']]
+                              : [];
 
       kutu.innerHTML = `<div class="panel">
         <h2>${liste.length} ürün</h2>
         <table><thead><tr>
           <th></th><th>Cihaz No</th><th>Marka / Model</th><th>Seri No</th>
+          ${hatSutun.map(([b]) => `<th>${b}</th>`).join('')}
           ${sutunlar.map(a => `<th>${kacir(a)}</th>`).join('')}
           <th>Lokasyon</th><th>Durum</th></tr></thead><tbody>
         ${liste.map(u => `<tr class="tikla" onclick="cihazDetay(${u.id})">
@@ -2652,6 +2668,7 @@
               ${u.ozellikler['Parça No'] ? `<div class="muted" style="font-size:11.5px">${
                 kacir(u.ozellikler['Parça No'])}</div>` : ''}</td>
           <td class="muted">${esc(u.serial)}</td>
+          ${hatSutun.map(([, k]) => `<td class="muted">${esc(u[k])}</td>`).join('')}
           ${sutunlar.map(a => `<td class="muted">${esc(u.ozellikler[a])}</td>`).join('')}
           <td>${esc(u.lokasyon)}${u.proje_kodu
                 ? ` <span class="pill">${kacir(u.proje_kodu)}</span>` : ''}</td>
@@ -2719,6 +2736,15 @@
             <label>Yönetim IP <input id="auIp" placeholder="örn. 10.0.0.2" /></label>
             <label>Lokasyon <select id="auLokasyon"></select></label>
             <label>Durum <select id="auDurum"></select></label>
+            ${s.hat ? `
+            <label>Operatör <select id="auOperator">
+              <option value="">— seçilmedi —</option>
+              ${['Turkcell', 'Vodafone', 'Türk Telekom', 'Diğer'].map(o =>
+                `<option>${o}</option>`).join('')}
+            </select></label>
+            <label>Hat No <input id="auTelefon" placeholder="örn. 05xx xxx xx xx" /></label>
+            <label>SIM No <input id="auSim" /></label>
+            <label>IMEI <input id="auImei" /></label>` : ''}
           </div>
         </div>
         <div class="bolum"><h4>${kacir(s.ad)} özellikleri</h4>
@@ -2762,6 +2788,10 @@
         ip_address: deger('auIp') || null,
         location_id: Number(deger('auLokasyon')) || null,
         status_id: Number(deger('auDurum')) || null,
+        operator: deger('auOperator') || null,
+        telefon_no: deger('auTelefon') || null,
+        sim_no: deger('auSim') || null,
+        imei: deger('auImei') || null,
         ozellikler,
       };
       if (!govde.asset_tag && !govde.serial) {

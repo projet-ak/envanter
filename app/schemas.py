@@ -336,6 +336,12 @@ class AgUrunEkle(BaseModel):
     location_id: int | None = None
     status_id: int | None = None
     notes: str | None = None
+    # SIM'li cihazlar (Superbox, Vinn, USB modem): hat künyesi teknik özellik
+    # değil, varlığın kendi sütunlarıdır
+    operator: str | None = None
+    telefon_no: str | None = None
+    sim_no: str | None = None
+    imei: str | None = None
     ozellikler: dict[str, str] = Field(default_factory=dict)
 
 

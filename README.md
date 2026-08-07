@@ -44,7 +44,8 @@ python scripts/create_admin.py --username admin --password "GucluParola"
 
 Sol menü + üst bar düzeni. Menü iki bölümdür: günlük işler (Kontrol Paneli,
 Varlıklar, **Ağ Ürünleri**, **Yangın Sistemleri**, **Alarm Sistemleri**,
-Personel, Aksesuar/Sarf/Bileşen/Lisans) ve
+**Geçiş Sistemleri**, **Kantar Sistemi**, Personel,
+Aksesuar/Sarf/Bileşen/Lisans) ve
 **Yönetim** (Tanımlar,
 Excel Aktarım, Fatura Oku, Ayarlar). Üst barda her yerden çalışan arama
 kutusu, oturum sayacı, koyu/açık tema düğmesi ve kullanıcı kartı bulunur.
@@ -253,12 +254,13 @@ alanlar (hepsi CSV içe/dışa aktarımda ve aramada desteklenir):
 Bunların dışında kalan her şey için `custom` (JSON) alanı var — şema
 değiştirmeden istediğin alanı ekleyebilirsin.
 
-## Sistem ürünleri (ağ, yangın ve alarm)
+## Sistem ürünleri (ağ, yangın, alarm, geçiş, kantar)
 
-Sol menüde üç bölüm vardır: **Ağ Ürünleri**, **Yangın Sistemleri** ve
-**Alarm Sistemleri**. Üçü de aynı makineyi kullanır — ayrı bir tablo değildir,
-normal varlıklardır; bu yüzden zimmet, dosya eki, etiket basma ve arama aynen
-çalışır. Fark, her türün kendi teknik alan listesi olmasıdır.
+Sol menüde beş bölüm vardır: **Ağ Ürünleri**, **Yangın Sistemleri**,
+**Alarm Sistemleri**, **Geçiş Sistemleri** ve **Kantar Sistemi**. Hepsi aynı
+makineyi kullanır — ayrı bir tablo değildir, normal varlıklardır; bu yüzden
+zimmet, dosya eki, etiket basma ve arama aynen çalışır. Fark, her türün kendi
+teknik alan listesi olmasıdır.
 
 ### 🌐 Ağ Ürünleri
 
@@ -270,6 +272,7 @@ normal varlıklardır; bu yüzden zimmet, dosya eki, etiket basma ve arama aynen
 | 🛡️ Güvenlik Duvarı | Port, WAN, firewall/VPN throughput, eşzamanlı oturum, VPN tipi, lisans bitişi, HA, rack U |
 | 🔭 Noktadan Noktaya Link | Frekans, hız, menzil, anten kazancı (dBi), PtP/PtMP, master/slave, **karşı uç**, PoE |
 | 📡 Router / Modem | Port, WAN, throughput, bağlantı tipi (fiber/VDSL/4G…), ağdaki yeri |
+| 📱 Mobil İnternet / Superbox | Cihaz tipi (Superbox / Vinn-MiFi / USB modem / SIM'li router), şebeke nesli (4G-4.5G-5G), Wi-Fi standardı, bağlanabilen cihaz, **tarife/kota**, taahhüt bitişi, batarya — ayrıca künyede **operatör, hat no, SIM no, IMEI** |
 | 🎥 NVR / Kayıt Cihazı | Kanal sayısı, PoE portu, PoE bütçesi, disk yuvası, takılı disk, RAID, azami çözünürlük, kayıt süresi |
 | 🗄️ Kabinet / Patch Panel | Boyut (U), port sayısı, kablo kategorisi, derinlik |
 
@@ -297,6 +300,26 @@ sorulur; kablosuz cihazlarda ayrıca pil tipi ve pil ömrü tutulur.
 | 📢 Alarm Sireni | İç/dış mekan siren, siren+flaşör, ses seviyesi (dB), besleme, yedek batarya, tamper, IP sınıfı |
 | 🧩 Alarm Modülü | Modül tipi (zon genişletme, **kablosuz alıcı**, GSM/GPRS, IP, Wi-Fi, röle/çıkış, güç kaynağı, tekrarlayıcı), zon/kanal sayısı, menzil, besleme, uyumlu panel |
 
+### 🚧 Geçiş Sistemleri
+
+| Alt kategori | Türe özel alanlar |
+|---|---|
+| 🪪 Kart Okuyucu | Cihaz tipi (kart, kart+şifre, parmak izi, yüz tanıma, UHF uzun mesafe, turnike, plaka), **kart teknolojisi** (proximity 125 kHz, Mifare, DESFire, iCLASS, NFC, UHF, manyetik, barkod), haberleşme (Wiegand 26/34, RS485, **OSDP**, TCP/IP), kullanım (geçiş / PDKS / turnike / otopark), okuma mesafesi, kullanıcı kapasitesi, bağlı panel |
+| 🖨️ Kart Yazıcı / Kodlayıcı | Tek/çift yüz, renkli-monokrom, doğrudan/retransfer, dpi, **kart kodlama** (manyetik şerit, Mifare/RFID, temaslı çip, UHF), bağlantı, hız, laminasyon, hazne, ribbon, baskı sayacı |
+| 🚧 Bariyer | Kol tipi (düz / eklemli / çitli), kol uzunluğu, açılma süresi, motor tipi, besleme, **nasıl açılıyor** (kumanda / kart / plaka tanıma / kantar), güvenlik (fotosel, loop dedektör), giriş-çıkış yönü, manuel açma, LED kol |
+| 🔧 Bariyer Parçası | Parça tipi (kol, motor, redüktör, denge yayı, kontrol kartı, **loop dedektör**, fotosel, kumanda, alıcı, LED, flanş), uyumlu model, ölçü, adet |
+| 📷 Plaka Tanıma Kamerası | Çözünürlük, lens, okuma mesafesi, **okuyabildiği azami hız**, aydınlatma (IR / beyaz ışık), IR mesafesi, besleme (PoE), bağlı ünite, giriş-çıkış yönü, montaj, IP sınıfı |
+| 🚗 Plaka Tanıma Ünitesi | Bileşen tipi (gömülü ünite / sunucu-yazılım / kontrol ünitesi), kanal sayısı, plaka formatı, **beyaz liste kapasitesi**, entegre olduğu sistem (bariyer / kantar / kartlı geçiş), bağlantı, lisans bitişi |
+
+### ⚖️ Kantar Sistemi
+
+| Alt kategori | Türe özel alanlar |
+|---|---|
+| ⚖️ Kantar / Tartım Platformu | Kantar tipi (araç-köprü, platform, bant, vinç, mobil), **kapasite (ton)**, platform ölçüsü, yük hücresi sayısı, bölüntü (d), yapı, kurulum şekli, son kalibrasyon, **damga/muayene bitişi** |
+| 🏋️ Yük Hücresi (Loadcell) | Kapasite, hücre tipi (kolon / kesme kirişi / tek nokta / S / halka), malzeme, çıkış (mV/V), doğruluk sınıfı (C3…), kablo uzunluğu, bağlı kantar, **platformdaki konumu**, IP sınıfı |
+| 🖥️ Kantar Terminali / İndikatör | Cihaz tipi (indikatör / terminal / tartım bilgisayarı / uzak gösterge), ekran, bağlanabilen yük hücresi, haberleşme (RS232/RS485/TCP-IP), fiş yazıcısı, tartım yazılımı, onay (OIML R76) |
+| 🧰 Diğer Kantar Ekipmanı | Bağlantı kutusu (junction box), trafik lambası, uzak gösterge, yük hücresi kablosu, parafudr, kalibrasyon ağırlığı, yazılım |
+
 Ekranın üstünde toplam ürün, ağ tarafında **toplam port** ve PoE besleyen
 cihaz sayısı, yangın ve alarm tarafında ürün çeşidi ve lokasyon dağılımı;
 listede her ürünün **görseli**, lokasyonu, proje kodu ve kullanım durumu
@@ -307,6 +330,8 @@ curl -H "Authorization: Bearer $T" "$API/ag/urunler?tur=switch&proje_kodu=U030"
 curl -H "Authorization: Bearer $T" "$API/ag/urunler?aile=yangin"
 curl -H "Authorization: Bearer $T" "$API/ag/ozet?aile=alarm"
 curl -H "Authorization: Bearer $T" "$API/ag/urunler?tur=alarm_dedektor"
+curl -H "Authorization: Bearer $T" "$API/ag/urunler?aile=gecis"
+curl -H "Authorization: Bearer $T" "$API/ag/ozet?aile=kantar"
 ```
 
 > Uç adresleri tarihsel olarak `/ag` ile başlar (bölüm önce yalnızca ağ
@@ -318,10 +343,13 @@ ayıklanır: **"NVR Diski"** bir disktir, NVR değil — Türkçede tamlamanın 
 sonda olduğu için son kelimeye bakılır ("Switch Kablosu" parça, "Kablosuz
 Erişim Noktası" cihaz).
 
-Üç aile aynı kelimeleri paylaştığı için eşleştirme sırası önemlidir:
+Aileler aynı kelimeleri paylaştığı için eşleştirme sırası önemlidir:
 **"Yangın Alarm Paneli"** yangın, **"Kablosuz Alarm Paneli"** alarm,
 **"Kablosuz Erişim Noktası"** ağ ürünüdür. Adında "yangın" geçen hiçbir kayıt
-alarm ailesine düşmez.
+alarm ailesine düşmez. Aynı şekilde **"Bariyer Kolu"** bariyerin kendisi değil
+parçası, **"4G Modem"** router değil mobil internet cihazı, düz **"Yazıcı"**
+ise geçiş sistemi değildir (kart yazıcı anahtarlarının hepsi "kart" içerir).
+"Vinç Kantarı" da Vinn sanılmaz — kısa anahtarlar tam kelime aranır.
 
 Hangi kategorilerin hangi aileye/türe düştüğünü görmek için:
 

@@ -358,7 +358,7 @@ def test_tamlama_basi_sonda_kuralı(kategori, beklenen):
 # --------------------------------------------------------------------------- #
 def test_aileler_listelenir(client):
     a = {x["aile"] for x in client.get("/ag/aileler").json()}
-    assert a == {"ag", "yangin", "alarm"}
+    assert a == {"ag", "yangin", "alarm", "gecis", "kantar"}
 
 
 def test_sablon_aileye_gore_filtrelenir(client):
@@ -376,9 +376,19 @@ def test_sablon_aileye_gore_filtrelenir(client):
     assert not (alarm_turler & (ag_turler | yangin_turler))
 
 
+def test_her_tur_tek_bir_ailede():
+    """Aileler kesişmemeli: bir tür yalnızca tek ekranda görünür."""
+    esleme = {}
+    for tur, bilgi in ag.TURLER.items():
+        esleme.setdefault(bilgi["aile"], set()).add(tur)
+    tumu = [t for kume in esleme.values() for t in kume]
+    assert len(tumu) == len(set(tumu)) == len(ag.TURLER)
+    assert set(esleme) == set(ag.AILELER), "ailesi olmayan/boş aile var"
+
+
 def test_her_turun_ailesi_var(client):
     for s in client.get("/ag/sablon").json():
-        assert s["aile"] in ("ag", "yangin", "alarm"), f"{s['tur']} ailesiz"
+        assert s["aile"] in ag.AILELER, f"{s['tur']} ailesiz"
 
 
 def test_bilinmeyen_aile_reddedilir(client):
@@ -662,3 +672,263 @@ def test_her_turun_kendi_kategori_adi_kendine_doner():
     for tur in ag.TURLER:
         assert ag.tur_bul(ag.kategori_adi(tur)) == tur, \
             f"{tur}: '{ag.kategori_adi(tur)}' → {ag.tur_bul(ag.kategori_adi(tur))}"
+
+
+# --------------------------------------------------------------------------- #
+# Geçiş sistemleri: kart, bariyer, plaka tanıma
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def gecis_sahne(client):
+    lok = client.post("/locations", json={"name": "ŞANTİYE U060",
+                                          "proje_kodu": "U060"}).json()
+    client.post("/ag/urunler", json={
+        "tur": "kart_okuyucu", "asset_tag": "KO-1", "marka": "ZKTeco",
+        "model": "SF200", "location_id": lok["id"],
+        "ozellikler": {"Cihaz Tipi": "Kart + Parmak İzi",
+                       "Kart Teknolojisi": "Mifare 13.56 MHz",
+                       "Haberleşme": "Wiegand 26", "Kullanım": "PDKS (personel devam)",
+                       "Kullanıcı Kapasitesi": "3000"}})
+    client.post("/ag/urunler", json={
+        "tur": "kart_yazici", "asset_tag": "KY-1", "marka": "Evolis",
+        "model": "Primacy 2", "location_id": lok["id"],
+        "ozellikler": {"Baskı Tipi": "Çift Yüz", "Baskı Rengi": "Renkli (YMCKO)",
+                       "Çözünürlük": "300 dpi", "Kodlama": "Mifare / RFID",
+                       "Bağlantı": "USB + Ethernet", "Hız": "180 kart/saat"}})
+    client.post("/ag/urunler", json={
+        "tur": "bariyer", "asset_tag": "BR-1", "marka": "CAME",
+        "model": "Gard 4040", "location_id": lok["id"],
+        "ozellikler": {"Kol Tipi": "Düz Kol", "Kol Uzunluğu": "4",
+                       "Motor Tipi": "Elektromekanik", "Kontrol": "Plaka Tanıma",
+                       "Güvenlik": "Fotosel + Loop Dedektör", "Yön": "Giriş"}})
+    client.post("/ag/urunler", json={
+        "tur": "bariyer_parca", "asset_tag": "BP-1", "location_id": lok["id"],
+        "ozellikler": {"Parça Tipi": "Bariyer Kolu", "Uyumlu Model": "CAME Gard 4040",
+                       "Ölçü": "4 m alüminyum kol", "Adet": "2"}})
+    client.post("/ag/urunler", json={
+        "tur": "plaka_kamera", "asset_tag": "PK-1", "marka": "Hikvision",
+        "model": "iDS-2CD7A46G0", "location_id": lok["id"],
+        "ozellikler": {"Çözünürlük": "4 MP", "Okuma Mesafesi": "15",
+                       "Azami Hız": "60", "Aydınlatma": "IR + Beyaz Işık",
+                       "Yön": "Giriş", "Besleme": "PoE"}})
+    client.post("/ag/urunler", json={
+        "tur": "plaka_tanima", "asset_tag": "PT-1", "location_id": lok["id"],
+        "ozellikler": {"Bileşen Tipi": "Sunucu / Yazılım", "Kanal Sayısı": "4",
+                       "Entegrasyon": "Bariyer + Kantar",
+                       "Plaka Formatı": "TR (Türkiye)"}})
+    return {"lok": lok}
+
+
+@pytest.fixture
+def kantar_sahne(client, gecis_sahne):
+    lok = gecis_sahne["lok"]
+    client.post("/ag/urunler", json={
+        "tur": "kantar_platform", "asset_tag": "KN-1", "marka": "Baykon",
+        "location_id": lok["id"],
+        "ozellikler": {"Kantar Tipi": "Araç Kantarı (köprü)", "Kapasite": "60",
+                       "Platform Ölçüsü": "18 x 3 m", "Yük Hücresi Sayısı": "8",
+                       "Bölüntü": "20", "Yapı": "Çelik + Beton",
+                       "Damga Bitiş": "31.12.2027"}})
+    for i in (1, 2):
+        client.post("/ag/urunler", json={
+            "tur": "loadcell", "asset_tag": f"LC-{i}", "marka": "Zemic",
+            "model": "HM9B", "location_id": lok["id"],
+            "ozellikler": {"Kapasite": "30", "Hücre Tipi": "Kolon (column)",
+                           "Malzeme": "Paslanmaz Çelik", "Çıkış": "2.0 mV/V",
+                           "Konum": f"{i} no'lu hücre", "IP Sınıfı": "IP67"}})
+    client.post("/ag/urunler", json={
+        "tur": "kantar_terminal", "asset_tag": "KT-1", "marka": "Baykon",
+        "model": "BX24", "location_id": lok["id"],
+        "ozellikler": {"Cihaz Tipi": "Tartım Terminali", "Ekran": "LCD",
+                       "Kanal Sayısı": "8", "Haberleşme": "RS232 + TCP/IP",
+                       "Onay": "OIML R76"}})
+    client.post("/ag/urunler", json={
+        "tur": "kantar_diger", "asset_tag": "KD-1", "location_id": lok["id"],
+        "ozellikler": {"Ekipman Tipi": "Bağlantı Kutusu (junction box)",
+                       "Kapasite": "8 kanal", "Bağlı Kantar": "Giriş kantarı"}})
+    return {"lok": lok}
+
+
+def test_gecis_urunleri_kendi_ailesinde(client, sahne, gecis_sahne):
+    gecis = {u["asset_tag"] for u in
+             client.get("/ag/urunler", params={"aile": "gecis"}).json()}
+    agl = {u["asset_tag"] for u in
+           client.get("/ag/urunler", params={"aile": "ag"}).json()}
+    assert gecis == {"KO-1", "KY-1", "BR-1", "BP-1", "PK-1", "PT-1"}
+    assert not (gecis & agl)
+
+
+def test_kantar_ozeti(client, kantar_sahne):
+    o = client.get("/ag/ozet", params={"aile": "kantar"}).json()
+    assert o["toplam"] == 5
+    turler = {d["tur"]: d["adet"] for d in o["tur_dagilimi"]}
+    assert turler == {"kantar_platform": 1, "loadcell": 2,
+                      "kantar_terminal": 1, "kantar_diger": 1}
+
+
+def test_gecis_ozeti_kantari_saymaz(client, kantar_sahne):
+    o = client.get("/ag/ozet", params={"aile": "gecis"}).json()
+    assert o["toplam"] == 6
+    assert "loadcell" not in {d["tur"] for d in o["tur_dagilimi"]}
+
+
+def test_kart_okuyucu_alanlari(client):
+    s = next(x for x in client.get("/ag/sablon").json()
+             if x["tur"] == "kart_okuyucu")
+    adlar = {a["ad"] for a in s["alanlar"]}
+    assert {"Cihaz Tipi", "Kart Teknolojisi", "Haberleşme", "Okuma Mesafesi",
+            "Kullanıcı Kapasitesi", "Bağlı Panel"} <= adlar
+    tek = next(a for a in s["alanlar"] if a["ad"] == "Kart Teknolojisi")
+    assert "Mifare 13.56 MHz" in tek["secenekler"]
+    hab = next(a for a in s["alanlar"] if a["ad"] == "Haberleşme")
+    assert {"Wiegand 26", "OSDP", "RS485"} <= set(hab["secenekler"])
+
+
+def test_kart_yazici_alanlari(client):
+    s = next(x for x in client.get("/ag/sablon").json()
+             if x["tur"] == "kart_yazici")
+    adlar = {a["ad"] for a in s["alanlar"]}
+    assert {"Baskı Tipi", "Baskı Rengi", "Çözünürlük", "Kodlama", "Laminasyon",
+            "Ribbon"} <= adlar
+    kod = next(a for a in s["alanlar"] if a["ad"] == "Kodlama")
+    assert "Manyetik Şerit" in kod["secenekler"]
+
+
+def test_bariyer_ve_parcasi_ayri_turler(client, gecis_sahne):
+    br = client.get("/ag/urunler", params={"tur": "bariyer"}).json()
+    bp = client.get("/ag/urunler", params={"tur": "bariyer_parca"}).json()
+    assert [u["asset_tag"] for u in br] == ["BR-1"]
+    assert [u["asset_tag"] for u in bp] == ["BP-1"]
+    assert bp[0]["ozellikler"]["Parça Tipi"] == "Bariyer Kolu"
+
+
+def test_plaka_sistemi_kamera_ve_unite(client, gecis_sahne):
+    kam = client.get("/ag/urunler", params={"tur": "plaka_kamera"}).json()
+    uni = client.get("/ag/urunler", params={"tur": "plaka_tanima"}).json()
+    assert kam[0]["ozellikler"]["Azami Hız"] == "60"
+    assert uni[0]["ozellikler"]["Entegrasyon"] == "Bariyer + Kantar"
+
+
+def test_kantar_kalibrasyon_ve_hucreler(client, kantar_sahne):
+    kn = client.get("/ag/urunler", params={"tur": "kantar_platform"}).json()[0]
+    assert kn["ozellikler"]["Kapasite"] == "60"
+    assert kn["ozellikler"]["Damga Bitiş"] == "31.12.2027"
+    hucreler = client.get("/ag/urunler", params={"tur": "loadcell"}).json()
+    assert {u["ozellikler"]["Konum"] for u in hucreler} == {"1 no'lu hücre",
+                                                            "2 no'lu hücre"}
+
+
+def test_gecis_ve_kantar_aranabilir(client, kantar_sahne):
+    r = client.get("/ag/urunler", params={"q": "wiegand"}).json()
+    assert [u["asset_tag"] for u in r] == ["KO-1"]
+    r2 = client.get("/ag/urunler", params={"aile": "kantar", "q": "oiml"}).json()
+    assert [u["asset_tag"] for u in r2] == ["KT-1"]
+
+
+@pytest.mark.parametrize("kategori,beklenen", [
+    ("Kart Okuyucu", "kart_okuyucu"),
+    ("Proximity Kart Okuyucu", "kart_okuyucu"),
+    ("Parmak İzi Okuyucu", "kart_okuyucu"),
+    ("PDKS Terminali", "kart_okuyucu"),
+    ("Turnike Okuyucusu", "kart_okuyucu"),
+    ("Kart Yazıcı", "kart_yazici"),
+    ("Kimlik Kartı Yazıcısı", "kart_yazici"),
+    ("Kart Kodlayıcı", "kart_yazici"),
+    # Normal ofis yazıcısı geçiş sistemi değildir
+    ("Yazıcı", None),
+    ("Lazer Yazıcı", None),
+    ("Kart Yazıcı Ribbonu", None),
+    # Bariyer ve parçaları
+    ("Bariyer", "bariyer"),
+    ("Kollu Bariyer", "bariyer"),
+    ("Otopark Bariyeri", "bariyer"),
+    ("Bariyer Kolu", "bariyer_parca"),
+    ("Bariyer Motoru", "bariyer_parca"),
+    ("Bariyer Kontrol Kartı", "bariyer_parca"),
+    ("Loop Dedektör", "bariyer_parca"),
+    ("Fotosel", "bariyer_parca"),
+    # Plaka okuma
+    ("Plaka Tanıma Kamerası", "plaka_kamera"),
+    ("ANPR Kamera", "plaka_kamera"),
+    ("Plaka Tanıma Sistemi", "plaka_tanima"),
+    ("Plaka Okuma Ünitesi", "plaka_tanima"),
+    # Kantar
+    ("Kantar", "kantar_platform"),
+    ("Araç Kantarı", "kantar_platform"),
+    ("Köprü Kantarı", "kantar_platform"),
+    ("Yük Hücresi", "loadcell"),
+    ("Loadcell", "loadcell"),
+    ("Kantar Terminali", "kantar_terminal"),
+    ("İndikatör", "kantar_terminal"),
+    ("Kantar Bağlantı Kutusu", "kantar_diger"),
+    ("Kantar Kablosu", "kantar_diger"),
+    # Kart benzeri ama ürün olmayanlar
+    ("Ekran Kartı", None),
+    ("Hafıza Kartı", None),
+])
+def test_gecis_kantar_kategorileri_dogru_ture_duser(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen
+
+
+def test_bariyer_parcasi_yedek_parca_elemesine_takilmaz():
+    """`_parca_mi` kablo/kart biten adları eler; parça türleri bundan muaf."""
+    assert ag.tur_bul("Bariyer Kolu") == "bariyer_parca"
+    assert ag.tur_bul("Kantar Kablosu") == "kantar_diger"
+    assert ag.tur_bul("Switch Kablosu") is None      # eski davranış korunur
+
+
+# --------------------------------------------------------------------------- #
+# Mobil internet: Superbox, Vinn, USB modem
+# --------------------------------------------------------------------------- #
+def test_mobil_internet_hat_kunyesi_kaydedilir(client):
+    """Operatör/hat/SIM/IMEI teknik özellik değil, varlığın kendi sütunları."""
+    client.post("/ag/urunler", json={
+        "tur": "mobil_internet", "asset_tag": "SB-1", "marka": "Turkcell",
+        "model": "Superbox 5G", "operator": "Turkcell",
+        "telefon_no": "0532 111 22 33", "sim_no": "8990011122233344",
+        "imei": "356938035643809",
+        "ozellikler": {"Cihaz Tipi": "Sabit Kablosuz (Superbox)", "Nesil": "5G",
+                       "Paket": "250 GB/ay", "Taahhüt Bitiş": "31.12.2026"}})
+    u = client.get("/ag/urunler", params={"tur": "mobil_internet"}).json()[0]
+    assert u["operator"] == "Turkcell"
+    assert u["telefon_no"] == "0532 111 22 33"
+    assert u["sim_no"] == "8990011122233344"
+    assert u["imei"] == "356938035643809"
+    # Varlık kaydında da aynı sütunlarda durmalı (arama/dışa aktarım için)
+    varlik = client.get(f"/assets/{u['id']}").json()
+    assert varlik["telefon_no"] == "0532 111 22 33"
+    assert varlik["imei"] == "356938035643809"
+
+
+def test_hat_no_ile_aranabilir(client):
+    client.post("/ag/urunler", json={
+        "tur": "mobil_internet", "asset_tag": "VN-1", "marka": "Vodafone",
+        "model": "Vinn", "operator": "Vodafone", "telefon_no": "0542 999 88 77"})
+    r = client.get("/ag/urunler", params={"q": "0542 999"}).json()
+    assert [u["asset_tag"] for u in r] == ["VN-1"]
+    assert [u["asset_tag"] for u in
+            client.get("/ag/urunler", params={"q": "vodafone"}).json()] == ["VN-1"]
+
+
+def test_hat_bayragi_yalniz_mobil_internette(client):
+    for s in client.get("/ag/sablon").json():
+        assert s["hat"] is (s["tur"] == "mobil_internet"), f"{s['tur']} hat bayrağı"
+
+
+@pytest.mark.parametrize("kategori,beklenen", [
+    ("Superbox", "mobil_internet"),
+    ("Turkcell Superbox", "mobil_internet"),
+    ("Vinn", "mobil_internet"),
+    ("VİN", "mobil_internet"),
+    ("Mobil İnternet", "mobil_internet"),
+    ("USB Modem", "mobil_internet"),
+    ("4G Modem", "mobil_internet"),
+    ("Mifi Cihazı", "mobil_internet"),
+    # Sabit hat modemi eskisi gibi router kalır
+    ("Modem", "router"),
+    ("VDSL Modem", "router"),
+    ("Router", "router"),
+    # "Vinç" içindeki "vin" yanlış eşleşmemeli
+    ("Vinç Kantarı", "kantar_platform"),
+])
+def test_mobil_internet_kategorileri(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen

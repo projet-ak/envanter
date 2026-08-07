@@ -1,11 +1,12 @@
 """Teknik sistem ürünleri — tür şablonları ve sorgular.
 
 Başlangıçta yalnızca ağ ürünleri içindi (modül adı ve /ag uçları bu yüzden),
-sonradan yangın algılama ve alarm sistemleri de eklendi. Türler **ailelere**
-ayrılır:
+sonradan yangın algılama, alarm ve kart sistemleri de eklendi. Türler
+**ailelere** ayrılır:
 
     AILELER = {"ag": Ağ Ürünleri, "yangin": Yangın Sistemleri,
-               "alarm": Alarm Sistemleri}
+               "alarm": Alarm Sistemleri, "gecis": Geçiş Sistemleri,
+               "kantar": Kantar Sistemi}
 
 Bu ürünler ayrı bir tablo değildir: normal varlıklardır, ama kategorileri
 sistem türlerinden biridir ve teknik özellikleri `Asset.custom["Ağ"]` altında
@@ -60,6 +61,12 @@ AILELER = {
     "alarm": {"ad": "Alarm Sistemleri", "ikon": "🔐",
               "aciklama": "Hırsız alarm panelleri, kablolu/kablosuz dedektörler, "
                           "tuş takımları, sirenler ve modüller"},
+    "gecis": {"ad": "Geçiş Sistemleri", "ikon": "🚧",
+              "aciklama": "Kart okuyucu ve yazıcıları, bariyerler ve parçaları, "
+                          "plaka tanıma sistemi ve kameraları"},
+    "kantar": {"ad": "Kantar Sistemi", "ikon": "⚖️",
+               "aciklama": "Araç kantarları, yük hücreleri, terminaller ve "
+                           "yardımcı ekipman"},
 }
 
 POE_SECENEKLERI = ["Yok", "PoE", "PoE+ (802.3at)", "PoE++ (802.3bt)", "Pasif PoE"]
@@ -72,6 +79,13 @@ BAGLANTI_SECENEKLERI = ["Kablolu", "Kablosuz", "Hibrit (kablolu + kablosuz)"]
 FREKANS_SECENEKLERI = ["433 MHz", "868 MHz", "915 MHz", "2.4 GHz"]
 PIL_SECENEKLERI = ["Yok (kablolu besleme)", "CR123A", "CR2032", "AA (kalem)",
                    "AAA (ince kalem)", "9V", "Lityum (dahili)"]
+
+# Kart teknolojisi hem okuyucuyu hem yazıcıyı ilgilendirir (aynı kartı
+# okuyan ve kodlayan cihazlar eşleşmeli)
+KART_TEKNOLOJISI = ["Proximity 125 kHz (EM)", "Mifare 13.56 MHz",
+                    "Mifare DESFire", "HID iCLASS", "NFC",
+                    "UHF (860-960 MHz)", "Manyetik Şerit", "Temaslı Çip",
+                    "Barkod / QR"]
 
 # Ağ ürün türleri: anahtar -> (görünen ad, ikon, alanlar)
 TURLER: dict[str, dict] = {
@@ -139,6 +153,33 @@ TURLER: dict[str, dict] = {
             Alan("Bağlantı Tipi", "Bağlantı Tipi", "secim",
                  ["Fiber", "VDSL/ADSL", "Metro Ethernet", "4G/LTE", "5G", "Uydu"]),
             Alan("Katman", "Ağdaki Yeri", "secim", KATMAN_SECENEKLERI),
+        ],
+    },
+    "mobil_internet": {
+        "aile": "ag",
+        "ad": "Mobil İnternet / Superbox",
+        "ikon": "📱",
+        "aciklama": "Superbox, Vinn, MiFi, USB modem ve SIM'li 4G/5G cihazlar",
+        # Hat bilgisi teknik özellik değil künye bilgisidir: operatör, hat no,
+        # SIM ve IMEI varlığın kendi sütunlarında tutulur (arama onları da tarar)
+        "hat": True,
+        "alanlar": [
+            Alan("Cihaz Tipi", "Cihaz Tipi", "secim",
+                 ["Sabit Kablosuz (Superbox)", "Taşınabilir Wi-Fi (Vinn/MiFi)",
+                  "USB Modem (dongle)", "SIM'li Router", "Endüstriyel 4G Router"]),
+            Alan("Nesil", "Şebeke Nesli", "secim",
+                 ["4G / LTE", "4.5G", "5G", "3G"]),
+            Alan("Wi-Fi", "Wi-Fi Standardı", "secim",
+                 ["Yok", "Wi-Fi 4 (n)", "Wi-Fi 5 (ac)", "Wi-Fi 6 (ax)"]),
+            Alan("Ethernet Portu", "Ethernet Portu", "number"),
+            Alan("Bağlanabilen Cihaz", "Bağlanabilen Cihaz Sayısı", "number",
+                 ipucu="örn. 64"),
+            Alan("Paket", "Tarife / Kota", ipucu="örn. 250 GB/ay"),
+            Alan("Taahhüt Bitiş", "Taahhüt Bitişi", ipucu="örn. 31.12.2026"),
+            Alan("Batarya", "Batarya", "secim",
+                 ["Yok (prizden)", "Var"]),
+            Alan("Batarya Süresi", "Batarya Süresi", ipucu="örn. 8 saat"),
+            Alan("Anten", "Harici Anten", "secim", ["Var", "Yok"]),
         ],
     },
     "firewall": {
@@ -421,6 +462,244 @@ TURLER: dict[str, dict] = {
             Alan("Açıklama", "Teknik Açıklama"),
         ],
     },
+
+    # ----------------------------------------------------------------- #
+    # Geçiş sistemleri — kart, bariyer ve plaka tanıma
+    # ----------------------------------------------------------------- #
+    "kart_okuyucu": {
+        "aile": "gecis",
+        "ad": "Kart Okuyucu",
+        "ikon": "🪪",
+        "aciklama": "Kartlı geçiş okuyucuları, parmak izi ve yüz tanıma "
+                    "terminalleri, PDKS cihazları",
+        "alanlar": [
+            Alan("Cihaz Tipi", "Cihaz Tipi", "secim",
+                 ["Kart Okuyucu", "Kart + Şifre (tuş takımlı)", "Parmak İzi",
+                  "Yüz Tanıma", "Kart + Parmak İzi", "Uzun Mesafe (UHF)",
+                  "Turnike Okuyucusu", "Plaka Tanıma"]),
+            Alan("Kart Teknolojisi", "Kart Teknolojisi", "secim", KART_TEKNOLOJISI),
+            Alan("Haberleşme", "Haberleşme", "secim",
+                 ["Wiegand 26", "Wiegand 34", "RS485", "OSDP", "TCP/IP", "USB"]),
+            Alan("Kullanım", "Kullanım Amacı", "secim",
+                 ["Geçiş Kontrol (kapı)", "PDKS (personel devam)",
+                  "Turnike", "Otopark / Bariyer", "Yemekhane"]),
+            Alan("Okuma Mesafesi", "Okuma Mesafesi (cm)", "number", ipucu="örn. 8"),
+            Alan("Kullanıcı Kapasitesi", "Kart / Kullanıcı Kapasitesi", "number",
+                 ipucu="örn. 10000"),
+            Alan("Tuş Takımı", "Tuş Takımı", "secim", ["Var", "Yok"]),
+            Alan("Bağlı Panel", "Bağlı Olduğu Panel / Kontrolör",
+                 ipucu="örn. 2 kapılı kontrolör"),
+            Alan("Besleme", "Besleme", "secim",
+                 ["12V DC", "24V DC", "PoE", "USB"]),
+            Alan("Montaj", "Montaj", "secim",
+                 ["İç Mekan", "Dış Mekan", "Gömme", "Turnike üstü"]),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "kart_yazici": {
+        "aile": "gecis",
+        "ad": "Kart Yazıcı / Kodlayıcı",
+        "ikon": "🖨️",
+        "aciklama": "Personel/geçiş kartı basan ve kodlayan yazıcılar",
+        "alanlar": [
+            Alan("Baskı Tipi", "Baskı Tipi", "secim", ["Tek Yüz", "Çift Yüz"]),
+            Alan("Baskı Rengi", "Baskı Rengi", "secim",
+                 ["Renkli (YMCKO)", "Monokrom (siyah)", "Renkli + Monokrom"]),
+            Alan("Baskı Yöntemi", "Baskı Yöntemi", "secim",
+                 ["Doğrudan (DTC)", "Retransfer (yüksek kalite)"]),
+            Alan("Çözünürlük", "Çözünürlük (dpi)", "secim", ["300 dpi", "600 dpi"]),
+            Alan("Kodlama", "Kart Kodlama", "secim",
+                 ["Yok (sadece baskı)", "Manyetik Şerit", "Mifare / RFID",
+                  "Temaslı Çip", "UHF", "Manyetik Şerit + Çip"]),
+            Alan("Kart Teknolojisi", "Kodladığı Kart Teknolojisi", "secim",
+                 KART_TEKNOLOJISI),
+            Alan("Bağlantı", "Bağlantı", "secim",
+                 ["USB", "USB + Ethernet", "Ethernet", "Wi-Fi"]),
+            Alan("Hız", "Baskı Hızı", ipucu="örn. 180 kart/saat (renkli)"),
+            Alan("Laminasyon", "Laminasyon Ünitesi", "secim", ["Var", "Yok"]),
+            Alan("Hazne", "Kart Haznesi (adet)", "number", ipucu="örn. 100"),
+            Alan("Ribbon", "Kullandığı Ribbon", ipucu="örn. YMCKO 250 baskı"),
+            Alan("Baskı Sayacı", "Basılan Kart Sayısı", "number"),
+        ],
+    },
+    "bariyer": {
+        "aile": "gecis",
+        "ad": "Bariyer",
+        "ikon": "🚧",
+        "aciklama": "Kollu araç bariyerleri (otopark, şantiye girişi, kantar)",
+        "alanlar": [
+            Alan("Kol Tipi", "Kol Tipi", "secim",
+                 ["Düz Kol", "Eklemli (katlanır) Kol", "Çitli (fence) Kol",
+                  "Yuvarlak Kol", "Oval Kol"]),
+            Alan("Kol Uzunluğu", "Kol Uzunluğu (m)", "number", ipucu="örn. 4"),
+            Alan("Açılma Süresi", "Açılma Süresi (sn)", "number", ipucu="örn. 3"),
+            Alan("Motor Tipi", "Motor Tipi", "secim",
+                 ["Elektromekanik", "Hidrolik", "BLDC (fırçasız)"]),
+            Alan("Besleme", "Çalışma Gerilimi", "secim",
+                 ["220V AC", "24V DC", "12V DC"]),
+            Alan("Kontrol", "Nasıl Açılıyor", "secim",
+                 ["Uzaktan Kumanda", "Kartlı Geçiş", "Plaka Tanıma", "Buton",
+                  "Kantar / Yazılım", "Kumanda + Kart", "Kumanda + Plaka"]),
+            Alan("Güvenlik", "Güvenlik Donanımı", "secim",
+                 ["Yok", "Fotosel", "Loop Dedektör", "Fotosel + Loop Dedektör"]),
+            Alan("Yön", "Giriş / Çıkış", "secim",
+                 ["Giriş", "Çıkış", "Giriş + Çıkış (tek yol)"]),
+            Alan("Manuel Açma", "Manuel Açma (elektrik kesintisinde)", "secim",
+                 ["Var", "Yok"]),
+            Alan("LED Kol", "LED Kol Aydınlatması", "secim", ["Var", "Yok"]),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "bariyer_parca": {
+        "aile": "gecis",
+        "ad": "Bariyer Parçası",
+        "ikon": "🔧",
+        "aciklama": "Bariyer kolu, motor, kontrol kartı, fotosel, loop dedektör "
+                    "ve diğer yedek parçalar",
+        "alanlar": [
+            Alan("Parça Tipi", "Parça Tipi", "secim",
+                 ["Bariyer Kolu", "Motor", "Redüktör", "Denge Yayı",
+                  "Kontrol Kartı", "Loop Dedektör", "Fotosel",
+                  "Uzaktan Kumanda", "Kumanda Alıcısı", "LED Şerit",
+                  "Kol Flanşı / Tutucu", "Kol Ayağı (destek)", "Diğer"]),
+            Alan("Uyumlu Model", "Uyumlu Bariyer Modeli",
+                 ipucu="örn. CAME Gard 4040"),
+            Alan("Ölçü", "Ölçü / Uzunluk", ipucu="örn. 4 m alüminyum kol"),
+            Alan("Adet", "Adet", "number"),
+            Alan("Açıklama", "Teknik Açıklama"),
+        ],
+    },
+    "plaka_kamera": {
+        "aile": "gecis",
+        "ad": "Plaka Tanıma Kamerası",
+        "ikon": "📷",
+        "aciklama": "ANPR/LPR plaka okuma kameraları",
+        "alanlar": [
+            Alan("Çözünürlük", "Çözünürlük", "secim",
+                 ["2 MP (1080p)", "4 MP", "5 MP", "8 MP (4K)"]),
+            Alan("Lens", "Lens", ipucu="örn. 2.8-12 mm motorize"),
+            Alan("Okuma Mesafesi", "Okuma Mesafesi (m)", "number", ipucu="örn. 15"),
+            Alan("Azami Hız", "Okuyabildiği Azami Hız (km/s)", "number",
+                 ipucu="örn. 60"),
+            Alan("Aydınlatma", "Aydınlatma", "secim",
+                 ["IR (kızılötesi)", "Beyaz Işık", "IR + Beyaz Işık", "Yok"]),
+            Alan("IR Mesafesi", "IR Mesafesi (m)", "number"),
+            Alan("Besleme", "Besleme", "secim", ["PoE", "12V DC", "24V AC"]),
+            Alan("Bağlı Ünite", "Bağlı Olduğu Ünite / NVR"),
+            Alan("Yön", "Giriş / Çıkış", "secim", ["Giriş", "Çıkış", "Şerit"]),
+            Alan("Montaj", "Montaj", "secim", ["Direk", "Duvar", "Portal"]),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "plaka_tanima": {
+        "aile": "gecis",
+        "ad": "Plaka Tanıma Ünitesi",
+        "ikon": "🚗",
+        "aciklama": "Plaka okuma sisteminin kontrol ünitesi, sunucusu ve yazılımı",
+        "alanlar": [
+            Alan("Bileşen Tipi", "Bileşen Tipi", "secim",
+                 ["Gömülü Ünite (edge)", "Sunucu / Yazılım", "Kontrol Ünitesi",
+                  "Röle / Çıkış Modülü"]),
+            Alan("Kanal Sayısı", "Kamera / Kanal Sayısı", "number", ipucu="örn. 4"),
+            Alan("Plaka Formatı", "Plaka Formatı", "secim",
+                 ["TR (Türkiye)", "TR + Yabancı Plaka", "Çoklu Ülke"]),
+            Alan("Beyaz Liste", "Beyaz Liste Kapasitesi", "number",
+                 ipucu="örn. 10000 plaka"),
+            Alan("Entegrasyon", "Entegre Olduğu Sistem", "secim",
+                 ["Bariyer", "Kantar", "Kartlı Geçiş", "Otopark Yazılımı",
+                  "Bariyer + Kantar"]),
+            Alan("Bağlantı", "Bağlantı", "secim",
+                 ["TCP/IP", "RS485", "Röle Çıkışı", "TCP/IP + Röle"]),
+            Alan("Lisans Bitiş", "Lisans/Abonelik Bitişi", ipucu="örn. 31.12.2027"),
+            Alan("Sunucu", "Çalıştığı Sunucu / Bilgisayar"),
+        ],
+    },
+
+    # ----------------------------------------------------------------- #
+    # Kantar sistemi
+    # ----------------------------------------------------------------- #
+    "kantar_platform": {
+        "aile": "kantar",
+        "ad": "Kantar / Tartım Platformu",
+        "ikon": "⚖️",
+        "aciklama": "Araç (köprü) kantarları ve tartım platformları",
+        "alanlar": [
+            Alan("Kantar Tipi", "Kantar Tipi", "secim",
+                 ["Araç Kantarı (köprü)", "Yük Kantarı (platform)",
+                  "Bant Kantarı", "Vinç Kantarı", "Mobil Kantar"]),
+            Alan("Kapasite", "Kapasite (ton)", "number", ipucu="örn. 60"),
+            Alan("Platform Ölçüsü", "Platform Ölçüsü", ipucu="örn. 18 x 3 m"),
+            Alan("Yük Hücresi Sayısı", "Yük Hücresi Sayısı", "number",
+                 ipucu="örn. 8"),
+            Alan("Bölüntü", "Bölüntü (d) kg", "number", ipucu="örn. 20"),
+            Alan("Yapı", "Platform Yapısı", "secim",
+                 ["Çelik", "Beton", "Çelik + Beton"]),
+            Alan("Kurulum", "Kurulum Şekli", "secim",
+                 ["Yüzey (rampalı)", "Çukurlu (gömme)"]),
+            Alan("Kalibrasyon", "Son Kalibrasyon Tarihi", ipucu="örn. 12.03.2026"),
+            Alan("Damga Bitiş", "Damga / Muayene Bitişi", ipucu="örn. 31.12.2027"),
+        ],
+    },
+    "loadcell": {
+        "aile": "kantar",
+        "ad": "Yük Hücresi (Loadcell)",
+        "ikon": "🏋️",
+        "aciklama": "Kantar yük hücreleri ve bağlantı elemanları",
+        "alanlar": [
+            Alan("Kapasite", "Kapasite (ton)", "number", ipucu="örn. 30"),
+            Alan("Hücre Tipi", "Hücre Tipi", "secim",
+                 ["Kolon (column)", "Kesme Kirişi (shear beam)",
+                  "Tek Nokta (single point)", "S Tipi", "Halka (ring torsion)"]),
+            Alan("Malzeme", "Malzeme", "secim",
+                 ["Paslanmaz Çelik", "Alaşımlı Çelik", "Nikel Kaplama"]),
+            Alan("Çıkış", "Çıkış (mV/V)", ipucu="örn. 2.0 mV/V"),
+            Alan("Doğruluk Sınıfı", "Doğruluk Sınıfı", "secim",
+                 ["C3", "C4", "C5", "C6", "Belirtilmemiş"]),
+            Alan("Kablo Uzunluğu", "Kablo Uzunluğu (m)", "number"),
+            Alan("Bağlı Kantar", "Bağlı Olduğu Kantar", ipucu="örn. Giriş kantarı"),
+            Alan("Konum", "Platformdaki Konumu", ipucu="örn. 3 no'lu hücre"),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "kantar_terminal": {
+        "aile": "kantar",
+        "ad": "Kantar Terminali / İndikatör",
+        "ikon": "🖥️",
+        "aciklama": "Tartım göstergeleri, indikatörler ve tartım bilgisayarları",
+        "alanlar": [
+            Alan("Cihaz Tipi", "Cihaz Tipi", "secim",
+                 ["İndikatör (gösterge)", "Tartım Terminali",
+                  "Tartım Bilgisayarı", "Uzak Gösterge (büyük ekran)"]),
+            Alan("Ekran", "Ekran", "secim", ["LED", "LCD", "Dokunmatik"]),
+            Alan("Kanal Sayısı", "Bağlanabilen Yük Hücresi", "number",
+                 ipucu="örn. 8"),
+            Alan("Haberleşme", "Haberleşme", "secim",
+                 ["RS232", "RS485", "TCP/IP", "USB", "RS232 + TCP/IP"]),
+            Alan("Yazıcı", "Fiş Yazıcısı", "secim",
+                 ["Yok", "Dahili", "Harici (RS232)", "Harici (USB)"]),
+            Alan("Yazılım", "Tartım Yazılımı", ipucu="örn. kantar takip programı"),
+            Alan("Onay", "Onay / Sertifika", "secim",
+                 ["OIML R76", "TSE", "CE", "Belirtilmemiş"]),
+            Alan("Besleme", "Besleme", "secim", ["220V AC", "24V DC", "12V DC"]),
+        ],
+    },
+    "kantar_diger": {
+        "aile": "kantar",
+        "ad": "Diğer Kantar Ekipmanı",
+        "ikon": "🧰",
+        "aciklama": "Bağlantı kutusu, trafik lambası, uzak gösterge, kablo ve "
+                    "yardımcı ekipman",
+        "alanlar": [
+            Alan("Ekipman Tipi", "Ekipman Tipi", "secim",
+                 ["Bağlantı Kutusu (junction box)", "Trafik Lambası",
+                  "Uzak Gösterge Ekranı", "Yük Hücresi Kablosu",
+                  "Paratoner / Parafudr", "Kalibrasyon Ağırlığı",
+                  "Kamera / Görüntüleme", "Yazılım", "Diğer"]),
+            Alan("Kapasite", "Kapasite / Ölçü", ipucu="örn. 8 kanal, 500 kg"),
+            Alan("Bağlı Kantar", "Bağlı Olduğu Kantar"),
+            Alan("Açıklama", "Teknik Açıklama"),
+        ],
+    },
 }
 
 # Kategori adından tür anahtarına: içe aktarılmış kayıtları da yakalamak için.
@@ -456,12 +735,45 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
       "titresim sensor", "perde dedektor", "perde tipi",
       "bariyer dedektor"), "alarm_dedektor"),
     (("tus takimi", "keypad", "uzaktan kumanda", "alarm kumanda",
-      "etiket okuyucu", "proximity okuyucu", "panik butonu"), "alarm_keypad"),
+      "etiket okuyucu", "panik butonu"), "alarm_keypad"),
     (("alarm siren", "harici siren", "ic mekan siren", "dis mekan siren",
       "kablosuz siren"), "alarm_siren"),
     (("zon genisletici", "zon genisletme", "kablosuz alici", "alarm modul",
       "gsm modul", "gprs modul", "ip haberlesme", "haberlesme modul",
       "role modul", "tekrarlayici modul"), "alarm_modul"),
+
+    # --- Geçiş sistemleri ---
+    # Düz "Yazıcı" kategorisi (normal ofis yazıcısı) buraya girmemeli:
+    # her anahtar "kart" kelimesini içerir.
+    (("kart yazici", "kart printer", "kart basim", "kart kodlayici",
+      "kimlik karti yazici", "kartli gecis yazici"), "kart_yazici"),
+    (("kart okuyucu", "kart okutucu", "kartli gecis", "gecis okuyucu",
+      "gecis kontrol okuyucu", "proximity okuyucu", "prox okuyucu",
+      "rfid okuyucu", "mifare okuyucu", "parmak izi okuyucu",
+      "parmak izi terminal", "yuz tanima terminal", "pdks terminal",
+      "pdks cihaz", "turnike okuyucu"), "kart_okuyucu"),
+    # Kamera kuralı üniteden ÖNCE: "Plaka Tanıma Kamerası" ikisine de uyar
+    (("plaka tanima kamera", "plaka kamera", "anpr kamera", "lpr kamera",
+      "plaka okuma kamera"), "plaka_kamera"),
+    (("plaka tanima", "plaka okuma", "plaka sistem", " anpr ", " lpr ",
+      "anpr unite", "plaka unite"), "plaka_tanima"),
+    # Parça kuralı bariyerden ÖNCE: "Bariyer Kolu" bariyerin kendisi değil
+    (("bariyer kol", "bariyer motor", "bariyer kart", "bariyer kontrol",
+      "bariyer yedek",
+      "bariyer kumanda", "bariyer fotosel", "loop dedektor", "lup dedektor",
+      "fotosel", "bariyer parca"), "bariyer_parca"),
+    (("bariyer", "kollu bariyer", "otopark bariyer", "kol bariyer"), "bariyer"),
+
+    # --- Kantar sistemi ---
+    (("yuk hucresi", "loadcell", "load cell", "yuk sensor"), "loadcell"),
+    (("kantar terminal", "kantar indikator", "indikator", "tarti terminal",
+      "tartim terminal", "tartim bilgisayari", "kantar gosterge"),
+     "kantar_terminal"),
+    (("kantar baglanti kutusu", "junction box", "kantar yazilim",
+      "kantar kablo", "kalibrasyon agirlik", "trafik lamba",
+      "diger kantar"), "kantar_diger"),
+    (("arac kantar", "kopru kantar", "tartim platform", "kantar platform",
+      "kantar", "bascul", "tarti platform"), "kantar_platform"),
 
     # "Kablosuz Link" access_point değildir: ptp önce gelir
     (("noktadan noktaya", "point to point", "ptp", "ptmp", "kablosuz link",
@@ -469,6 +781,12 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
     (("access point", "accesspoint", "erisim noktasi", "wifi", "wi-fi",
       "kablosuz"), "access_point"),
     (("firewall", "guvenlik duvari", "utm", "guvenlik geciti"), "firewall"),
+    # SIM'li cihazlar router'dan ÖNCE: "4G Modem" bir mobil internet cihazıdır.
+    # " vin " boşlukla aranır — "vinç" içindeki "vin"e takılmasın.
+    (("superbox", "super box", "vinn", " vin ", "mifi", "mi-fi",
+      "mobil internet", "usb modem", "4g modem", "5g modem", "4.5g modem",
+      "sim modem", "cep interneti", "tasinabilir wifi",
+      "tasinabilir wi-fi"), "mobil_internet"),
     (("router", "modem", "yonlendirici"), "router"),
 
     # --- Yangın algılama (kalan türler) ---
@@ -490,8 +808,13 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
 
 # Ağ cihazının YEDEK PARÇASI olan kategoriler ağ ürünü sayılmaz:
 # "NVR Diski" bir disktir, "Switch Fanı" bir fandır.
+#
+# Kendisi zaten parça/sarf olan türler bu denetimden muaftır: "SFP / Modül"
+# bir moduldur, "Bariyer Kolu" ve "Kantar Kablosu" da bilerek takip edilir.
+_PARCA_MUAF = frozenset({"sfp", "bariyer_parca", "kantar_diger"})
 _PARCA_KELIMELERI = ("disk", "harddisk", "hdd", "ssd", "fan", "adaptor",
-                     "kablo", "raf", "vida", "guc", "batarya", "pil")
+                     "kablo", "raf", "vida", "guc", "batarya", "pil",
+                     "ribbon", "toner", "kartus")
 
 
 def _parca_mi(sade: str) -> bool:
@@ -524,8 +847,7 @@ def tur_bul(kategori_adi: str | None) -> str | None:
         if yangin_metni and tur.startswith("alarm_"):
             continue
         if any(a in bosluklu for a in anahtarlar):
-            # "SFP / Modül" kendisi bir modüldür; parça denetimi ona uygulanmaz
-            if tur != "sfp" and _parca_mi(sade):
+            if tur not in _PARCA_MUAF and _parca_mi(sade):
                 return None
             return tur
     return None
@@ -548,6 +870,8 @@ def sablon(aile: str | None = None) -> list[dict]:
             "ad": bilgi["ad"],
             "ikon": bilgi["ikon"],
             "aciklama": bilgi["aciklama"],
+            # Arayüz künye bölümüne hat alanlarını bu bayrağa bakarak ekler
+            "hat": bool(bilgi.get("hat")),
             "alanlar": [a.sozluk() for a in bilgi["alanlar"]],
             "ortak": [a.sozluk() for a in ORTAK],
         }
@@ -628,6 +952,11 @@ def urunler(db: Session, *, aile: str | None = None, tur: str | None = None,
             "serial": a.serial,
             "demirbas_no": a.demirbas_no,
             "ip_address": a.ip_address,
+            # SIM'li cihazlar (Superbox, Vinn, USB modem) için hat künyesi
+            "operator": a.operator,
+            "telefon_no": a.telefon_no,
+            "sim_no": a.sim_no,
+            "imei": a.imei,
             "lokasyon": lok.name if lok else None,
             "lokasyon_id": a.location_id,
             "proje_kodu": lok.proje_kodu if lok else None,
@@ -640,7 +969,8 @@ def urunler(db: Session, *, aile: str | None = None, tur: str | None = None,
             havuz = " ".join(str(v) for v in [
                 kayit["asset_tag"], kayit["marka"], kayit["model"], kayit["serial"],
                 kayit["demirbas_no"], kayit["lokasyon"], kayit["ip_address"],
-                *kayit["ozellikler"].values()] if v)
+                kayit["operator"], kayit["telefon_no"], kayit["sim_no"],
+                kayit["imei"], *kayit["ozellikler"].values()] if v)
             if terim not in _sadelestir(havuz):
                 continue
         sonuc.append(kayit)
