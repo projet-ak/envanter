@@ -19,15 +19,24 @@ READ = [Depends(get_current_user)]
 WRITE = [Depends(require_editor)]
 
 
+@router.get("/aileler", dependencies=READ)
+def aileler():
+    """Ürün aileleri (Ağ Ürünleri, Yangın Sistemleri) — menü bunlardan üretilir."""
+    return [{"aile": k, **v} for k, v in ag.AILELER.items()]
+
+
 @router.get("/sablon", dependencies=READ)
-def sablon():
-    """Ağ ürün türleri ve her türün teknik alanları (arayüz formu bundan üretilir)."""
-    return ag.sablon()
+def sablon(aile: str | None = Query(None, description="ag | yangin")):
+    """Ürün türleri ve her türün teknik alanları (arayüz formu bundan üretilir)."""
+    if aile and aile not in ag.AILELER:
+        raise HTTPException(400, f"Bilinmeyen aile: {aile}")
+    return ag.sablon(aile)
 
 
 @router.get("/urunler", dependencies=READ)
 def urunler(
-    tur: str | None = Query(None, description="switch, sfp, access_point, router…"),
+    aile: str | None = Query(None, description="ag | yangin"),
+    tur: str | None = Query(None, description="switch, sfp, dedektor, yangin_panel…"),
     location_id: int | None = None,
     proje_kodu: str | None = None,
     durum_id: int | None = None,
@@ -36,13 +45,18 @@ def urunler(
 ):
     if tur and tur not in ag.TURLER:
         raise HTTPException(400, f"Bilinmeyen tür: {tur}")
-    return ag.urunler(db, tur=tur, location_id=location_id, proje_kodu=proje_kodu,
-                      durum_id=durum_id, q=q)
+    if aile and aile not in ag.AILELER:
+        raise HTTPException(400, f"Bilinmeyen aile: {aile}")
+    return ag.urunler(db, aile=aile, tur=tur, location_id=location_id,
+                      proje_kodu=proje_kodu, durum_id=durum_id, q=q)
 
 
 @router.get("/ozet", dependencies=READ)
-def ozet(db: Session = Depends(get_db)):
-    return ag.ozet(db)
+def ozet(aile: str | None = Query(None, description="ag | yangin"),
+         db: Session = Depends(get_db)):
+    if aile and aile not in ag.AILELER:
+        raise HTTPException(400, f"Bilinmeyen aile: {aile}")
+    return ag.ozet(db, aile=aile)
 
 
 @router.get("/transferler", dependencies=READ)

@@ -1,12 +1,17 @@
-"""Ağ / network ürünleri — tür şablonları ve sorgular.
+"""Teknik sistem ürünleri — tür şablonları ve sorgular.
 
-Ağ ürünleri ayrı bir tablo değildir: normal varlıklardır, ama kategorileri
-ağ türlerinden biridir ve teknik özellikleri `Asset.custom["Ağ"]` altında
-tutulur. Böylece zimmet, dosya eki, etiket basma, arama gibi her şey aynen
-çalışır; ağ ekranı yalnızca bu varlıklara türe özel bir görünüm sunar.
+Başlangıçta yalnızca ağ ürünleri içindi (modül adı ve /ag uçları bu yüzden),
+sonradan yangın algılama sistemleri de eklendi. Türler **ailelere** ayrılır:
 
-Her türün kendi alan listesi vardır (switch'te port sayısı ve PoE, SFP'de
-hız/mesafe/mod gibi) — bkz. `TURLER`.
+    AILELER = {"ag": Ağ Ürünleri, "yangin": Yangın Sistemleri}
+
+Bu ürünler ayrı bir tablo değildir: normal varlıklardır, ama kategorileri
+sistem türlerinden biridir ve teknik özellikleri `Asset.custom["Ağ"]` altında
+tutulur. Böylece zimmet, dosya eki, etiket basma ve arama aynen çalışır;
+ekran yalnızca türe özel bir görünüm sunar.
+
+Her türün kendi alan listesi vardır (switch'te port sayısı ve PoE, dedektörde
+algılama tipi ve kapsama alanı gibi) — bkz. `TURLER`.
 """
 
 from __future__ import annotations
@@ -44,12 +49,23 @@ ORTAK = [
     Alan("Firmware", "Firmware / Yazılım Sürümü"),
 ]
 
+# Ürün aileleri — menüde ayrı bölüm olarak görünür
+AILELER = {
+    "ag": {"ad": "Ağ Ürünleri", "ikon": "🌐",
+           "aciklama": "Switch, SFP modül, access point ve diğer ağ donanımı"},
+    "yangin": {"ad": "Yangın Sistemleri", "ikon": "🔥",
+               "aciklama": "Yangın alarm paneli, dedektörler, butonlar ve sirenler"},
+}
+
 POE_SECENEKLERI = ["Yok", "PoE", "PoE+ (802.3at)", "PoE++ (802.3bt)", "Pasif PoE"]
+ADRESLI_SECENEKLERI = ["Adresli", "Konvansiyonel"]
+IP_SINIFI = ["IP20", "IP42", "IP54", "IP65", "IP66", "IP67"]
 KATMAN_SECENEKLERI = ["Erişim (Access)", "Dağıtım (Distribution)", "Omurga (Core)"]
 
 # Ağ ürün türleri: anahtar -> (görünen ad, ikon, alanlar)
 TURLER: dict[str, dict] = {
     "switch": {
+        "aile": "ag",
         "ad": "Switch",
         "ikon": "🔀",
         "aciklama": "Yönetilebilir/yönetilemez anahtarlar, omurga ve kenar cihazlar",
@@ -69,6 +85,7 @@ TURLER: dict[str, dict] = {
         ],
     },
     "sfp": {
+        "aile": "ag",
         "ad": "SFP / Modül",
         "ikon": "🔌",
         "aciklama": "SFP, SFP+, QSFP transceiver ve medya dönüştürücüler",
@@ -85,6 +102,7 @@ TURLER: dict[str, dict] = {
         ],
     },
     "access_point": {
+        "aile": "ag",
         "ad": "Access Point",
         "ikon": "📶",
         "aciklama": "Kablosuz erişim noktaları",
@@ -99,18 +117,58 @@ TURLER: dict[str, dict] = {
         ],
     },
     "router": {
-        "ad": "Router / Firewall",
-        "ikon": "🛡️",
-        "aciklama": "Yönlendirici, güvenlik duvarı ve modemler",
+        "aile": "ag",
+        "ad": "Router / Modem",
+        "ikon": "📡",
+        "aciklama": "Yönlendiriciler ve modemler",
         "alanlar": [
             Alan("Port Sayısı", "Port Sayısı", "number"),
             Alan("WAN Portu", "WAN Portu", "number"),
             Alan("Throughput", "Throughput", ipucu="örn. 1 Gbps"),
-            Alan("VPN", "VPN Desteği", "secim", ["Var", "Yok"]),
+            Alan("Bağlantı Tipi", "Bağlantı Tipi", "secim",
+                 ["Fiber", "VDSL/ADSL", "Metro Ethernet", "4G/LTE", "5G", "Uydu"]),
             Alan("Katman", "Ağdaki Yeri", "secim", KATMAN_SECENEKLERI),
         ],
     },
+    "firewall": {
+        "aile": "ag",
+        "ad": "Güvenlik Duvarı",
+        "ikon": "🛡️",
+        "aciklama": "Firewall / UTM cihazları ve güvenlik geçitleri",
+        "alanlar": [
+            Alan("Port Sayısı", "Port Sayısı", "number"),
+            Alan("WAN Portu", "WAN Portu", "number"),
+            Alan("Throughput", "Firewall Throughput", ipucu="örn. 1 Gbps"),
+            Alan("VPN Throughput", "VPN Throughput", ipucu="örn. 300 Mbps"),
+            Alan("Eşzamanlı Oturum", "Eşzamanlı Oturum", "number"),
+            Alan("VPN", "VPN Desteği", "secim",
+                 ["Yok", "IPSec", "SSL-VPN", "IPSec + SSL-VPN"]),
+            Alan("Lisans Bitiş", "Lisans/Abonelik Bitişi", ipucu="örn. 31.12.2027"),
+            Alan("HA", "Yüksek Erişilebilirlik (HA)", "secim",
+                 ["Yok", "Aktif-Pasif", "Aktif-Aktif"]),
+            Alan("Rack U", "Rack Yüksekliği (U)", "number"),
+        ],
+    },
+    "ptp": {
+        "aile": "ag",
+        "ad": "Noktadan Noktaya Link",
+        "ikon": "🔭",
+        "aciklama": "Şantiyeler arası kablosuz köprüler (PtP/PtMP anten setleri)",
+        "alanlar": [
+            Alan("Frekans", "Frekans", "secim",
+                 ["2.4 GHz", "5 GHz", "5.8 GHz", "24 GHz", "60 GHz", "80 GHz"]),
+            Alan("Hız", "Bağlantı Hızı", ipucu="örn. 300 Mbps"),
+            Alan("Menzil", "Menzil", ipucu="örn. 5 km"),
+            Alan("Anten Kazancı", "Anten Kazancı (dBi)", "number", ipucu="örn. 25"),
+            Alan("Mod", "Çalışma Modu", "secim",
+                 ["Noktadan Noktaya (PtP)", "Noktadan Çok Noktaya (PtMP)"]),
+            Alan("Rol", "Roldeki Yeri", "secim", ["Master (AP)", "Slave (Station)"]),
+            Alan("Karşı Uç", "Karşı Uç", ipucu="bağlandığı şantiye / cihaz"),
+            Alan("PoE", "PoE ile Beslenir mi", "secim", POE_SECENEKLERI),
+        ],
+    },
     "nvr": {
+        "aile": "ag",
         "ad": "NVR / Kayıt Cihazı",
         "ikon": "🎥",
         "aciklama": "Ağ üzerinden kamera kaydı yapan cihazlar (NVR / DVR)",
@@ -130,6 +188,7 @@ TURLER: dict[str, dict] = {
         ],
     },
     "kabinet": {
+        "aile": "ag",
         "ad": "Kabinet / Patch Panel",
         "ikon": "🗄️",
         "aciklama": "Rack kabinetler, patch panel ve kablolama malzemesi",
@@ -142,10 +201,101 @@ TURLER: dict[str, dict] = {
         ],
     },
     "diger": {
+        "aile": "ag",
         "ad": "Diğer Ağ Ürünü",
         "ikon": "🌐",
         "aciklama": "Media converter, KVM, konsol sunucu ve diğerleri",
         "alanlar": [Alan("Açıklama", "Teknik Açıklama")],
+    },
+
+    # ----------------------------------------------------------------- #
+    # Yangın algılama sistemleri
+    # ----------------------------------------------------------------- #
+    "yangin_panel": {
+        "aile": "yangin",
+        "ad": "Yangın Alarm Paneli",
+        "ikon": "🚨",
+        "aciklama": "Adresli/konvansiyonel yangın alarm santralleri ve tekrarlayıcılar",
+        "alanlar": [
+            Alan("Sistem Tipi", "Sistem Tipi", "secim", ADRESLI_SECENEKLERI),
+            Alan("Çevrim Sayısı", "Çevrim (Loop) Sayısı", "number", ipucu="örn. 2"),
+            Alan("Adres Kapasitesi", "Çevrim Başına Adres", "number", ipucu="örn. 127"),
+            Alan("Zon Sayısı", "Zon Sayısı", "number"),
+            Alan("Siren Çıkışı", "Siren Çıkışı", "number"),
+            Alan("Batarya", "Batarya", ipucu="örn. 2x12V 7Ah"),
+            Alan("Yedek Süre", "Yedekleme Süresi", ipucu="örn. 24 saat + 30 dk alarm"),
+            Alan("Ağ Bağlantısı", "Ağ Bağlantısı", "secim",
+                 ["Yok", "TCP/IP", "RS485", "TCP/IP + RS485"]),
+            Alan("Sertifika", "Sertifika", "secim",
+                 ["EN 54", "UL", "CE", "TSE", "Belirtilmemiş"]),
+        ],
+    },
+    "dedektor": {
+        "aile": "yangin",
+        "ad": "Dedektör / Sensör",
+        "ikon": "🔎",
+        "aciklama": "Duman, ısı, alev ve gaz dedektörleri",
+        "alanlar": [
+            Alan("Algılama Tipi", "Algılama Tipi", "secim",
+                 ["Optik Duman", "İyonize Duman", "Isı (Sabit)", "Isı (Artış Hızı)",
+                  "Duman + Isı (Kombine)", "Alev", "Gaz (CO)", "Gaz (LPG/Doğalgaz)",
+                  "Aspirasyon"]),
+            Alan("Sistem Tipi", "Sistem Tipi", "secim", ADRESLI_SECENEKLERI),
+            Alan("Adres", "Adres / Zon", ipucu="örn. Loop 1 / Adres 24"),
+            Alan("Kapsama Alanı", "Kapsama Alanı (m²)", "number", ipucu="örn. 60"),
+            Alan("Montaj", "Montaj", "secim", ["Tavan", "Duvar", "Kanal içi"]),
+            Alan("Soket", "Soket / Taban", ipucu="örn. standart taban"),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "yangin_buton": {
+        "aile": "yangin",
+        "ad": "Buton / Siren",
+        "ikon": "🔔",
+        "aciklama": "Yangın ihbar butonları, sirenler ve flaşörler",
+        "alanlar": [
+            Alan("Cihaz Tipi", "Cihaz Tipi", "secim",
+                 ["Yangın İhbar Butonu", "Siren", "Flaşör", "Siren + Flaşör",
+                  "Konvansiyonel Buton"]),
+            Alan("Sistem Tipi", "Sistem Tipi", "secim", ADRESLI_SECENEKLERI),
+            Alan("Adres", "Adres / Zon", ipucu="örn. Loop 1 / Adres 8"),
+            Alan("Ses Seviyesi", "Ses Seviyesi (dB)", "number", ipucu="örn. 100"),
+            Alan("Montaj", "Montaj", "secim", ["İç Mekan", "Dış Mekan"]),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+            Alan("Besleme", "Besleme Gerilimi", "secim", ["24V DC", "12V DC", "Çevrimden"]),
+        ],
+    },
+    "beam": {
+        "aile": "yangin",
+        "ad": "Beam Dedektör / Yansıtıcı",
+        "ikon": "📡",
+        "aciklama": "Noktadan noktaya (ışınlı) duman dedektörleri ve yansıtıcıları",
+        "alanlar": [
+            Alan("Parça Tipi", "Parça Tipi", "secim",
+                 ["Verici-Alıcı (tek gövde)", "Verici", "Alıcı", "Yansıtıcı (prizma)"]),
+            Alan("Menzil", "Menzil", ipucu="örn. 10-100 m"),
+            Alan("Yansıtıcı Sayısı", "Yansıtıcı Sayısı", "number",
+                 ipucu="uzun mesafede birden fazla prizma kullanılır"),
+            Alan("Hizalama", "Hizalama", "secim", ["Elle", "Motorlu/Otomatik"]),
+            Alan("Sistem Tipi", "Sistem Tipi", "secim", ADRESLI_SECENEKLERI),
+            Alan("Adres", "Adres / Zon"),
+            Alan("Montaj Yüksekliği", "Montaj Yüksekliği (m)", "number"),
+            Alan("IP Sınıfı", "IP Koruma Sınıfı", "secim", IP_SINIFI),
+        ],
+    },
+    "yangin_diger": {
+        "aile": "yangin",
+        "ad": "Diğer Yangın Ekipmanı",
+        "ikon": "🧯",
+        "aciklama": "Modül, izolatör, yangın dolabı, tüp ve diğer ekipman",
+        "alanlar": [
+            Alan("Ekipman Tipi", "Ekipman Tipi", "secim",
+                 ["Giriş/Çıkış Modülü", "İzolatör", "Tekrarlayıcı Panel",
+                  "Yangın Dolabı", "Yangın Tüpü", "Duman Damperi", "Diğer"]),
+            Alan("Sistem Tipi", "Sistem Tipi", "secim", ADRESLI_SECENEKLERI),
+            Alan("Adres", "Adres / Zon"),
+            Alan("Açıklama", "Teknik Açıklama"),
+        ],
     },
 }
 
@@ -160,7 +310,21 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
       "wireless bridge", "wifi bridge", "kablosuz kopru"), "diger"),
     (("access point", "accesspoint", "erisim noktasi", "wifi", "wi-fi",
       "kablosuz"), "access_point"),
-    (("router", "firewall", "guvenlik duvari", "modem", "yonlendirici"), "router"),
+    (("firewall", "guvenlik duvari", "utm", "guvenlik geciti"), "firewall"),
+    (("noktadan noktaya", "point to point", "ptp", "ptmp", "kablosuz link",
+      "radyo link", "airfiber", "airmax", "nanostation"), "ptp"),
+    (("router", "modem", "yonlendirici"), "router"),
+    # --- Yangın algılama ---
+    (("yangin alarm panel", "yangin panel", "yangin santral", "alarm santral",
+      "ihbar panel"), "yangin_panel"),
+    (("beam dedektor", "isinli dedektor", "yansitici", "prizma",
+      "lineer duman"), "beam"),
+    (("dedektor", "detektor", "duman sensor", "isi sensor", "alev sensor",
+      "gaz sensor", "duman alarm"), "dedektor"),
+    (("yangin butonu", "ihbar butonu", "siren", "flasor",
+      "yangin buton"), "yangin_buton"),
+    (("yangin dolab", "yangin tup", "yangin sondur", "duman damper",
+      "izolator", "yangin"), "yangin_diger"),
     (("nvr", "dvr", "kayit cihazi", "kamera kayit"), "nvr"),
     (("kabinet", "kabin", "patch panel", "patchpanel", "rack"), "kabinet"),
     # Ağ altyapısı ama yukarıdakilere girmeyenler
@@ -208,11 +372,15 @@ def kategori_adi(tur: str) -> str:
     return TURLER[tur]["ad"]
 
 
-def sablon() -> list[dict]:
-    """Arayüzün form üretmek için kullandığı tür/alan tanımları."""
+def sablon(aile: str | None = None) -> list[dict]:
+    """Arayüzün form üretmek için kullandığı tür/alan tanımları.
+
+    `aile` verilirse yalnızca o ailenin türleri döner ("ag" / "yangin").
+    """
     return [
         {
             "tur": anahtar,
+            "aile": bilgi["aile"],
             "ad": bilgi["ad"],
             "ikon": bilgi["ikon"],
             "aciklama": bilgi["aciklama"],
@@ -220,6 +388,7 @@ def sablon() -> list[dict]:
             "ortak": [a.sozluk() for a in ORTAK],
         }
         for anahtar, bilgi in TURLER.items()
+        if aile is None or bilgi["aile"] == aile
     ]
 
 
@@ -241,10 +410,10 @@ def _ozellikler(a: models.Asset) -> dict:
     return dict(ozel.get(GRUP) or {})
 
 
-def urunler(db: Session, *, tur: str | None = None, location_id: int | None = None,
-            proje_kodu: str | None = None, durum_id: int | None = None,
-            q: str | None = None) -> list[dict]:
-    """Ağ ürünlerini türe/lokasyona/duruma göre listeler."""
+def urunler(db: Session, *, aile: str | None = None, tur: str | None = None,
+            location_id: int | None = None, proje_kodu: str | None = None,
+            durum_id: int | None = None, q: str | None = None) -> list[dict]:
+    """Sistem ürünlerini aileye/türe/lokasyona/duruma göre listeler."""
     kategoriler = _ag_kategori_idleri(db)
     if not kategoriler:
         return []
@@ -283,6 +452,8 @@ def urunler(db: Session, *, tur: str | None = None, location_id: int | None = No
         urun_turu = kategoriler.get(mdl.category_id) if mdl else None
         if tur and urun_turu != tur:
             continue
+        if aile and TURLER.get(urun_turu, {}).get("aile") != aile:
+            continue
         lok = lokasyonlar.get(a.location_id)
         kayit = {
             "id": a.id,
@@ -312,9 +483,9 @@ def urunler(db: Session, *, tur: str | None = None, location_id: int | None = No
     return sonuc
 
 
-def ozet(db: Session) -> dict:
+def ozet(db: Session, *, aile: str | None = None) -> dict:
     """Tür bazlı sayılar, lokasyon dağılımı ve toplam port/PoE kapasitesi."""
-    liste = urunler(db)
+    liste = urunler(db, aile=aile)
     tur_sayilari: dict[str, int] = {}
     lokasyon_sayilari: dict[str, int] = {}
     toplam_port = 0

@@ -466,6 +466,7 @@
       ['dashboard', 'Kontrol Paneli', '📊'],
       ['assets', 'Varlıklar', '💻'],
       ['ag', 'Ağ Ürünleri', '🌐'],
+      ['yangin', 'Yangın Sistemleri', '🔥'],
       ['personel', 'Personel', '👥'],
       ['accessories', 'Aksesuarlar', '🎧'],
       ['consumables', 'Sarf Malzeme', '📦'],
@@ -506,7 +507,7 @@
       else if (tab === 'personel') renderPersonelView();
       else if (tab === 'tanimlar') renderTanimlarView();
       else if (tab === 'excel') renderExcelView();
-      else if (tab === 'ag') renderAgView();
+      else if (tab === 'ag' || tab === 'yangin') renderAgView(tab);
       else if (tab === 'ayarlar') renderAyarlarView();
       else renderStockView(tab);
     }
@@ -2504,19 +2505,30 @@
     }
 
     // ---------- Ağ ürünleri ----------
-    let agSablon = null;        // tür/alan tanımları (sunucudan bir kez)
+    // Aynı ekran iki aileye hizmet eder: "ag" (ağ ürünleri) ve "yangin"
+    let agSablon = null;        // seçili ailenin tür/alan tanımları
+    let agAile = 'ag';          // hangi aile gösteriliyor
     let agTur = '';             // seçili alt kategori ('' = tümü)
     let agAraZaman = null;
 
-    async function renderAgView() {
+    const AILE_BILGI = {
+      ag: { ikon: '🌐', ad: 'Ağ Ürünleri',
+            alt: 'Switch, SFP modül, access point ve diğer ağ donanımı' },
+      yangin: { ikon: '🔥', ad: 'Yangın Sistemleri',
+                alt: 'Yangın alarm paneli, dedektörler, butonlar ve sirenler' },
+    };
+
+    async function renderAgView(aile = agAile) {
+      if (aile !== agAile) { agAile = aile; agTur = ''; agSablon = null; }
       if (!agSablon) {
-        try { agSablon = await api('/ag/sablon'); }
+        try { agSablon = await api('/ag/sablon?aile=' + agAile); }
         catch { agSablon = []; }
       }
-      const ozet = await api('/ag/ozet').catch(() => null);
+      const ozet = await api('/ag/ozet?aile=' + agAile).catch(() => null);
       const turBilgi = (k) => agSablon.find(s => s.tur === k) || {};
 
-      const sekmeler = [['', '🌐 Tümü' + (ozet ? ` (${ozet.toplam})` : '')]]
+      const sekmeler = [['', `${AILE_BILGI[agAile].ikon} Tümü` +
+                          (ozet ? ` (${ozet.toplam})` : '')]]
         .concat((ozet?.tur_dagilimi || []).map(d =>
           [d.tur, `${d.ikon} ${d.ad} (${d.adet})`]));
       // Henüz ürünü olmayan türler de eklenebilsin diye listede dursun
@@ -2526,20 +2538,25 @@
         }
       }
 
+      const bilgi = AILE_BILGI[agAile];
+      // Yangın tarafında port/PoE anlamsız; onun yerine tür çeşitliliği
+      const ekKart = agAile === 'ag'
+        ? statCard('Toplam port', ozet?.toplam_port ?? 0, '🔀', 'mavi') +
+          statCard('PoE besleyen', ozet?.poe_cihaz ?? 0, '⚡', 'sari')
+        : statCard('Ürün çeşidi', (ozet?.tur_dagilimi || []).length, '🧩', 'mavi');
+
       document.getElementById('view').innerHTML =
-        sayfaBasligi('🌐', 'Ağ Ürünleri',
-          'Switch, SFP modül, access point ve diğer ağ donanımı') + `
+        sayfaBasligi(bilgi.ikon, bilgi.ad, bilgi.alt) + `
         ${ozet ? `<div class="stats">
-          ${statCard('Toplam ağ ürünü', ozet.toplam, '🌐')}
-          ${statCard('Toplam port', ozet.toplam_port, '🔀', 'mavi')}
-          ${statCard('PoE besleyen', ozet.poe_cihaz, '⚡', 'sari')}
+          ${statCard('Toplam ürün', ozet.toplam, bilgi.ikon)}
+          ${ekKart}
           ${statCard('Lokasyon', ozet.lokasyon_dagilimi.length, '📍', 'mor')}
         </div>` : ''}
         <div class="panel">
           <div class="row" style="align-items:center; margin-bottom:10px">
             <h2 style="margin:0; flex:1">Alt kategoriler</h2>
             ${canWrite() ? `<button class="primary" onclick="agUrunEkleAc()">
-              + Ağ ürünü ekle</button>` : ''}
+              + ${agAile === 'yangin' ? 'Yangın ekipmanı' : 'Ağ ürünü'} ekle</button>` : ''}
             <button class="ghost" onclick="agTransferler()">🔄 Transferler</button>
           </div>
           <div class="row">${sekmeler.map(([k, l]) =>
@@ -2574,7 +2591,7 @@
       agListele();
     }
 
-    function agTurSec(tur) { agTur = tur; renderAgView(); }
+    function agTurSec(tur) { agTur = tur; renderAgView(agAile); }
 
     function agAraGecikmeli() {
       clearTimeout(agAraZaman);
@@ -2584,7 +2601,7 @@
     async function agListele() {
       const kutu = document.getElementById('agListe');
       if (!kutu) return;
-      const p = new URLSearchParams();
+      const p = new URLSearchParams({ aile: agAile });
       if (agTur) p.set('tur', agTur);
       const q = document.getElementById('agAra')?.value.trim();
       if (q) p.set('q', q);
@@ -2654,7 +2671,7 @@
     }
 
     // Ağ ürünü ekleme — türe göre alanlar
-    function agUrunEkleAc(tur = agTur || 'switch') {
+    function agUrunEkleAc(tur = agTur || (agAile === 'yangin' ? 'dedektor' : 'switch')) {
       const s = agSablon.find(x => x.tur === tur) || agSablon[0];
       if (!s) return alert('⚠ Tür şablonu alınamadı.');
 
@@ -2671,7 +2688,7 @@
                     ${a.tip === 'number' ? 'type="number"' : ''}
                     placeholder="${kacir(a.ipucu || '')}" /></label>`;
 
-      modalAc('Ağ ürünü ekle', `
+      modalAc(`${AILE_BILGI[agAile].ad} — ürün ekle`, `
         <div class="row" style="margin-bottom:14px">
           ${agSablon.map(x => `<button class="ghost ${x.tur === tur ? 'sec' : ''}"
              onclick="agUrunEkleAc('${x.tur}')">${x.ikon} ${kacir(x.ad)}</button>`).join('')}
@@ -2744,7 +2761,7 @@
         });
         modalKapat();
         agTur = tur;
-        renderAgView();
+        renderAgView(agAile);
       } catch (e) {
         bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Eklenemedi'}</span>`;
       }

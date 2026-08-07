@@ -43,7 +43,8 @@ python scripts/create_admin.py --username admin --password "GucluParola"
 ## Arayüz
 
 Sol menü + üst bar düzeni. Menü iki bölümdür: günlük işler (Kontrol Paneli,
-Varlıklar, **Ağ Ürünleri**, Personel, Aksesuar/Sarf/Bileşen/Lisans) ve
+Varlıklar, **Ağ Ürünleri**, **Yangın Sistemleri**, Personel,
+Aksesuar/Sarf/Bileşen/Lisans) ve
 **Yönetim** (Tanımlar,
 Excel Aktarım, Fatura Oku, Ayarlar). Üst barda her yerden çalışan arama
 kutusu, oturum sayacı, koyu/açık tema düğmesi ve kullanıcı kartı bulunur.
@@ -252,30 +253,49 @@ alanlar (hepsi CSV içe/dışa aktarımda ve aramada desteklenir):
 Bunların dışında kalan her şey için `custom` (JSON) alanı var — şema
 değiştirmeden istediğin alanı ekleyebilirsin.
 
-## Ağ ürünleri
+## Sistem ürünleri (ağ ve yangın)
 
-Sol menüdeki **Ağ Ürünleri** bölümü switch, SFP modül, access point ve diğer
-ağ donanımını türe özel alanlarla takip eder. Ayrı bir tablo değildir —
-normal varlıklardır, bu yüzden zimmet, dosya eki, etiket basma ve arama
-aynen çalışır.
+Sol menüde iki bölüm vardır: **Ağ Ürünleri** ve **Yangın Sistemleri**. İkisi de
+aynı makineyi kullanır — ayrı bir tablo değildir, normal varlıklardır; bu
+yüzden zimmet, dosya eki, etiket basma ve arama aynen çalışır. Fark, her türün
+kendi teknik alan listesi olmasıdır.
+
+### 🌐 Ağ Ürünleri
 
 | Alt kategori | Türe özel alanlar |
 |---|---|
 | 🔀 Switch | Port sayısı, port hızı, **PoE** (yok/PoE/PoE+/PoE++), PoE bütçesi, **ağdaki yeri** (erişim/dağıtım/**omurga**), yönetilebilirlik, uplink, stack, VLAN, rack U |
 | 🔌 SFP / Modül | Hız, dalga boyu, mesafe, mod (single/multi), konnektör |
 | 📶 Access Point | Wi-Fi standardı, bantlar, PoE, anten, montaj |
-| 🛡️ Router / Firewall | Port sayısı, WAN portu, throughput, VPN, ağdaki yeri |
+| 🛡️ Güvenlik Duvarı | Port, WAN, firewall/VPN throughput, eşzamanlı oturum, VPN tipi, lisans bitişi, HA, rack U |
+| 🔭 Noktadan Noktaya Link | Frekans, hız, menzil, anten kazancı (dBi), PtP/PtMP, master/slave, **karşı uç**, PoE |
+| 📡 Router / Modem | Port, WAN, throughput, bağlantı tipi (fiber/VDSL/4G…), ağdaki yeri |
 | 🎥 NVR / Kayıt Cihazı | Kanal sayısı, PoE portu, PoE bütçesi, disk yuvası, takılı disk, RAID, azami çözünürlük, kayıt süresi |
 | 🗄️ Kabinet / Patch Panel | Boyut (U), port sayısı, kablo kategorisi, derinlik |
 
-Ekranın üstünde toplam ürün, **toplam port**, PoE besleyen cihaz sayısı ve
-lokasyon dağılımı; listede her ürünün **görseli**, lokasyonu, proje kodu ve
-kullanım durumu (boşta / kimde) görünür.
+### 🔥 Yangın Sistemleri
+
+| Alt kategori | Türe özel alanlar |
+|---|---|
+| 🚨 Yangın Alarm Paneli | Adresli/konvansiyonel, çevrim (loop) sayısı, çevrim başına adres, zon, siren çıkışı, batarya, yedekleme süresi, ağ bağlantısı, sertifika (EN 54…) |
+| 🔎 Dedektör / Sensör | Algılama tipi (optik duman / iyonize / ısı / kombine / alev / gaz / aspirasyon), adresli mi, adres, kapsama alanı (m²), montaj, IP sınıfı |
+| 🔔 Buton / Siren | Cihaz tipi (ihbar butonu / siren / flaşör), adresli mi, adres, ses seviyesi (dB), iç-dış mekan, IP sınıfı, besleme |
+| 📡 Beam Dedektör / Yansıtıcı | Parça tipi (verici-alıcı / verici / alıcı / **yansıtıcı prizma**), menzil, yansıtıcı sayısı, hizalama, adres, montaj yüksekliği |
+| 🧯 Diğer Yangın Ekipmanı | Giriş/çıkış modülü, izolatör, tekrarlayıcı panel, yangın dolabı/tüpü, duman damperi |
+
+Ekranın üstünde toplam ürün, ağ tarafında **toplam port** ve PoE besleyen
+cihaz sayısı, yangın tarafında ürün çeşidi ve lokasyon dağılımı; listede her
+ürünün **görseli**, lokasyonu, proje kodu ve kullanım durumu (boşta / kimde)
+görünür.
 
 ```bash
 curl -H "Authorization: Bearer $T" "$API/ag/urunler?tur=switch&proje_kodu=U030"
-curl -H "Authorization: Bearer $T" "$API/ag/ozet"
+curl -H "Authorization: Bearer $T" "$API/ag/urunler?aile=yangin"
+curl -H "Authorization: Bearer $T" "$API/ag/ozet?aile=yangin"
 ```
+
+> Uç adresleri tarihsel olarak `/ag` ile başlar (bölüm önce yalnızca ağ
+> ürünleri içindi); `aile` parametresi hangi ailenin sorgulandığını belirler.
 
 Kategori adından tür otomatik çıkarılır; Excel'den gelmiş
 "POE Switch 8 Port" gibi kayıtlar da bu ekranda listelenir. Yedek parçalar
@@ -627,7 +647,8 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/assets/sayi` | Filtrelere uyan toplam sayı (sayfalamadan bağımsız) |
 | `GET` | `/assets/proje-kodlari` | Proje kodları + cihaz sayıları |
 | `GET/POST` | `/ag/urunler` | Ağ ürünlerini listele / ekle |
-| `GET` | `/ag/sablon` | Ağ türleri ve teknik alanları |
+| `GET` | `/ag/aileler` | Ürün aileleri (ağ / yangın) |
+| `GET` | `/ag/sablon` | Türler ve teknik alanları (`?aile=`) |
 | `GET` | `/ag/ozet` | Tür/lokasyon dağılımı, toplam port, PoE |
 | `GET` | `/ag/transferler` | Lokasyonu değişen cihazlar |
 | `PUT` | `/ag/urunler/{id}/ozellikler` | Ağ özelliklerini topluca yaz |

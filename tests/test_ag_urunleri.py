@@ -235,7 +235,7 @@ def test_ayni_lokasyona_guncelleme_transfer_degil(client, sahne):
     ("SFP Modül", "sfp"),
     ("Transceiver", "sfp"),
     ("Router", "router"),
-    ("Güvenlik Duvarı", "router"),
+    ("Güvenlik Duvarı", "firewall"),   # artık ayrı tür
     ("Rack Kabinet", "kabinet"),
     ("Dizüstü Bilgisayar", None),
     ("Monitör", None),
@@ -351,3 +351,160 @@ def test_nvr_ozette_ayri_tur_olarak_sayilir(client):
 ])
 def test_tamlama_basi_sonda_kuralı(kategori, beklenen):
     assert ag.tur_bul(kategori) == beklenen
+
+
+# --------------------------------------------------------------------------- #
+# Aileler: ağ ürünleri / yangın sistemleri
+# --------------------------------------------------------------------------- #
+def test_aileler_listelenir(client):
+    a = {x["aile"] for x in client.get("/ag/aileler").json()}
+    assert a == {"ag", "yangin"}
+
+
+def test_sablon_aileye_gore_filtrelenir(client):
+    ag_turler = {x["tur"] for x in client.get("/ag/sablon",
+                                              params={"aile": "ag"}).json()}
+    yangin_turler = {x["tur"] for x in client.get("/ag/sablon",
+                                                  params={"aile": "yangin"}).json()}
+    assert {"switch", "sfp", "firewall", "ptp"} <= ag_turler
+    assert {"yangin_panel", "dedektor", "yangin_buton", "beam"} <= yangin_turler
+    assert not (ag_turler & yangin_turler), "türler iki aileye birden giremez"
+
+
+def test_her_turun_ailesi_var(client):
+    for s in client.get("/ag/sablon").json():
+        assert s["aile"] in ("ag", "yangin"), f"{s['tur']} ailesiz"
+
+
+def test_bilinmeyen_aile_reddedilir(client):
+    for yol, par in [("/ag/sablon", {"aile": "yok"}),
+                     ("/ag/urunler", {"aile": "yok"}),
+                     ("/ag/ozet", {"aile": "yok"})]:
+        assert client.get(yol, params=par).status_code == 400
+
+
+@pytest.fixture
+def yangin_sahne(client):
+    lok = client.post("/locations", json={"name": "ŞANTİYE U040",
+                                          "proje_kodu": "U040"}).json()
+    client.post("/ag/urunler", json={
+        "tur": "yangin_panel", "asset_tag": "YP-1", "marka": "Mavigard",
+        "model": "MGA-2000-2", "location_id": lok["id"],
+        "ozellikler": {"Sistem Tipi": "Adresli", "Çevrim Sayısı": "2",
+                       "Adres Kapasitesi": "127"}})
+    client.post("/ag/urunler", json={
+        "tur": "dedektor", "asset_tag": "DD-1", "location_id": lok["id"],
+        "ozellikler": {"Algılama Tipi": "Optik Duman", "Kapsama Alanı": "60"}})
+    client.post("/ag/urunler", json={
+        "tur": "yangin_buton", "asset_tag": "YB-1", "location_id": lok["id"],
+        "ozellikler": {"Cihaz Tipi": "Yangın İhbar Butonu"}})
+    client.post("/ag/urunler", json={
+        "tur": "beam", "asset_tag": "YN-1", "location_id": lok["id"],
+        "ozellikler": {"Parça Tipi": "Yansıtıcı (prizma)", "Yansıtıcı Sayısı": "4"}})
+    return {"lok": lok}
+
+
+def test_yangin_urunleri_ag_ekraninda_gorunmez(client, sahne, yangin_sahne):
+    ag_liste = {u["asset_tag"] for u in
+                client.get("/ag/urunler", params={"aile": "ag"}).json()}
+    yangin_liste = {u["asset_tag"] for u in
+                    client.get("/ag/urunler", params={"aile": "yangin"}).json()}
+    assert {"SW-01", "SW-CORE"} <= ag_liste
+    assert not ({"YP-1", "DD-1", "YB-1", "YN-1"} & ag_liste)
+    assert {"YP-1", "DD-1", "YB-1", "YN-1"} == yangin_liste
+
+
+def test_ailesiz_sorgu_hepsini_getirir(client, sahne, yangin_sahne):
+    hepsi = {u["asset_tag"] for u in client.get("/ag/urunler").json()}
+    assert {"SW-01", "YP-1"} <= hepsi
+
+
+def test_yangin_ozeti_ayri_hesaplanir(client, sahne, yangin_sahne):
+    o = client.get("/ag/ozet", params={"aile": "yangin"}).json()
+    assert o["toplam"] == 4
+    turler = {d["tur"] for d in o["tur_dagilimi"]}
+    assert turler == {"yangin_panel", "dedektor", "yangin_buton", "beam"}
+    assert o["lokasyon_dagilimi"] == [{"lokasyon": "ŞANTİYE U040", "adet": 4}]
+
+
+def test_yangin_ozellikleri_aranabilir(client, yangin_sahne):
+    r = client.get("/ag/urunler", params={"aile": "yangin", "q": "optik duman"}).json()
+    assert [u["asset_tag"] for u in r] == ["DD-1"]
+    r2 = client.get("/ag/urunler", params={"q": "prizma"}).json()
+    assert [u["asset_tag"] for u in r2] == ["YN-1"]
+
+
+# --------------------------------------------------------------------------- #
+# Güvenlik duvarı router'dan ayrı
+# --------------------------------------------------------------------------- #
+def test_guvenlik_duvari_ayri_tur(client):
+    client.post("/ag/urunler", json={
+        "tur": "firewall", "asset_tag": "FW-1", "marka": "Fortinet",
+        "model": "FortiGate 60F",
+        "ozellikler": {"Throughput": "10 Gbps", "VPN": "IPSec + SSL-VPN"}})
+    client.post("/ag/urunler", json={"tur": "router", "asset_tag": "RT-1"})
+
+    fw = client.get("/ag/urunler", params={"tur": "firewall"}).json()
+    rt = client.get("/ag/urunler", params={"tur": "router"}).json()
+    assert [u["asset_tag"] for u in fw] == ["FW-1"]
+    assert [u["asset_tag"] for u in rt] == ["RT-1"]
+
+
+def test_firewall_alanlari_router_dan_farkli(client):
+    fw = next(x for x in client.get("/ag/sablon").json() if x["tur"] == "firewall")
+    rt = next(x for x in client.get("/ag/sablon").json() if x["tur"] == "router")
+    fw_alan = {a["ad"] for a in fw["alanlar"]}
+    assert {"VPN Throughput", "Eşzamanlı Oturum", "HA", "Lisans Bitiş"} <= fw_alan
+    assert "Bağlantı Tipi" in {a["ad"] for a in rt["alanlar"]}
+
+
+# --------------------------------------------------------------------------- #
+# Noktadan noktaya link
+# --------------------------------------------------------------------------- #
+def test_ptp_alanlari(client):
+    s = next(x for x in client.get("/ag/sablon").json() if x["tur"] == "ptp")
+    alanlar = {a["ad"] for a in s["alanlar"]}
+    assert {"Frekans", "Menzil", "Anten Kazancı", "Mod", "Rol", "Karşı Uç"} <= alanlar
+
+
+def test_ptp_urunu_karsi_ucuyla_kaydedilir(client):
+    client.post("/ag/urunler", json={
+        "tur": "ptp", "asset_tag": "PTP-1", "marka": "Ubiquiti",
+        "ozellikler": {"Frekans": "5 GHz", "Menzil": "5 km",
+                       "Rol": "Master (AP)", "Karşı Uç": "ŞANTİYE U026"}})
+    u = client.get("/ag/urunler", params={"tur": "ptp"}).json()[0]
+    assert u["ozellikler"]["Karşı Uç"] == "ŞANTİYE U026"
+
+
+# --------------------------------------------------------------------------- #
+# Kategori eşleştirme
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("kategori,beklenen", [
+    ("Yangın Alarm Paneli", "yangin_panel"),
+    ("Yangın Santrali", "yangin_panel"),
+    ("Adresli Duman Dedektörü", "dedektor"),
+    ("Isı Sensörü", "dedektor"),
+    ("Yangın İhbar Butonu", "yangin_buton"),
+    ("Siren", "yangin_buton"),
+    ("Flaşör", "yangin_buton"),
+    ("Beam Dedektör", "beam"),
+    ("Yansıtıcı Prizma", "beam"),
+    ("Yangın Dolabı", "yangin_diger"),
+    ("Yangın Tüpü", "yangin_diger"),
+    ("Güvenlik Duvarı", "firewall"),
+    ("Firewall", "firewall"),
+    ("UTM Cihazı", "firewall"),
+    ("Noktadan Noktaya Link", "ptp"),
+    ("NanoStation", "ptp"),
+    ("Router", "router"),
+    ("Modem", "router"),
+])
+def test_yangin_ve_yeni_turler_kategoriden_bulunur(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen
+
+
+def test_yangin_kategorileri_dogru_aileye_duser():
+    for kategori in ("Yangın Alarm Paneli", "Duman Dedektörü", "Siren",
+                     "Beam Dedektör", "Yangın Tüpü"):
+        tur = ag.tur_bul(kategori)
+        assert ag.TURLER[tur]["aile"] == "yangin", f"{kategori} yanlış ailede"
