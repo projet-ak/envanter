@@ -153,8 +153,9 @@
     // Referans (tanım) tabloları — Lokasyon, Kategori, Üretici vb.
     const TANIMLAR = {
       locations:     { label: 'Lokasyonlar',  endpoint: '/locations',
-        cols: [['name','Ad'],['city','Şehir'],['address','Adres']],
-        add: [['name','Ad','text'],['city','Şehir','text'],['address','Adres','text']] },
+        cols: [['name','Ad'],['proje_kodu','Proje Kodu'],['city','Şehir'],['address','Adres']],
+        add: [['name','Ad','text'],['proje_kodu','Proje Kodu','text'],
+              ['city','Şehir','text'],['address','Adres','text']] },
       categories:    { label: 'Kategoriler',  endpoint: '/categories',
         cols: [['name','Ad'],['type','Tür']],
         add: [['name','Ad','text']] },
@@ -259,41 +260,154 @@
     // ---------- Personel ----------
     async function renderPersonelView() {
       document.getElementById('view').innerHTML = `
-        ${canWrite() ? `<div class="panel">
-          <h2>Personel ekle</h2>
-          <div class="row">
-            <input id="p_ad" placeholder="Ad" />
-            <input id="p_soyad" placeholder="Soyad" />
-            <input id="p_sicil" placeholder="Sicil no" />
-            <input id="p_dept" placeholder="Departman" />
-            <input id="p_sube" placeholder="Şube" />
-            <input id="p_eposta" class="grow" placeholder="E-posta" />
-            <button class="primary" onclick="addPersonel()">Ekle</button>
-          </div>
-          <div id="pInfo" class="note"></div>
-        </div>` : ''}
         <div class="panel">
-          <h2>Personel (<span id="pCount">0</span>)</h2>
-          <div class="row" style="margin-bottom:12px">
-            <input id="pAra" class="grow" placeholder="Ada göre ara…"
+          <div class="row" style="align-items:center">
+            <h2 style="margin:0; flex:1">Personel (<span id="pCount">0</span>)</h2>
+            ${canWrite() ? `<button class="primary" onclick="personelEkleAc()">
+              + Personel ekle</button>` : ''}
+          </div>
+          <div class="row" style="margin-top:12px">
+            <input id="pAra" class="grow" placeholder="Ada, sicile veya departmana göre ara…"
                    oninput="loadPersonel()" />
           </div>
-          <table><thead><tr><th>Ad Soyad</th><th>Sicil</th><th>Departman</th>
-            <th>Şube</th><th>E-posta</th><th>Zimmet</th><th></th></tr></thead>
+          <table style="margin-top:8px"><thead><tr><th>Ad Soyad</th><th>Sicil</th>
+            <th>Departman</th><th>Şube</th><th>E-posta</th><th>Zimmet</th><th></th></tr></thead>
             <tbody id="pRows"></tbody></table>
         </div>`;
       loadPersonel();
     }
 
+    // Yeni personel: popup pencerede aç
+    async function personelEkleAc() {
+      const lokasyonlar = await api('/locations?limit=500');
+      const alanlarListe = [
+        ['first_name','Ad *','text'],['last_name','Soyad','text'],
+        ['employee_num','Sicil No','text'],['department','Departman','text'],
+        ['job_title','Unvan','text'],['sube','Şube','text'],
+        ['email','E-posta','text'],['telefon','Telefon','text'],
+        ['tckn','TCKN','text'],['ise_giris','İşe Giriş','date'],
+      ];
+      modalAc('👤 Yeni personel', `
+        <div class="alan-grid">
+          ${alanlarListe.map(([k, l, t]) => `<div>
+            <div class="stat-l" style="margin-bottom:3px">${l}</div>
+            <input id="np_${k}" type="${t}" style="width:100%"
+              ${k === 'first_name' ? 'autofocus' : ''}
+              onkeydown="if(event.key==='Enter')personelKaydet()" /></div>`).join('')}
+          <div><div class="stat-l" style="margin-bottom:3px">Lokasyon</div>
+            <select id="npl_location_id" style="width:100%">
+              ${secenekler(lokasyonlar, null)}</select></div>
+        </div>
+        <div class="row" style="margin-top:16px">
+          <button class="primary" onclick="personelKaydet()">Kaydet ve zimmet ver</button>
+          <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+        </div>
+        <div class="note">Kaydettikten sonra doğrudan bu kişinin sayfası açılır;
+          cihaz zimmetlemeyi oradan yapabilirsin.</div>
+        <div id="npInfo" class="note"></div>`);
+      setTimeout(() => document.getElementById('np_first_name')?.focus(), 100);
+    }
+
+    async function personelKaydet() {
+      const govde = {};
+      for (const el of document.querySelectorAll('[id^="np_"]')) {
+        const v = el.value.trim();
+        if (v) govde[el.id.slice(3)] = v;
+      }
+      const lok = document.getElementById('npl_location_id');
+      if (lok?.value) govde.location_id = Number(lok.value);
+      const bilgi = document.getElementById('npInfo');
+      if (!govde.first_name) {
+        bilgi.innerHTML = '<span style="color:var(--err)">Ad zorunlu.</span>'; return;
+      }
+      try {
+        const kisi = await api('/users', { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
+        if (activeTab === 'personel') loadPersonel();
+        // Listede aramaya gerek kalmasın: doğrudan yeni kişinin sayfasını aç
+        kisiDetay(kisi.id);
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Eklenemedi'}</span>`;
+      }
+    }
+
+    // ---------- Zimmet atama (kişi sayfasından) ----------
+    let zimmetHedefKisi = null;
+
+    function zimmetPaneliAc(kisiId) {
+      zimmetHedefKisi = kisiId;
+      const panel = document.getElementById('zimmetPanel');
+      if (!panel) return;
+      panel.innerHTML = `
+        <div class="row">
+          <input id="zAra" class="grow" autofocus
+                 placeholder="Cihaz ara: etiket, seri no, demirbaş, IP…"
+                 oninput="zimmetAra()" onkeydown="if(event.key==='Enter')zimmetAra()" />
+          <button class="ghost" onclick="zimmetPaneliKapat()">Kapat</button>
+        </div>
+        <div id="zSonuc" class="note">Aramak için yazmaya başla (boştaki cihazlar listelenir).</div>`;
+      setTimeout(() => document.getElementById('zAra')?.focus(), 60);
+      zimmetAra();
+    }
+
+    function zimmetPaneliKapat() {
+      const panel = document.getElementById('zimmetPanel');
+      if (panel) panel.innerHTML = '';
+    }
+
+    let zAraZaman = null;
+    function zimmetAra() {
+      clearTimeout(zAraZaman);
+      zAraZaman = setTimeout(async () => {
+        const q = document.getElementById('zAra')?.value.trim() || '';
+        const p = new URLSearchParams({ assigned: 'false', limit: '25' });
+        if (q) p.set('q', q);
+        const liste = await api('/assets?' + p.toString());
+        const kutu = document.getElementById('zSonuc');
+        if (!liste.length) {
+          kutu.innerHTML = q
+            ? '<span class="muted">Eşleşen boştaki cihaz yok.</span>'
+            : '<span class="muted">Boştaki cihaz yok.</span>';
+          return;
+        }
+        kutu.innerHTML = `<table style="margin-top:6px"><thead><tr>
+          <th>Etiket</th><th>Ad</th><th>Seri</th><th></th></tr></thead><tbody>
+          ${liste.map(a => `<tr>
+            <td><b>${a.asset_tag}</b></td><td>${esc(a.name)}</td>
+            <td class="muted">${esc(a.serial)}</td>
+            <td><button class="primary" onclick="zimmetVer(${a.id})">Zimmetle</button></td>
+            </tr>`).join('')}</tbody></table>`;
+      }, 300);
+    }
+
+    async function zimmetVer(assetId) {
+      try {
+        await api(`/assets/${assetId}/checkout`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assigned_type: 'user', assigned_id: zimmetHedefKisi }) });
+        kisiDetay(zimmetHedefKisi);         // listeyi tazele
+        setTimeout(() => zimmetPaneliAc(zimmetHedefKisi), 250);  // panel açık kalsın
+      } catch (e) { alert('⚠ ' + (e.detail || 'Zimmetlenemedi')); }
+    }
+
+    async function zimmetGeriAl(assetId, kisiId) {
+      if (!confirm('Bu cihaz iade alınsın mı? (zimmet kalkacak)')) return;
+      try {
+        await api(`/assets/${assetId}/checkin`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        kisiDetay(kisiId);
+      } catch (e) { alert('⚠ ' + (e.detail || 'İade alınamadı')); }
+    }
+
     async function loadPersonel() {
-      const q = (document.getElementById('pAra')?.value || '').trim().toLowerCase();
+      const q = (document.getElementById('pAra')?.value || '').trim().toLocaleLowerCase('tr');
       const [kisiler, zimmetler] = await Promise.all([
         api('/users?limit=500'), api('/reports/personel-zimmet'),
       ]);
       const sayac = Object.fromEntries(zimmetler.map(z => [z.user_id, z.cihaz_sayisi]));
-      const liste = kisiler.filter(k =>
-        !q || `${k.first_name} ${k.last_name ?? ''} ${k.employee_num ?? ''}`
-                .toLowerCase().includes(q));
+      const liste = kisiler.filter(k => !q ||
+        [k.first_name, k.last_name, k.employee_num, k.department, k.sube, k.email]
+          .filter(Boolean).join(' ').toLocaleLowerCase('tr').includes(q));
       document.getElementById('pCount').textContent = liste.length;
       document.getElementById('pRows').innerHTML = liste.map(k => {
         const adet = sayac[k.id] || 0;
@@ -310,25 +424,6 @@
                      : '<span class="muted">—</span>'}</td>
           <td>${fis}</td></tr>`;
       }).join('');
-    }
-
-    async function addPersonel() {
-      const body = {
-        first_name: p_ad.value.trim(),
-        last_name: p_soyad.value.trim() || null,
-        employee_num: p_sicil.value.trim() || null,
-        department: p_dept.value.trim() || null,
-        sube: p_sube.value.trim() || null,
-        email: p_eposta.value.trim() || null,
-      };
-      if (!body.first_name) { pInfo.textContent = 'Ad zorunlu.'; return; }
-      try {
-        await api('/users', { method: 'POST',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        p_ad.value = p_soyad.value = p_sicil.value = p_dept.value =
-          p_sube.value = p_eposta.value = '';
-        pInfo.textContent = '✓ Eklendi.'; loadPersonel();
-      } catch (e) { pInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
     }
 
     // ---------- Tanımlar (lokasyon, kategori, üretici…) ----------
@@ -885,12 +980,15 @@
 
       const tablo = d.cihazlar.length ? `
         <table><thead><tr><th>Cihaz NO</th><th>Tip</th><th>Marka/Model</th>
-          <th>Seri No</th><th>Bedel</th></tr></thead><tbody>
-        ${d.cihazlar.map(c => `<tr class="tikla" onclick="cihazDetay(${c.id})">
+          <th>Seri No</th><th>Bedel</th>${canWrite() ? '<th></th>' : ''}</tr></thead><tbody>
+        ${d.cihazlar.map(c => `<tr class="tikla"
+            onclick="if(!event.target.closest('button'))cihazDetay(${c.id})">
           <td><b>${c.asset_tag}</b></td><td>${esc(c.kategori)}</td>
           <td>${esc([c.marka, c.model].filter(Boolean).join(' '))}</td>
           <td class="muted">${esc(c.serial)}</td>
           <td class="muted">${c.purchase_cost != null ? tl(c.purchase_cost) : '—'}</td>
+          ${canWrite() ? `<td><button class="ghost" title="İade al"
+             onclick="zimmetGeriAl(${c.id}, ${id})">↩</button></td>` : ''}
           </tr>`).join('')}</tbody></table>`
         : '<div class="muted">Zimmetli cihaz yok</div>';
 
@@ -907,7 +1005,15 @@
             <div class="stat-l">Toplam bedel</div></div>
         </div>
         ${dagilim ? `<div class="row" style="margin-bottom:14px">${dagilim}</div>` : ''}
-        <div class="bolum"><h4>Cihazlar (${d.cihaz_sayisi})</h4>${tablo}</div>`,
+        <div class="bolum">
+          <div class="row" style="align-items:center; margin-bottom:8px">
+            <h4 style="margin:0; flex:1">Cihazlar (${d.cihaz_sayisi})</h4>
+            ${canWrite() ? `<button class="primary" onclick="zimmetPaneliAc(${id})">
+              + Zimmet ekle</button>` : ''}
+          </div>
+          <div id="zimmetPanel"></div>
+          ${tablo}
+        </div>`,
         (d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
           onclick="openPdf('/documents/zimmet/user/${id}.pdf')">📄</button>` : '') +
         (canWrite() ? `<button class="ghost" onclick="kisiDuzenle(${id})">✏️ Düzenle</button>` : ''));

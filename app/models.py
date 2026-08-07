@@ -106,6 +106,8 @@ class Location(Base, TimestampMixin, ExternalMixin):
     address: Mapped[str | None] = mapped_column(String(255))
     city: Mapped[str | None] = mapped_column(String(120))
     country: Mapped[str | None] = mapped_column(String(120))
+    # Şantiye/proje bazlı takip için (örn. U023, U026)
+    proje_kodu: Mapped[str | None] = mapped_column(String(60), index=True)
 
     parent: Mapped[Location | None] = relationship(remote_side="Location.id")
 

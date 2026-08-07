@@ -37,6 +37,7 @@ class CompanyRead(ORMModel):
 
 class LocationCreate(BaseModel):
     name: str
+    proje_kodu: str | None = None
     parent_id: int | None = None
     address: str | None = None
     city: str | None = None
@@ -45,6 +46,7 @@ class LocationCreate(BaseModel):
 
 class LocationUpdate(BaseModel):
     name: str | None = None
+    proje_kodu: str | None = None
     parent_id: int | None = None
     address: str | None = None
     city: str | None = None
@@ -54,6 +56,7 @@ class LocationUpdate(BaseModel):
 class LocationRead(ORMModel):
     id: int
     name: str
+    proje_kodu: str | None = None
     parent_id: int | None = None
     address: str | None = None
     city: str | None = None

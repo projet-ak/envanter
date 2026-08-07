@@ -315,6 +315,10 @@ def aktar(db: Session, satirlar: list[dict], *, varsayilan_durum_id: int | None 
             if not lokasyon_adi and not s.get("kisi_mi") and s.get("kullanici"):
                 lokasyon_adi = s["kullanici"]
             lokasyon = onbellek.al(models.Location, lokasyon_adi)
+            # Excel'deki "Kullanılan Birim" (U023, U026…) proje kodudur;
+            # lokasyonda boşsa doldur.
+            if lokasyon is not None and s.get("birim") and not lokasyon.proje_kodu:
+                lokasyon.proje_kodu = s["birim"]
 
             model_adi = s.get("model") or (
                 f"{s.get('marka')} {s.get('cihaz_tipi')}".strip()
