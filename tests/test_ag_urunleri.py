@@ -259,3 +259,23 @@ def test_excelden_gelen_switchler_de_listelenir(client):
 def test_giris_sart(anon_client):
     assert anon_client.get("/ag/urunler").status_code == 401
     assert anon_client.get("/ag/ozet").status_code == 401
+
+
+@pytest.mark.parametrize("kategori,beklenen", [
+    # Gerçek veride görülen yazım varyantları
+    ("Swich", "switch"),
+    ("POE Swtich 16 Port", "switch"),
+    ("Wi-Fi Access Point", "access_point"),
+    ("AccessPoint", "access_point"),
+    ("Kablosuz Erişim Noktası", "access_point"),
+    ("Fiber Modül", "sfp"),
+    ("QSFP+ Modül", "sfp"),
+    ("Patch Panel 24 Port", "kabinet"),
+    ("Media Converter", "diger"),
+    # Ağ olmayan ama benzer harf içerenler yanlış eşleşmemeli
+    ("Klavye", None),
+    ("Yazıcı", None),
+    ("Kablo Kanalı", None),
+])
+def test_yazim_varyantlari_da_yakalanir(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen

@@ -132,11 +132,15 @@ TURLER: dict[str, dict] = {
 
 # Kategori adından tür anahtarına: içe aktarılmış kayıtları da yakalamak için
 _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
-    (("switch", "anahtar"), "switch"),
-    (("sfp", "transceiver", "modul", "gbic", "qsfp"), "sfp"),
-    (("access point", "erisim noktasi", "wifi", "kablosuz"), "access_point"),
+    # Yaygın yazım hataları da dahil ("swich", "swtich" gerçek veride görüldü)
+    (("switch", "swich", "swtich", "anahtar"), "switch"),
+    (("sfp", "transceiver", "gbic", "qsfp", "fiber modul", "optik modul"), "sfp"),
+    (("access point", "accesspoint", "erisim noktasi", "wifi", "wi-fi",
+      "kablosuz"), "access_point"),
     (("router", "firewall", "guvenlik duvari", "modem", "yonlendirici"), "router"),
-    (("kabinet", "kabin", "patch", "rack"), "kabinet"),
+    (("kabinet", "kabin", "patch panel", "patchpanel", "rack"), "kabinet"),
+    # Ağ altyapısı ama yukarıdakilere girmeyenler
+    (("media converter", "medya donusturucu", "kvm", "konsol sunucu"), "diger"),
 ]
 
 
