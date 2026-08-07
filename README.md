@@ -145,12 +145,24 @@ Sonra aaPanel → Website → Config'e `deploy/nginx-envanter.conf` içeriğini 
 Uygulama alt klasörde çalışabilir (örn. `https://site.com/envanter/`).
 **İki parça birlikte** çalışır:
 
-1. **`.env` → `ROOT_PATH=/envanter`** — uygulamanın *ürettiği* adreslere ön ek
-   ekler (yönlendirmeler, OpenAPI). Arayüz API adreslerini zaten bulunduğu
-   yoldan türetir.
-2. **Nginx ön eki kırpar** — `rewrite ^/envanter/?(.*)$ /$1 break;`
+1. **Nginx ön eki kırpar** — `rewrite ^/envanter/?(.*)$ /$1 break;`
    Uygulamanın kendi yolları `/ui/`, `/assets` şeklindedir; ön ek kırpılmazsa
    **tüm istekler 404 döner**. `deploy/nginx-envanter.conf` bunu içerir.
+2. **`.env` → `ROOT_PATH=/envanter`** — yalnızca uygulamanın *ürettiği*
+   adreslere (OpenAPI/`/docs`) ön ek ekler; yönlendirmeye karışmaz. Arayüz
+   API adreslerini zaten bulunduğu yoldan türetir.
+
+> Ön ek, FastAPI kurucusuna `root_path=` olarak **verilmez**. Verilseydi
+> StaticFiles bağlaması yolu ön ekle beklerdi ve Nginx zaten kırptığı için
+> `/ui/` 404 dönerdi. `tests/test_alt_klasor.py` bu tuzağı kapalı tutar.
+
+Kurulumu doğrulamak için:
+
+```bash
+bash scripts/kurulum-kontrol.sh
+# dışarıdan erişimi de sınamak için:
+ADRES=https://ernsaha.com.tr/envanter bash scripts/kurulum-kontrol.sh
+```
 
 ## PostgreSQL (önerilen, üretim)
 
@@ -550,5 +562,6 @@ scripts/
   import_snipeit.py  # Snipe-IT'ten veri taşıma
   create_admin.py    # Admin kullanıcı oluştur/yükselt
   santiye-ayir.py    # Eski veriyi şantiyelere ayır (tekrar çalıştırılabilir)
+  kurulum-kontrol.sh # Güncelleme sonrası sağlık kontrolü (hiçbir şey değiştirmez)
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```

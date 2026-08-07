@@ -35,13 +35,22 @@ async def lifespan(app: FastAPI):
     yield
 
 
+_ONEK = settings.root_path.rstrip("/")
+
 app = FastAPI(
     title="Envanter API",
     description="Esnek, stabil BT envanter yönetim sistemi (Snipe-IT alternatifi).",
     version=__version__,
     lifespan=lifespan,
-    # Alt klasörde yayın (örn. /envanter) için; uvicorn --root-path ile de verilebilir.
-    root_path=settings.root_path.rstrip("/"),
+    # Alt klasörde yayın (örn. /envanter): ön ek YALNIZCA üretilen adreslerde
+    # (OpenAPI) kullanılır, yönlendirmeye karıştırılmaz.
+    #
+    # NEDEN root_path= DEĞİL: Nginx ön eki kırpar, yani uygulamaya "/ui/" gelir.
+    # Kurucuya root_path verildiğinde StaticFiles bağlaması yolu ön ekle
+    # bekliyor ve "/ui/" 404 dönüyor (uvicorn'a --root-path da verilmediyse).
+    # servers= ile ön ek dokümana yansır, yönlendirme bozulmaz.
+    # Üretimde uvicorn zaten --root-path alıyor; o da yalnızca scope'u ayarlar.
+    servers=[{"url": _ONEK}] if _ONEK else None,
 )
 
 app.include_router(auth.router)
