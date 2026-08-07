@@ -95,7 +95,21 @@ fi
 gzip -f "$DOSYA"
 echo "✓ Yedek alındı: ${DOSYA}.gz ($(du -h "${DOSYA}.gz" | cut -f1))"
 
+# Yüklenen dosyalar (cihaz görselleri, imzalı zimmet formları) veritabanında
+# değil diskte durur; veritabanı yedeği bunları içermez.
+YUKLEME="$(grep -E '^UPLOAD_DIR=' "${PROJE_DIZIN}/.env" 2>/dev/null \
+           | cut -d= -f2- | tr -d '"'"'"'')"
+YUKLEME="${YUKLEME:-yuklemeler}"
+[[ "$YUKLEME" = /* ]] || YUKLEME="${PROJE_DIZIN}/${YUKLEME}"
+
+if [[ -d "$YUKLEME" ]] && [[ -n "$(ls -A "$YUKLEME" 2>/dev/null)" ]]; then
+    DOSYA_ARSIV="${YEDEK_DIZIN}/dosyalar_${TARIH}.tar.gz"
+    tar -czf "$DOSYA_ARSIV" -C "$(dirname "$YUKLEME")" "$(basename "$YUKLEME")"
+    echo "✓ Dosyalar yedeklendi: ${DOSYA_ARSIV} ($(du -h "$DOSYA_ARSIV" | cut -f1))"
+fi
+
 # Eski yedekleri temizle
-silinen=$(find "$YEDEK_DIZIN" -name 'envanter_*.gz' -mtime "+${SAKLAMA_GUN}" -print -delete | wc -l)
+silinen=$(find "$YEDEK_DIZIN" \( -name 'envanter_*.gz' -o -name 'dosyalar_*.tar.gz' \) \
+          -mtime "+${SAKLAMA_GUN}" -print -delete | wc -l)
 [[ "$silinen" -gt 0 ]] && echo "  ${silinen} eski yedek silindi (${SAKLAMA_GUN} günden eski)"
 exit 0

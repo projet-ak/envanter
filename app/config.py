@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     # "/envanter" yaz. Kök dizinde çalışıyorsa boş bırak.
     root_path: str = ""
 
+    # Yüklenen dosyalar (cihaz görselleri, imzalı zimmet formları).
+    # Veritabanında değil diskte tutulur; yedeklemede bu klasörü de al.
+    upload_dir: str = "yuklemeler"
+    max_upload_mb: int = 20
+
     # Kimlik doğrulama (JWT)
     # ÜRETİMDE mutlaka değiştir! (örn: `openssl rand -hex 32`)
     secret_key: str = "dev-insecure-change-me-0123456789abcdef-please-set-SECRET_KEY"

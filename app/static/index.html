@@ -15,6 +15,31 @@
     header h1 { margin:0; font-size:20px; }
     header .sub { color:var(--mut); font-size:13px; }
     header .spacer { flex:1; }
+
+    /* Üst bar canlı arama */
+    #hizliKutu { position:relative; margin-left:16px; }
+    #hizliAra { width:320px; padding:8px 12px; border-radius:8px;
+                border:1px solid var(--line); background:#0b1220; color:var(--txt); }
+    #hizliAra:focus { outline:none; border-color:var(--acc); }
+    #hizliSonuc { position:absolute; top:calc(100% + 6px); left:0; width:440px;
+                  max-height:60vh; overflow-y:auto; background:#0b1220; z-index:60;
+                  border:1px solid var(--line); border-radius:10px; padding:6px;
+                  box-shadow:0 12px 32px rgba(0,0,0,.5); }
+    #hizliSonuc .baslik { font-size:11px; letter-spacing:.5px; text-transform:uppercase;
+                          color:var(--mut); padding:8px 10px 4px; }
+    #hizliSonuc .satir { padding:8px 10px; border-radius:6px; cursor:pointer;
+                         display:flex; gap:8px; align-items:baseline; }
+    #hizliSonuc .satir:hover, #hizliSonuc .satir.secili { background:#16233a; }
+    #hizliSonuc .satir .ikincil { color:var(--mut); font-size:12px; }
+    #hizliSonuc .bos { padding:14px 10px; color:var(--mut); }
+
+    /* Cihaz görselleri */
+    .gorsel-serit { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+    .gorsel-serit figure { margin:0; position:relative; }
+    .gorsel-serit img { width:150px; height:110px; object-fit:cover; cursor:zoom-in;
+                        border:1px solid var(--line); border-radius:8px; display:block; }
+    .gorsel-serit figure button { position:absolute; top:4px; right:4px; }
+    button.mini { padding:1px 5px; font-size:11px; margin-left:6px; }
     nav { display:flex; gap:4px; padding:0 24px; border-bottom:1px solid var(--line);
           background:#0b1220; flex-wrap:wrap; }
     nav button { background:none; border:none; color:var(--mut); padding:12px 16px;
@@ -115,6 +140,13 @@
     <header>
       <h1>📦 Envanter</h1>
       <span class="sub"><a id="docsLink" href="docs">API dokümanı</a></span>
+      <div id="hizliKutu">
+        <input id="hizliAra" autocomplete="off"
+               placeholder="🔎 İsim, cihaz no, seri no…"
+               oninput="hizliAra()" onfocus="hizliAra()"
+               onkeydown="if(event.key==='Escape')hizliKapat()" />
+        <div id="hizliSonuc" class="hidden"></div>
+      </div>
       <span class="spacer"></span>
       <span class="sub" id="who"></span>
       <button class="ghost" onclick="logout()">Çıkış</button>
@@ -881,7 +913,13 @@
         </div>`;
     }
 
-    const esc = (v) => v == null || v === '' ? '<span class="muted">—</span>' : String(v);
+    // HTML kaçırma. Cihaz adları/özellikler Excel'den geliyor; <, >, " ve '
+    // karakterleri kaçırılmazsa sayfaya HTML enjekte edilebilir.
+    const kacir = (v) => String(v ?? '').replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    // Boş değerleri "—" gösterir, dolu olanları kaçırır (hücre içi gösterim).
+    const esc = (v) => v == null || v === ''
+      ? '<span class="muted">—</span>' : kacir(v);
     const tl = (v) => v == null ? '—' : new Intl.NumberFormat('tr-TR',
       { style:'currency', currency:'TRY', maximumFractionDigits:0 }).format(v);
 
@@ -917,15 +955,76 @@
       catch (e) { return alert('⚠ ' + (e.detail || 'Detay alınamadı')); }
       const k = d.kunye, z = d.zimmet;
 
+      const yaz = canWrite();
       const ozellikHtml = Object.entries(d.ozellikler || {}).map(([grup, degerler]) => {
         if (!degerler || typeof degerler !== 'object') return '';
+        // Grup/alan adları öznitelik içine gömüldüğü için URL kodlaması
+        // kullanılır: çıktısında tırnak/boşluk olmaz, işlev tarafında çözülür.
+        const g = encodeURIComponent(grup);
         const satirlar = Object.entries(degerler)
-          .filter(([, v]) => v != null && v !== '')
-          .map(([a, v]) => `<div class="alan"><span class="et">${a}</span>
-                            <span class="dg">${v}</span></div>`).join('');
-        return satirlar ? `<div class="bolum"><h4>${grup}</h4>
+          .map(([a, v]) => `<div class="alan">
+              <span class="et">${esc(a)}</span>
+              <span class="dg">${esc(v)}
+              ${yaz ? `<button class="ghost mini" title="Düzenle"
+                 onclick="ozellikAc(${id}, '${g}', '${encodeURIComponent(a)}')">✏️</button>
+               <button class="ghost mini" title="Sil"
+                 onclick="ozellikSil(${id}, '${g}', '${encodeURIComponent(a)}')">🗑</button>` : ''}
+              </span></div>`).join('');
+        return satirlar ? `<div class="bolum"><h4>${esc(grup)}</h4>
                            <div class="alan-grid">${satirlar}</div></div>` : '';
       }).join('');
+
+      const ozellikBolumu = `
+        <div class="bolum">
+          <div class="row" style="align-items:center; margin-bottom:6px">
+            <h4 style="margin:0; flex:1">Teknik Özellikler</h4>
+            ${yaz ? `<button class="primary" onclick="ozellikAc(${id})">
+                     + Özellik ekle</button>` : ''}
+          </div>
+          ${ozellikHtml || '<div class="muted">Kayıtlı teknik özellik yok</div>'}
+        </div>`;
+
+      // --- Dosyalar: cihaz görselleri + imzalı zimmet formları ---
+      const dosyalar = d.dosyalar || [];
+      const gorseller = dosyalar.filter(f => f.tur === 'gorsel');
+      const belgeler = dosyalar.filter(f => f.tur !== 'gorsel');
+      const TUR_ADI = { gorsel: 'Görsel', zimmet_formu: 'İmzalı zimmet formu',
+                        fatura: 'Fatura', diger: 'Diğer' };
+
+      // Görsel ucu Authorization başlığı ister; <img src> başlık gönderemez,
+      // bu yüzden içerik blob olarak çekilip src sonradan atanır.
+      const gorselHtml = gorseller.length ? `<div class="gorsel-serit">
+        ${gorseller.map(f => `<figure>
+          <img data-dosya="${f.id}" alt="${kacir(f.dosya_adi)}"
+               onclick="dosyaAc(${f.id})" title="Büyüt" />
+          ${yaz ? `<button class="ghost mini" title="Sil"
+             onclick="dosyaSil(${f.id}, ${id})">🗑</button>` : ''}
+        </figure>`).join('')}</div>` : '';
+
+      const belgeHtml = belgeler.length ? `<table><tbody>
+        ${belgeler.map(f => `<tr>
+          <td><a href="#" onclick="dosyaAc(${f.id});return false">📎 ${esc(f.dosya_adi)}</a></td>
+          <td class="muted">${TUR_ADI[f.tur] || f.tur}</td>
+          <td class="muted">${(f.boyut / 1024).toFixed(0)} KB</td>
+          <td class="muted">${f.tarih ? new Date(f.tarih).toLocaleDateString('tr-TR') : ''}</td>
+          ${yaz ? `<td><button class="ghost mini" title="Sil"
+             onclick="dosyaSil(${f.id}, ${id})">🗑</button></td>` : ''}
+        </tr>`).join('')}</tbody></table>` : '';
+
+      const dosyaBolumu = `
+        <div class="bolum">
+          <h4>Görseller ve Belgeler</h4>
+          ${gorselHtml}${belgeHtml}
+          ${!dosyalar.length ? '<div class="muted">Yüklenmiş dosya yok</div>' : ''}
+          ${yaz ? `<div class="row" style="margin-top:10px">
+            <button class="ghost" onclick="dosyaSec(${id}, 'gorsel')">
+              📷 Cihaz görseli yükle</button>
+            <button class="ghost" onclick="dosyaSec(${id}, 'zimmet_formu')">
+              ✍️ İmzalı zimmet formu yükle</button>
+            <button class="ghost" onclick="dosyaSec(${id}, 'diger')">
+              📎 Diğer belge</button>
+          </div>` : ''}
+        </div>`;
 
       const gecmisHtml = (d.gecmis || []).length
         ? `<table><thead><tr><th>İşlem</th><th>Not</th><th>Tarih</th></tr></thead><tbody>` +
@@ -964,8 +1063,227 @@
         ${z.kisi_id ? `<button class="ghost" style="margin-top:8px"
             onclick="kisiDetay(${z.kisi_id})">👤 ${z.kisi} — tüm cihazları</button>` : ''}
         </div>
-        ${ozellikHtml}
+        ${ozellikBolumu}
+        ${dosyaBolumu}
         <div class="bolum"><h4>Geçmiş</h4>${gecmisHtml}</div>`, butonlar);
+
+      gorselleriYukle();
+    }
+
+    // Korumalı görselleri token ile çekip <img>'lere yerleştirir.
+    async function gorselleriYukle() {
+      for (const img of document.querySelectorAll('img[data-dosya]')) {
+        try {
+          const r = await fetch(url('/dosyalar/' + img.dataset.dosya),
+                                { headers: { 'Authorization': `Bearer ${token}` } });
+          if (!r.ok) throw new Error();
+          img.src = URL.createObjectURL(await r.blob());
+        } catch { img.replaceWith(Object.assign(document.createElement('div'),
+                                  { className: 'muted', textContent: 'Görsel yüklenemedi' })); }
+      }
+    }
+
+    // ---------- Üst bar canlı arama (isim / cihaz no / seri no) ----------
+    let hizliZaman = null;
+    let hizliIstek = 0;
+
+    function hizliKapat() {
+      document.getElementById('hizliSonuc')?.classList.add('hidden');
+    }
+
+    function hizliAra() {
+      clearTimeout(hizliZaman);
+      const q = document.getElementById('hizliAra').value.trim();
+      if (!q) return hizliKapat();
+      // Yazmayı kesmeden sonuç gelsin diye kısa gecikme (her tuşta istek atma)
+      hizliZaman = setTimeout(() => hizliCalistir(q), 180);
+    }
+
+    async function hizliCalistir(q) {
+      const sira = ++hizliIstek;
+      let d;
+      try { d = await api('/assets/ara?limit=8&q=' + encodeURIComponent(q)); }
+      catch { return; }
+      // Geç dönen eski istek, yeni sonucun üstüne yazmasın
+      if (sira !== hizliIstek) return;
+
+      const kutu = document.getElementById('hizliSonuc');
+      if (!kutu) return;
+      const parcalar = [];
+
+      if (d.personel.length) {
+        parcalar.push('<div class="baslik">Personel</div>');
+        parcalar.push(d.personel.map(k => `
+          <div class="satir" onclick="hizliSec('kisi', ${k.id})">
+            <span>👤 ${kacir(k.ad)}</span>
+            <span class="ikincil">${kacir([k.employee_num, k.department]
+              .filter(Boolean).join(' · '))}</span>
+          </div>`).join(''));
+        if (d.personel_toplam > d.personel.length) {
+          parcalar.push(`<div class="baslik">+${d.personel_toplam - d.personel.length}
+                         kişi daha</div>`);
+        }
+      }
+
+      if (d.cihazlar.length) {
+        parcalar.push('<div class="baslik">Cihazlar</div>');
+        parcalar.push(d.cihazlar.map(c => `
+          <div class="satir" onclick="hizliSec('cihaz', ${c.id})">
+            <span>💻 <b>${kacir(c.asset_tag)}</b> ${kacir(c.name || '')}</span>
+            <span class="ikincil">${kacir([c.serial, c.zimmetli, c.lokasyon]
+              .filter(Boolean).join(' · '))}</span>
+          </div>`).join(''));
+        if (d.cihaz_toplam > d.cihazlar.length) {
+          parcalar.push(`<div class="satir" onclick="hizliTumu()">
+            <span class="ikincil">↳ ${d.cihaz_toplam} cihazın tümünü listede göster</span>
+            </div>`);
+        }
+      }
+
+      kutu.innerHTML = parcalar.length ? parcalar.join('')
+        : '<div class="bos">Sonuç yok</div>';
+      kutu.classList.remove('hidden');
+    }
+
+    function hizliSec(tur, id) {
+      hizliKapat();
+      document.getElementById('hizliAra').value = '';
+      if (tur === 'kisi') kisiDetay(id); else cihazDetay(id);
+    }
+
+    // Arama terimini varlık listesi filtresine taşır
+    function hizliTumu() {
+      const q = document.getElementById('hizliAra').value.trim();
+      hizliKapat();
+      selectTab('assets');
+      setTimeout(() => {
+        const el = document.getElementById('fAra');
+        if (el) { el.value = q; loadAssets(); }
+      }, 120);
+    }
+
+    // Kutunun dışına tıklanınca kapat
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#hizliKutu')) hizliKapat();
+    });
+
+    // ---------- Teknik özellik ekleme / düzenleme ----------
+    let ozellikSablonu = null;
+
+    async function ozellikAc(assetId, grupKodlu = '', adKodlu = '') {
+      // Öznitelikten URL kodlu geliyorlar (bkz. cihazDetay)
+      const grup = decodeURIComponent(grupKodlu);
+      const ad = decodeURIComponent(adKodlu);
+      if (!ozellikSablonu) {
+        try { ozellikSablonu = await api('/assets/ozellik-sablonu'); }
+        catch { ozellikSablonu = []; }
+      }
+      let mevcut = '';
+      if (grup && ad) {
+        const d = await api('/detay/asset/' + assetId).catch(() => null);
+        mevcut = d?.ozellikler?.[grup]?.[ad] ?? '';
+      }
+      const gruplar = ozellikSablonu.map(s => s.grup);
+      // Şablonda olmayan (elle açılmış) gruplar da listede çıksın
+      if (grup && !gruplar.includes(grup)) gruplar.push(grup);
+
+      modalAc(ad ? `Özellik: ${kacir(ad)}` : 'Teknik özellik ekle', `
+        <div class="form-grid">
+          <label>Grup
+            <input id="ozGrup" list="ozGrupListe" value="${kacir(grup)}"
+                   placeholder="örn. İşlemci" />
+            <datalist id="ozGrupListe">
+              ${gruplar.map(g => `<option value="${kacir(g)}"></option>`).join('')}
+            </datalist>
+          </label>
+          <label>Alan adı
+            <input id="ozAd" list="ozAdListe" value="${kacir(ad)}"
+                   placeholder="örn. İşlemci Markası" />
+            <datalist id="ozAdListe"></datalist>
+          </label>
+          <label style="grid-column:1/-1">Değer
+            <input id="ozDeger" value="${kacir(mevcut)}"
+                   onkeydown="if(event.key==='Enter')ozellikKaydet(${assetId})" />
+          </label>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button class="primary" onclick="ozellikKaydet(${assetId})">Kaydet</button>
+          <button class="ghost" onclick="cihazDetay(${assetId})">Vazgeç</button>
+        </div>`);
+      document.getElementById('ozGrup').oninput = ozellikAlanOner;
+      ozellikAlanOner();
+      setTimeout(() => document.getElementById(grup ? 'ozDeger' : 'ozGrup')?.focus(), 60);
+    }
+
+    function ozellikAlanOner() {
+      const grup = document.getElementById('ozGrup')?.value.trim();
+      const liste = document.getElementById('ozAdListe');
+      if (!liste) return;
+      const s = (ozellikSablonu || []).find(x => x.grup === grup);
+      liste.innerHTML = (s?.alanlar || [])
+        .map(a => `<option value="${kacir(a)}"></option>`).join('');
+    }
+
+    async function ozellikKaydet(assetId) {
+      const grup = document.getElementById('ozGrup').value.trim();
+      const ad = document.getElementById('ozAd').value.trim();
+      if (!grup || !ad) return alert('⚠ Grup ve alan adı zorunlu.');
+      try {
+        await api(`/assets/${assetId}/ozellik`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grup, ad,
+                                 deger: document.getElementById('ozDeger').value }),
+        });
+        cihazDetay(assetId);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Özellik kaydedilemedi')); }
+    }
+
+    async function ozellikSil(assetId, grupKodlu, adKodlu) {
+      const grup = decodeURIComponent(grupKodlu), ad = decodeURIComponent(adKodlu);
+      if (!confirm(`"${grup} / ${ad}" özelliği silinsin mi?`)) return;
+      try {
+        await api(`/assets/${assetId}/ozellik?grup=${grupKodlu}&ad=${adKodlu}`,
+                  { method: 'DELETE' });
+        cihazDetay(assetId);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
+    }
+
+    // ---------- Dosya yükleme (cihaz görseli / imzalı zimmet formu) ----------
+    function dosyaSec(assetId, tur) {
+      const girdi = document.createElement('input');
+      girdi.type = 'file';
+      if (tur === 'gorsel') girdi.accept = 'image/*';
+      girdi.onchange = () => girdi.files[0] && dosyaYukle(assetId, tur, girdi.files[0]);
+      girdi.click();
+    }
+
+    async function dosyaYukle(assetId, tur, dosya) {
+      const veri = new FormData();
+      veri.append('file', dosya);
+      veri.append('tur', tur);
+      try {
+        // FormData'da Content-Type'ı tarayıcı belirlemeli (boundary için)
+        await api(`/assets/${assetId}/dosyalar`, { method: 'POST', body: veri });
+        cihazDetay(assetId);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Dosya yüklenemedi')); }
+    }
+
+    async function dosyaAc(dosyaId) {
+      try {
+        const r = await fetch(url('/dosyalar/' + dosyaId),
+                              { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Açılamadı' }));
+        pdfAc(await r.blob());
+      } catch (e) { alert('⚠ ' + (e.detail || e.message || 'Dosya açılamadı')); }
+    }
+
+    async function dosyaSil(dosyaId, assetId) {
+      if (!confirm('Dosya silinsin mi?')) return;
+      try {
+        await api('/dosyalar/' + dosyaId, { method: 'DELETE' });
+        cihazDetay(assetId);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
     }
 
     // ---------- Kişi detayı ----------
@@ -1414,10 +1732,21 @@
           body: JSON.stringify({ asset_ids: assets.map(a => a.id) })
         });
         if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
-        const url = URL.createObjectURL(await r.blob());
-        window.open(url, '_blank');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } catch (e) { alert('⚠ ' + (e.detail || 'Etiket üretilemedi')); }
+        pdfAc(await r.blob());
+      } catch (e) { alert('⚠ ' + (e.detail || e.message || 'Etiket üretilemedi')); }
+    }
+
+    // PDF blob'unu yeni sekmede gösterir. DİKKAT: buradaki değişken adı asla
+    // `url` olmamalı — global url() yardımcısını gölgeler ve aynı fonksiyondaki
+    // önceki url(...) çağrısı temporal dead zone'a düşüp ReferenceError atar.
+    function pdfAc(blob) {
+      const baglanti = URL.createObjectURL(blob);
+      const sekme = window.open(baglanti, '_blank');
+      if (!sekme) {           // açılır pencere engellendiyse indirmeye düş
+        const a = document.createElement('a');
+        a.href = baglanti; a.download = 'belge.pdf'; a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(baglanti), 60000);
     }
 
     // Korumalı PDF uçlarını token ile açar (yeni sekmede gösterir)
@@ -1425,19 +1754,18 @@
       try {
         const r = await fetch(url(path), { headers: { 'Authorization': `Bearer ${token}` } });
         if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
-        const url = URL.createObjectURL(await r.blob());
-        window.open(url, '_blank');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } catch (e) { alert('⚠ ' + (e.detail || 'PDF açılamadı')); }
+        pdfAc(await r.blob());
+      } catch (e) { alert('⚠ ' + (e.detail || e.message || 'PDF açılamadı')); }
     }
 
     async function downloadCsv(ev) {
       ev.preventDefault();
       const blob = await (await fetch(url('/io/assets.csv'),
         { headers: { 'Authorization': `Bearer ${token}` } })).blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'varliklar.csv'; a.click();
-      URL.revokeObjectURL(url);
+      const baglanti = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = baglanti; a.download = 'varliklar.csv'; a.click();
+      URL.revokeObjectURL(baglanti);
     }
 
     // ---------- Adet bazlı türler (genel) ----------

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import models, schemas
+from app import arama, models, schemas
 from app.auth import get_current_user, require_editor
 from app.database import get_db
 
@@ -54,7 +54,8 @@ def list_assets(
     user_id: int | None = Query(None, description="Zimmetli olduğu personel"),
     proje_kodu: str | None = Query(None, description="Lokasyonun proje kodu (örn. U023)"),
     assigned: bool | None = Query(None, description="true=zimmetli, false=boşta"),
-    q: str | None = Query(None, description="Etiket/seri/ad/demirbaş içinde ara"),
+    q: str | None = Query(
+        None, description="Etiket/seri/ad/demirbaş/IP veya zimmetli personel adı"),
     db: Session = Depends(get_db),
 ):
     stmt = select(models.Asset)
@@ -85,16 +86,85 @@ def list_assets(
     elif assigned is False:
         stmt = stmt.where(models.Asset.assigned_type.is_(None))
     if q:
-        like = f"%{q}%"
-        stmt = stmt.where(
-            models.Asset.asset_tag.ilike(like)
-            | models.Asset.serial.ilike(like)
-            | models.Asset.name.ilike(like)
-            | models.Asset.demirbas_no.ilike(like)
-            | models.Asset.ip_address.ilike(like)
-        )
+        # Türkçe duyarlı eşleştirme SQL'de güvenilir değil (bkz. app/arama.py)
+        stmt = stmt.where(models.Asset.id.in_(arama.cihaz_idleri(db, q)))
     stmt = stmt.order_by(models.Asset.asset_tag).offset(skip).limit(limit)
     return db.scalars(stmt).all()
+
+
+@router.get("/ara", dependencies=READ)
+def hizli_arama(
+    q: str = Query("", description="İsim, cihaz no, seri no, demirbaş, IP…"),
+    limit: int = Query(10, le=50),
+    db: Session = Depends(get_db),
+):
+    """Yazdıkça arama: cihazları ve personeli birlikte döndürür."""
+    return arama.hizli_ara(db, q, limit=limit)
+
+
+@router.get("/ozellik-sablonu", dependencies=READ)
+def ozellik_sablonu():
+    """Bilinen teknik özellik grupları ve alan adları (arayüzde öneri listesi)."""
+    from app.excel.sema import OZELLIK_GRUPLARI
+
+    return [{"grup": g, "alanlar": alanlar} for g, alanlar in OZELLIK_GRUPLARI.items()]
+
+
+def _ozellikleri_yaz(asset: models.Asset, yeni: dict) -> None:
+    """`custom` alanını yeni bir sözlükle değiştirir.
+
+    JSON sütunu yerinde değişiklikleri (``asset.custom[g][a] = v``) izlemez;
+    değişikliğin kaydedilmesi için yeni bir nesne atamak gerekir.
+    """
+    asset.custom = yeni
+
+
+@router.put("/{asset_id}/ozellik", response_model=schemas.AssetRead,
+            dependencies=WRITE)
+def ozellik_yaz(asset_id: int, payload: schemas.OzellikYaz,
+                db: Session = Depends(get_db)):
+    """Cihaza teknik özellik ekler ya da mevcut olanı günceller."""
+    asset = db.get(models.Asset, asset_id)
+    if asset is None:
+        raise HTTPException(404, "Varlık bulunamadı")
+
+    grup, ad = payload.grup.strip(), payload.ad.strip()
+    ozel = {g: dict(v) for g, v in (asset.custom or {}).items() if isinstance(v, dict)}
+    eski = ozel.get(grup, {}).get(ad)
+    ozel.setdefault(grup, {})[ad] = payload.deger
+    _ozellikleri_yaz(asset, ozel)
+
+    _log(db, action=models.ActivityAction.update, asset_id=asset.id,
+         note=f"Özellik: {grup} / {ad}",
+         changes={ad: {"eski": eski, "yeni": payload.deger}})
+    db.commit()
+    db.refresh(asset)
+    return asset
+
+
+@router.delete("/{asset_id}/ozellik", response_model=schemas.AssetRead,
+               dependencies=WRITE)
+def ozellik_sil(asset_id: int, grup: str = Query(...), ad: str = Query(...),
+                db: Session = Depends(get_db)):
+    """Teknik özelliği siler; grup boşalırsa grubu da kaldırır."""
+    asset = db.get(models.Asset, asset_id)
+    if asset is None:
+        raise HTTPException(404, "Varlık bulunamadı")
+
+    ozel = {g: dict(v) for g, v in (asset.custom or {}).items() if isinstance(v, dict)}
+    if ad not in ozel.get(grup, {}):
+        raise HTTPException(404, f"'{grup} / {ad}' özelliği yok")
+    eski = ozel[grup].pop(ad)
+    if not ozel[grup]:
+        del ozel[grup]
+    _ozellikleri_yaz(asset, ozel)
+
+    _log(db, action=models.ActivityAction.update, asset_id=asset.id,
+         note=f"Özellik silindi: {grup} / {ad}",
+         changes={ad: {"eski": eski, "yeni": None}})
+    db.commit()
+    db.refresh(asset)
+    return asset
 
 
 @router.get("/proje-kodlari", dependencies=READ)
@@ -154,14 +224,7 @@ def asset_sayisi(
     elif assigned is False:
         stmt = stmt.where(models.Asset.assigned_type.is_(None))
     if q:
-        like = f"%{q}%"
-        stmt = stmt.where(
-            models.Asset.asset_tag.ilike(like)
-            | models.Asset.serial.ilike(like)
-            | models.Asset.name.ilike(like)
-            | models.Asset.demirbas_no.ilike(like)
-            | models.Asset.ip_address.ilike(like)
-        )
+        stmt = stmt.where(models.Asset.id.in_(arama.cihaz_idleri(db, q)))
     return {"toplam": db.scalar(stmt) or 0}
 
 

@@ -217,24 +217,102 @@ hiçbir şeyi değiştirmez):
 Proje kodu olmayan cihazlara dokunulmaz. Yalnızca belirli bir lokasyonu
 ayırmak için `--kaynak "ŞANTİYE"` kullan.
 
-## Zimmet / iade tutanağı (PDF)
+## Arama (yazdıkça listeleme)
 
-Personele cihaz teslim ederken imzalatılacak tutanağı sistem üretir — Türkçe
-karakterler gömülü fontla doğru basılır.
+Üst çubuktaki arama kutusu, yazmaya başlar başlamaz hem cihazları hem personeli
+listeler. Kapsam: ad/isim, cihaz no (etiket), seri no, demirbaş no, IP, barkod,
+IMEI, hostname, sicil no ve **cihazın zimmetli olduğu kişinin adı**.
 
 ```bash
-# Tek cihaz için zimmet fişi
+curl -H "Authorization: Bearer $T" "$API/assets/ara?q=ertekin"
+```
+
+Eşleştirme Türkçe duyarlıdır: `ertekin` → **ERTEKİN**, `atesoglu` → **Ateşoğlu**,
+`monitor` → **Monitör** bulur.
+
+> Bu karşılaştırma bilerek veritabanında değil Python'da yapılır. SQL'in
+> `LOWER()`/`ILIKE`'ı Türkçe'de yanılır: PostgreSQL `lower('ERTEKİN')` sonucu
+> `erteki̇n` (i + birleşen nokta) verir, SQLite ise yalnızca ASCII harfleri
+> çevirir. İkisinde de `ertekin` araması boş dönerdi. Ayrıntı: `app/arama.py`.
+
+## Teknik özellikler
+
+Cihaz detayında **+ Özellik ekle** ile istediğin grubu ve alanı açabilirsin;
+şemayı değiştirmen gerekmez (`Asset.custom`, JSON). Bilinen grup/alan adları
+öneri olarak sunulur.
+
+```bash
+curl -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
+  -d '{"grup":"Bellek","ad":"Ram Kapasitesi (mB)","deger":"32 GB"}' \
+  "$API/assets/12/ozellik"
+
+curl -X DELETE -H "Authorization: Bearer $T" \
+  "$API/assets/12/ozellik?grup=Bellek&ad=Ram%20Kapasitesi%20(mB)"
+```
+
+## Cihaz görseli ve imzalı form yükleme
+
+Her cihaza fotoğraf, **imzalı/taranmış zimmet formu**, fatura ve diğer belgeler
+eklenebilir. Dosyalar veritabanında değil diskte (`UPLOAD_DIR`, varsayılan
+`yuklemeler/`) tutulur.
+
+```bash
+curl -H "Authorization: Bearer $T" -F "file=@imzali.pdf" -F "tur=zimmet_formu" \
+  "$API/assets/12/dosyalar"
+```
+
+| Tür | Anlamı |
+|---|---|
+| `gorsel` | Cihaz fotoğrafı (yalnızca resim dosyaları) |
+| `zimmet_formu` | İmzalı / taranmış zimmet formu |
+| `fatura` | Fatura veya irsaliye |
+| `diger` | Diğer belgeler |
+
+Yürütülebilir dosyalar (`.exe`, `.sh`, `.php`…) reddedilir; boyut sınırı
+`MAX_UPLOAD_MB` (varsayılan 20 MB). Diskteki adı sunucu üretir, bu yüzden
+dosya adındaki `../` gibi ifadeler zarar veremez.
+
+> **Yedeklemede `yuklemeler/` klasörünü de al** — veritabanı yedeği bu
+> dosyaları içermez.
+
+## Demirbaş zimmet formu (PDF)
+
+Personele cihaz teslim ederken imzalatılacak form, kurumun kullandığı
+**DEMİRBAŞ ZİMMET FORMU** düzeninde üretilir — Türkçe karakterler gömülü fontla
+doğru basılır.
+
+```bash
+# Tek cihaz için zimmet formu
 GET /documents/zimmet/asset/{asset_id}.pdf
-# Personele zimmetli tüm cihazlar tek tutanakta
+# Personele zimmetli tüm cihazlar (her cihaz ayrı sayfa, ayrı imza)
 GET /documents/zimmet/user/{user_id}.pdf
-# İade tutanağı + not
+# İade formu + not
 GET /documents/zimmet/user/{user_id}.pdf?doc_type=iade&note=Ekran%20çizik
 ```
 
-Tutanakta: kurum başlığı (`ORG_NAME`), personel bilgileri (ad, sicil,
-departman, şube), cihaz tablosu (etiket, demirbaş no, seri, barkod), taahhüt
-metni, tarih ve **imza alanları** bulunur. Arayüzde zimmetli cihazın satırındaki
-📄 butonundan açılır.
+Formun bölümleri:
+
+| Bölüm | İçerik |
+|---|---|
+| Künye | Nesne No, Nesne Açıklama, Nesne Türü / Kategori |
+| Özellikler | MARKA, MODEL, ŞASİ NO / SERİ NO, KULLANIM DURUMU, ZİMMETLENEN PERSONEL, LOKASYON, KİRALANAN FİRMA, KAPASİTE, İŞLEMCİ, RAM, EKRAN KARTI, HDD, ANAKART, EKRAN BOYUTU, İŞLETİM SİSTEMİ, CİHAZ KODU |
+| Notlar | Elle doldurulabilir boş alan (ya da `note` parametresi) |
+| Kullanıcı Bilgileri | Ad Soyad, Sicil No, Departman, Mail Adresi |
+| Taahhüt | `ORG_NAME` ile başlayan teslim alma metni |
+| İmza | TESLİM EDEN / TESLİM ALAN — Ad Soyad, İmza, Tarih |
+
+Teknik özellikler cihazın `custom` alanından okunur. Çok uzun değerleri
+(ekran kartı, anakart) olan cihazlarda form otomatik küçültülerek **tek
+sayfada** tutulur; veri kırpılmaz.
+
+Kurum adını `.env` içinde ayarla:
+
+```ini
+ORG_NAME=YILDIZLAR GRUP
+```
+
+Arayüzde cihazın 📄 butonundan açılır. İmzalandıktan sonra taranan formu
+cihaza geri yükleyebilirsin (bkz. *Cihaz görseli ve imzalı form yükleme*).
 
 ## Barkod / QR etiket
 
@@ -312,6 +390,11 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/assets/{id}/history` | Varlık geçmişi |
 | `GET` | `/assets/sayi` | Filtrelere uyan toplam sayı (sayfalamadan bağımsız) |
 | `GET` | `/assets/proje-kodlari` | Proje kodları + cihaz sayıları |
+| `GET` | `/assets/ara` | Yazdıkça arama (cihaz + personel, Türkçe duyarlı) |
+| `PUT/DELETE` | `/assets/{id}/ozellik` | Teknik özellik ekle-güncelle / sil |
+| `GET` | `/assets/ozellik-sablonu` | Bilinen özellik grupları ve alan adları |
+| `GET/POST` | `/assets/{id}/dosyalar` | Cihaz dosyalarını listele / yükle |
+| `GET/DELETE` | `/dosyalar/{id}` | Dosyayı indir/göster / sil |
 | `POST` | `/search` | Doğal dil araması |
 | `GET` | `/io/assets.csv` | Varlıkları CSV olarak indir |
 | `POST` | `/io/assets/import` | CSV'den varlık içe aktar (etikete göre ekle/güncelle) |
@@ -355,6 +438,8 @@ app/
   crud_factory.py    # Referans tabloları için jenerik CRUD
   seed.py            # Varsayılan durum etiketleri
   santiye.py         # Cihazları proje koduna göre şantiyelere dağıtma
+  arama.py           # Türkçe duyarlı yazdıkça arama
+  pdf/               # Zimmet formu ve barkod/QR etiket üretimi
   ai/search.py       # Doğal dil → yapısal filtre (Claude)
   excel/             # Excel içe/dışa aktarım (sütun şeması + aktarım)
   routers/           # API uçları

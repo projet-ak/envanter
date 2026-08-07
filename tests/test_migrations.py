@@ -66,7 +66,7 @@ def test_upgrade_head_creates_all_tables(alembic_cfg, monkeypatch):
     beklenen = {"assets", "users", "categories", "locations", "manufacturers",
                 "suppliers", "companies", "status_labels", "asset_models",
                 "custom_fields", "activity_logs", "accessories", "consumables",
-                "components", "licenses"}
+                "components", "licenses", "asset_files"}
     eksik = beklenen - tablolar
     assert not eksik, f"Eksik tablolar: {eksik}"
 

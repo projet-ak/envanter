@@ -10,6 +10,7 @@ from app.models import (
     ActivityAction,
     AssignedType,
     CategoryType,
+    DosyaTuru,
     StatusType,
     UserRole,
 )
@@ -321,6 +322,14 @@ class AssetUpdate(BaseModel):
     custom: dict | None = None
 
 
+class OzellikYaz(BaseModel):
+    """Tek bir teknik özellik: hangi grupta, hangi alan, hangi değer."""
+
+    grup: str = Field(min_length=1, max_length=80)
+    ad: str = Field(min_length=1, max_length=120)
+    deger: str = Field(default="", max_length=2000)
+
+
 class AssetRead(ORMModel):
     id: int
     asset_tag: str
@@ -383,6 +392,21 @@ class ActivityLogRead(ORMModel):
     note: str | None = None
     changes: dict | None = None
     actor: str | None = None
+    created_at: dt.datetime
+
+
+# --------------------------------------------------------------------------- #
+# Cihaz dosya ekleri (görsel, imzalı zimmet formu, fatura…)
+# --------------------------------------------------------------------------- #
+class AssetFileRead(ORMModel):
+    id: int
+    asset_id: int
+    tur: DosyaTuru
+    dosya_adi: str
+    content_type: str | None = None
+    boyut: int
+    aciklama: str | None = None
+    yukleyen: str | None = None
     created_at: dt.datetime
 
 

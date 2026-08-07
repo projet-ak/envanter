@@ -95,6 +95,19 @@ def varlik_detay(asset_id: int, db: Session = Depends(get_db)):
         },
         # Teknik özellikler zaten gruplu JSON olarak saklanıyor
         "ozellikler": a.custom or {},
+        "dosyalar": [
+            {
+                "id": d.id,
+                "tur": d.tur.value,
+                "dosya_adi": d.dosya_adi,
+                "content_type": d.content_type,
+                "boyut": d.boyut,
+                "aciklama": d.aciklama,
+                "yukleyen": d.yukleyen,
+                "tarih": d.created_at.isoformat() if d.created_at else None,
+            }
+            for d in a.dosyalar
+        ],
         "gecmis": [
             {
                 "islem": g.action.value,

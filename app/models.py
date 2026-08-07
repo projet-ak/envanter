@@ -78,6 +78,13 @@ class UserRole(str, enum.Enum):
     viewer = "viewer"  # Sadece okuma
 
 
+class DosyaTuru(str, enum.Enum):
+    gorsel = "gorsel"          # Cihaz fotoğrafı
+    zimmet_formu = "zimmet_formu"  # İmzalı, taranmış zimmet formu
+    fatura = "fatura"          # Fatura / irsaliye
+    diger = "diger"
+
+
 class ActivityAction(str, enum.Enum):
     create = "create"
     update = "update"
@@ -278,6 +285,10 @@ class Asset(Base, TimestampMixin, ExternalMixin):
     location: Mapped[Location | None] = relationship(foreign_keys=[location_id])
     company: Mapped[Company | None] = relationship()
     assigned_user: Mapped[User | None] = relationship()
+    dosyalar: Mapped[list[AssetFile]] = relationship(
+        back_populates="asset", cascade="all, delete-orphan",
+        order_by="AssetFile.created_at.desc()",
+    )
     assigned_location: Mapped[Location | None] = relationship(
         foreign_keys=[assigned_location_id]
     )
@@ -360,3 +371,33 @@ class ActivityLog(Base):
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class AssetFile(Base):
+    """Cihaza bağlı dosya eki: fotoğraf, imzalı zimmet formu, fatura…
+
+    İçerik veritabanında değil diskte tutulur (`settings.upload_dir`); burada
+    yalnızca künyesi durur. Böylece yedek boyutu şişmez ve büyük dosyalar
+    doğrudan dosya sisteminden servis edilir.
+    """
+
+    __tablename__ = "asset_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), index=True
+    )
+    tur: Mapped[DosyaTuru] = mapped_column(
+        Enum(DosyaTuru), default=DosyaTuru.diger, index=True
+    )
+    dosya_adi: Mapped[str] = mapped_column(String(255))      # kullanıcının gördüğü ad
+    saklama_adi: Mapped[str] = mapped_column(String(255), unique=True)  # diskteki ad
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    boyut: Mapped[int] = mapped_column(Integer, default=0)
+    aciklama: Mapped[str | None] = mapped_column(String(500))
+    yukleyen: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    asset: Mapped[Asset] = relationship(back_populates="dosyalar")

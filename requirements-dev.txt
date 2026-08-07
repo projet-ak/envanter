@@ -1,3 +1,4 @@
 -r requirements.txt
 pytest>=8.0
 respx>=0.21
+pypdf>=5.0          # zimmet formu içeriğini doğrulayan testler için
