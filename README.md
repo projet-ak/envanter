@@ -219,16 +219,29 @@ ayırmak için `--kaynak "ŞANTİYE"` kullan.
 
 ## Arama (yazdıkça listeleme)
 
-Üst çubuktaki arama kutusu, yazmaya başlar başlamaz hem cihazları hem personeli
-listeler. Kapsam: ad/isim, cihaz no (etiket), seri no, demirbaş no, IP, barkod,
-IMEI, hostname, sicil no ve **cihazın zimmetli olduğu kişinin adı**.
+Üst çubuktaki arama kutusu, yazmaya başlar başlamaz cihazları, personeli ve
+şantiyeleri birlikte listeler.
+
+| Arananlar | Alanlar |
+|---|---|
+| Cihaz | etiket (cihaz no), seri no, demirbaş no, ad, IP, barkod, IMEI, hostname |
+| Personel | ad soyad, sicil no, departman, e-posta |
+| Lokasyon / proje | lokasyon adı, **proje kodu** (örn. `U023`) |
+
+Bir cihaz; kendi alanları, **zimmetli olduğu kişinin adı** ya da **bulunduğu
+lokasyonun adı/proje kodu** eşleştiğinde bulunur. Yani `ertekin` yazınca o
+kişideki cihazlar, `U026` yazınca o şantiyedeki cihazlar gelir.
 
 ```bash
 curl -H "Authorization: Bearer $T" "$API/assets/ara?q=ertekin"
+curl -H "Authorization: Bearer $T" "$API/assets?q=U026"   # şantiyedeki cihazlar
 ```
 
+Sonuç listesinde bir şantiyeye tıklamak varlık listesini o projeye filtreler
+(proje kodu yoksa o lokasyona).
+
 Eşleştirme Türkçe duyarlıdır: `ertekin` → **ERTEKİN**, `atesoglu` → **Ateşoğlu**,
-`monitor` → **Monitör** bulur.
+`monitor` → **Monitör**, `santiye` → **ŞANTİYE** bulur.
 
 > Bu karşılaştırma bilerek veritabanında değil Python'da yapılır. SQL'in
 > `LOWER()`/`ILIKE`'ı Türkçe'de yanılır: PostgreSQL `lower('ERTEKİN')` sonucu
@@ -390,7 +403,7 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/assets/{id}/history` | Varlık geçmişi |
 | `GET` | `/assets/sayi` | Filtrelere uyan toplam sayı (sayfalamadan bağımsız) |
 | `GET` | `/assets/proje-kodlari` | Proje kodları + cihaz sayıları |
-| `GET` | `/assets/ara` | Yazdıkça arama (cihaz + personel, Türkçe duyarlı) |
+| `GET` | `/assets/ara` | Yazdıkça arama (cihaz + personel + lokasyon, Türkçe duyarlı) |
 | `PUT/DELETE` | `/assets/{id}/ozellik` | Teknik özellik ekle-güncelle / sil |
 | `GET` | `/assets/ozellik-sablonu` | Bilinen özellik grupları ve alan adları |
 | `GET/POST` | `/assets/{id}/dosyalar` | Cihaz dosyalarını listele / yükle |

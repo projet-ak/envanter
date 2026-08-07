@@ -40,8 +40,23 @@ def _kisi_adi(k: models.User | None) -> str | None:
     return " ".join(filter(None, [k.first_name, k.last_name]))
 
 
+def _eslesen_lokasyonlar(db: Session, terim: str) -> set[int]:
+    """Adı ya da proje kodu terimle eşleşen lokasyonların kimlikleri."""
+    return {
+        lid for lid, ad, kod in db.execute(
+            select(models.Location.id, models.Location.name,
+                   models.Location.proje_kodu).limit(ARAMA_TAVANI)
+        ).all()
+        if _eslesir(terim, ad, kod)
+    }
+
+
 def cihaz_idleri(db: Session, q: str) -> list[int]:
-    """Terimle eşleşen cihaz kimlikleri (zimmetli personel adı dahil)."""
+    """Terimle eşleşen cihaz kimlikleri.
+
+    Cihazın kendi alanlarının yanı sıra zimmetli olduğu personelin adı ve
+    bulunduğu lokasyonun adı / proje kodu da kapsanır.
+    """
     terim = normalle(q)
     if not terim:
         return []
@@ -55,12 +70,14 @@ def cihaz_idleri(db: Session, q: str) -> list[int]:
         kid for kid, ad, soyad, sicil in kisiler
         if _eslesir(terim, " ".join(filter(None, [ad, soyad])), sicil)
     }
+    lokasyon_idleri = _eslesen_lokasyonlar(db, terim)
 
     satirlar = db.execute(
         select(models.Asset.id, models.Asset.asset_tag, models.Asset.serial,
                models.Asset.name, models.Asset.demirbas_no, models.Asset.ip_address,
                models.Asset.barkod, models.Asset.imei, models.Asset.hostname,
-               models.Asset.assigned_user_id).limit(ARAMA_TAVANI)
+               models.Asset.assigned_user_id,
+               models.Asset.location_id).limit(ARAMA_TAVANI)
     ).all()
 
     return [
@@ -68,6 +85,7 @@ def cihaz_idleri(db: Session, q: str) -> list[int]:
         if _eslesir(terim, r.asset_tag, r.serial, r.name, r.demirbas_no,
                     r.ip_address, r.barkod, r.imei, r.hostname)
         or (r.assigned_user_id in kisi_idleri)
+        or (r.location_id in lokasyon_idleri)
     ]
 
 
@@ -78,8 +96,8 @@ def hizli_ara(db: Session, q: str, *, limit: int = 10) -> dict:
     """
     terim = normalle(q)
     if not terim:
-        return {"cihazlar": [], "personel": [], "cihaz_toplam": 0,
-                "personel_toplam": 0}
+        return {"cihazlar": [], "personel": [], "lokasyonlar": [],
+                "cihaz_toplam": 0, "personel_toplam": 0, "lokasyon_toplam": 0}
 
     # --- Personel ---
     kisiler = db.scalars(select(models.User).limit(ARAMA_TAVANI)).all()
@@ -100,16 +118,37 @@ def hizli_ara(db: Session, q: str, *, limit: int = 10) -> dict:
             .order_by(models.Asset.asset_tag)
         ).all()
 
+    # --- Lokasyonlar (ad ya da proje kodu) ---
+    from sqlalchemy import func
+
+    lokasyon_sayilari = dict(db.execute(
+        select(models.Asset.location_id, func.count(models.Asset.id))
+        .where(models.Asset.location_id.is_not(None))
+        .group_by(models.Asset.location_id)
+    ).all())
+    tum_lokasyonlar = db.scalars(select(models.Location).limit(ARAMA_TAVANI)).all()
+    lokasyon_bulunan = [
+        l for l in tum_lokasyonlar if _eslesir(terim, l.name, l.proje_kodu)
+    ]
+    # Çok cihazlı şantiye önce gelsin
+    lokasyon_bulunan.sort(key=lambda l: -lokasyon_sayilari.get(l.id, 0))
+
     kisi_adlari = {k.id: _kisi_adi(k) for k in kisiler}
-    lokasyonlar = {
-        lid: ad for lid, ad in db.execute(
-            select(models.Location.id, models.Location.name)
-        ).all()
-    }
+    lokasyonlar = {l.id: l.name for l in tum_lokasyonlar}
 
     return {
         "cihaz_toplam": len(cihazlar),
         "personel_toplam": len(kisi_bulunan),
+        "lokasyon_toplam": len(lokasyon_bulunan),
+        "lokasyonlar": [
+            {
+                "id": l.id,
+                "ad": l.name,
+                "proje_kodu": l.proje_kodu,
+                "cihaz_sayisi": lokasyon_sayilari.get(l.id, 0),
+            }
+            for l in lokasyon_bulunan[:limit]
+        ],
         "cihazlar": [
             {
                 "id": a.id,

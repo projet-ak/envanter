@@ -142,7 +142,7 @@
       <span class="sub"><a id="docsLink" href="docs">API dokümanı</a></span>
       <div id="hizliKutu">
         <input id="hizliAra" autocomplete="off"
-               placeholder="🔎 İsim, cihaz no, seri no…"
+               placeholder="🔎 İsim, cihaz no, seri no, şantiye…"
                oninput="hizliAra()" onfocus="hizliAra()"
                onkeydown="if(event.key==='Escape')hizliKapat()" />
         <div id="hizliSonuc" class="hidden"></div>
@@ -1111,6 +1111,20 @@
       if (!kutu) return;
       const parcalar = [];
 
+      // Lokasyon/proje en üstte: en dar ve en kesin eşleşme burasıdır. Proje
+      // kodu ("U026") aynı zamanda personelin departmanı olduğu için, kişi
+      // listesi önce gelseydi şantiyeyi onlarca satırın altına iterdi.
+      if (d.lokasyonlar.length) {
+        parcalar.push('<div class="baslik">Lokasyon / Proje</div>');
+        parcalar.push(d.lokasyonlar.map(l => `
+          <div class="satir" onclick="hizliLokasyon(${l.id}, '${
+              encodeURIComponent(l.proje_kodu || '')}')">
+            <span>📍 ${kacir(l.ad)}${l.proje_kodu
+              ? ` <span class="pill">${kacir(l.proje_kodu)}</span>` : ''}</span>
+            <span class="ikincil">${l.cihaz_sayisi} cihaz</span>
+          </div>`).join(''));
+      }
+
       if (d.personel.length) {
         parcalar.push('<div class="baslik">Personel</div>');
         parcalar.push(d.personel.map(k => `
@@ -1149,6 +1163,37 @@
       hizliKapat();
       document.getElementById('hizliAra').value = '';
       if (tur === 'kisi') kisiDetay(id); else cihazDetay(id);
+    }
+
+    // Lokasyon seçilince listeyi o lokasyona (proje kodu varsa projeye) filtreler.
+    // Filtre açılır listeleri sunucudan asenkron doldurulduğu için seçim hemen
+    // yapılamayabilir; istek burada bekletilir ve seçenekler gelince uygulanır.
+    let bekleyenFiltre = null;
+
+    function hizliLokasyon(lokasyonId, projeKodu) {
+      const kod = decodeURIComponent(projeKodu || '');
+      hizliKapat();
+      document.getElementById('hizliAra').value = '';
+      // Proje kodu varsa proje filtresi tüm şantiyeyi kapsar; yoksa lokasyon
+      bekleyenFiltre = kod ? { alan: 'fProje', deger: kod }
+                           : { alan: 'fLokasyon', deger: String(lokasyonId) };
+      if (activeTab === 'assets') {
+        filtreleriSifirla();
+        bekleyenFiltreyiUygula();
+      } else {
+        selectTab('assets');   // görünüm + seçenekler yüklenince uygulanır
+      }
+    }
+
+    function bekleyenFiltreyiUygula() {
+      if (!bekleyenFiltre) return;
+      const el = document.getElementById(bekleyenFiltre.alan);
+      if (!el) return;                       // görünüm henüz oluşmadı
+      el.value = bekleyenFiltre.deger;
+      // Seçenek listesi henüz gelmediyse atama tutmaz; sonraki denemeye bırak
+      if (el.value !== bekleyenFiltre.deger) return;
+      bekleyenFiltre = null;
+      loadAssets();
     }
 
     // Arama terimini varlık listesi filtresine taşır
@@ -1510,7 +1555,8 @@
               <option value="true">Sadece zimmetli</option>
               <option value="false">Sadece boşta</option>
             </select>
-            <input id="fAra" class="grow" placeholder="Etiket / seri / demirbaş / IP ara…"
+            <input id="fAra" class="grow"
+                   placeholder="Etiket / seri / demirbaş / kişi / şantiye ara…"
                    oninput="gecikmeliAra()" />
             <button class="ghost" onclick="filtreTemizle()">Temizle</button>
           </div>
@@ -1560,6 +1606,8 @@
       doldur('fLokasyon', lok, 'Tüm lokasyonlar');
       doldur('fMarka', mar, 'Tüm markalar');
       doldur('fDurum', dur, 'Tüm durumlar');
+      // Seçenekler hazır; hızlı aramadan gelen filtre isteği varsa şimdi uygula
+      bekleyenFiltreyiUygula();
       // Model -> kategori/marka eşlemesi (listede tür göstermek için)
       const modeller = await api('/models?limit=1000');
       refModelKat = Object.fromEntries(modeller.map(m => [m.id, m]));
@@ -1571,9 +1619,13 @@
       araZaman = setTimeout(loadAssets, 350);
     }
 
-    function filtreTemizle() {
+    function filtreleriSifirla() {
       ['fProje','fKategori','fLokasyon','fMarka','fDurum','fZimmet','fAra']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    }
+
+    function filtreTemizle() {
+      filtreleriSifirla();
       loadAssets();
     }
 

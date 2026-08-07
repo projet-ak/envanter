@@ -28,7 +28,17 @@ def veri(client):
         "ip_address": "10.0.0.5"}).json()
     client.post(f"/assets/{a1['id']}/checkout",
                 json={"assigned_type": "user", "assigned_id": kisi["id"]})
-    return {"kisi": kisi, "digeri": digeri, "a1": a1, "a2": a2, "lok": lok}
+
+    # İkinci şantiye + kodsuz bir lokasyon (filtreleme ayrımı için)
+    lok2 = client.post("/locations", json={"name": "ŞANTİYE U026",
+                                           "proje_kodu": "U026"}).json()
+    merkez = client.post("/locations", json={"name": "Merkez Depo"}).json()
+    a3 = client.post("/assets", json={"asset_tag": "K101",
+                                      "location_id": lok2["id"]}).json()
+    a4 = client.post("/assets", json={"asset_tag": "D501",
+                                      "location_id": merkez["id"]}).json()
+    return {"kisi": kisi, "digeri": digeri, "a1": a1, "a2": a2, "a3": a3,
+            "a4": a4, "lok": lok, "lok2": lok2, "merkez": merkez}
 
 
 def _etiketler(client, q):
@@ -130,8 +140,8 @@ def test_hizli_arama_cihaz_satirinda_zimmetli_gorunur(client, veri):
 
 def test_hizli_arama_bos_terim_bos_doner(client, veri):
     r = client.get("/assets/ara", params={"q": ""}).json()
-    assert r == {"cihazlar": [], "personel": [], "cihaz_toplam": 0,
-                 "personel_toplam": 0}
+    assert r == {"cihazlar": [], "personel": [], "lokasyonlar": [],
+                 "cihaz_toplam": 0, "personel_toplam": 0, "lokasyon_toplam": 0}
     assert client.get("/assets/ara").json()["cihaz_toplam"] == 0
 
 
@@ -156,3 +166,77 @@ def test_ara_ucu_kimlikle_karismaz(client, veri):
     """/assets/ara, /assets/{id} yoluna düşmemeli."""
     assert client.get("/assets/ara", params={"q": "x"}).status_code == 200
     assert client.get("/assets/proje-kodlari").status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# Lokasyon ve proje kodu
+# --------------------------------------------------------------------------- #
+def test_lokasyon_adiyla_cihaz_bulunur(client, veri):
+    """'santiye' yazınca o lokasyondaki cihazlar gelsin (Türkçe harf dahil)."""
+    assert _etiketler(client, "santiye") == {"N411", "K101"}
+    assert _etiketler(client, "ŞANTİYE") == {"N411", "K101"}
+
+
+def test_proje_koduyla_cihaz_bulunur(client, veri):
+    assert _etiketler(client, "U023") == {"N411"}
+    assert _etiketler(client, "u026") == {"K101"}
+
+
+def test_kodsuz_lokasyon_adiyla_da_bulunur(client, veri):
+    assert _etiketler(client, "merkez depo") == {"D501"}
+    assert _etiketler(client, "depo") == {"D501"}
+
+
+def test_lokasyon_aramasi_sayi_ucuyla_tutarli(client, veri):
+    for q in ["santiye", "U023", "depo"]:
+        liste = len(client.get("/assets", params={"q": q}).json())
+        sayi = client.get("/assets/sayi", params={"q": q}).json()["toplam"]
+        assert liste == sayi, f"'{q}' için liste={liste} sayi={sayi}"
+
+
+def test_lokasyonsuz_cihaz_lokasyon_aramasinda_cikmaz(client, veri):
+    assert "M028" not in _etiketler(client, "santiye")   # M028'in lokasyonu yok
+
+
+def test_hizli_aramada_lokasyon_bolumu(client, veri):
+    r = client.get("/assets/ara", params={"q": "santiye"}).json()
+    adlar = {l["ad"] for l in r["lokasyonlar"]}
+    assert adlar == {"ŞANTİYE U023", "ŞANTİYE U026"}
+    assert r["lokasyon_toplam"] == 2
+
+
+def test_hizli_aramada_lokasyon_cihaz_sayisi_dogru(client, veri):
+    r = client.get("/assets/ara", params={"q": "U023"}).json()
+    lok = next(x for x in r["lokasyonlar"] if x["proje_kodu"] == "U023")
+    assert lok["cihaz_sayisi"] == 1
+    assert lok["ad"] == "ŞANTİYE U023"
+
+
+def test_lokasyonlar_cihaz_sayisina_gore_siralanir(client, veri):
+    """Çok cihazlı şantiye listede üstte olsun."""
+    for i in range(3):
+        client.post("/assets", json={"asset_tag": f"EK-{i}",
+                                     "location_id": veri["lok2"]["id"]})
+    r = client.get("/assets/ara", params={"q": "santiye"}).json()
+    assert [l["ad"] for l in r["lokasyonlar"]] == ["ŞANTİYE U026", "ŞANTİYE U023"]
+
+
+def test_bos_lokasyon_da_listelenir(client, veri):
+    """Henüz cihazı olmayan şantiye de bulunabilmeli."""
+    client.post("/locations", json={"name": "ŞANTİYE U099", "proje_kodu": "U099"})
+    r = client.get("/assets/ara", params={"q": "U099"}).json()
+    assert r["lokasyonlar"][0]["cihaz_sayisi"] == 0
+    assert r["cihaz_toplam"] == 0
+
+
+def test_bos_terimde_lokasyon_da_bos(client, veri):
+    r = client.get("/assets/ara", params={"q": ""}).json()
+    assert r["lokasyonlar"] == [] and r["lokasyon_toplam"] == 0
+
+
+def test_lokasyon_filtresi_proje_filtresiyle_ayni_sonucu_verir(client, veri):
+    """Arayüz proje kodlu lokasyonu seçince proje filtresine geçiyor."""
+    proje = client.get("/assets", params={"proje_kodu": "U023"}).json()
+    lokasyon = client.get("/assets",
+                          params={"location_id": veri["lok"]["id"]}).json()
+    assert {a["asset_tag"] for a in proje} == {a["asset_tag"] for a in lokasyon}
