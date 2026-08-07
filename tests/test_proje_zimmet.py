@@ -124,3 +124,66 @@ def test_personel_ekleme_kimligi_dondurur(client):
     assert r.status_code == 201
     kisi_id = r.json()["id"]
     assert client.get(f"/detay/user/{kisi_id}").json()["kisi"]["ad"] == "Yeni Kişi"
+
+
+# --------------------------------------------------------------------------- #
+# Proje koduna göre filtreleme
+# --------------------------------------------------------------------------- #
+def _proje_kur(client):
+    u23 = client.post("/locations", json={"name": "Şantiye A",
+                                          "proje_kodu": "U023"}).json()
+    u26 = client.post("/locations", json={"name": "Şantiye B",
+                                          "proje_kodu": "U026"}).json()
+    kodsuz = client.post("/locations", json={"name": "Merkez"}).json()
+    client.post("/assets", json={"asset_tag": "A-1", "location_id": u23["id"]})
+    client.post("/assets", json={"asset_tag": "A-2", "location_id": u23["id"]})
+    client.post("/assets", json={"asset_tag": "B-1", "location_id": u26["id"]})
+    client.post("/assets", json={"asset_tag": "M-1", "location_id": kodsuz["id"]})
+    client.post("/assets", json={"asset_tag": "YOK-1"})   # lokasyonsuz
+    return u23, u26
+
+
+def test_proje_koduna_gore_filtre(client):
+    _proje_kur(client)
+    r = client.get("/assets", params={"proje_kodu": "U023"}).json()
+    assert {a["asset_tag"] for a in r} == {"A-1", "A-2"}
+
+    r2 = client.get("/assets", params={"proje_kodu": "U026"}).json()
+    assert {a["asset_tag"] for a in r2} == {"B-1"}
+
+
+def test_proje_filtresi_sayida_da_calisir(client):
+    _proje_kur(client)
+    assert client.get("/assets/sayi",
+                      params={"proje_kodu": "U023"}).json()["toplam"] == 2
+    assert client.get("/assets/sayi").json()["toplam"] == 5
+
+
+def test_proje_filtresi_diger_filtrelerle_birlesir(client):
+    u23, _ = _proje_kur(client)
+    kisi = client.post("/users", json={"first_name": "X", "last_name": "Y"}).json()
+    a = client.get("/assets", params={"q": "A-1"}).json()[0]
+    client.post(f"/assets/{a['id']}/checkout",
+                json={"assigned_type": "user", "assigned_id": kisi["id"]})
+
+    r = client.get("/assets", params={"proje_kodu": "U023", "assigned": "true"}).json()
+    assert {x["asset_tag"] for x in r} == {"A-1"}
+
+
+def test_proje_kodlari_listesi(client):
+    _proje_kur(client)
+    kodlar = client.get("/assets/proje-kodlari").json()
+    harita = {k["proje_kodu"]: k["cihaz_sayisi"] for k in kodlar}
+    assert harita == {"U023": 2, "U026": 1}     # kodsuz lokasyon listelenmez
+
+
+def test_kodsuz_lokasyon_proje_listesinde_yok(client):
+    client.post("/locations", json={"name": "Kodsuz Yer"})
+    client.post("/locations", json={"name": "Boş Kodlu", "proje_kodu": ""})
+    kodlar = client.get("/assets/proje-kodlari").json()
+    assert kodlar == []
+
+
+def test_proje_filtresi_viewer_icin_de_calisir(viewer_client):
+    assert viewer_client.get("/assets", params={"proje_kodu": "U023"}).status_code == 200
+    assert viewer_client.get("/assets/proje-kodlari").status_code == 200

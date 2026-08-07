@@ -1182,6 +1182,7 @@
         <div class="panel">
           <h2>Filtreler</h2>
           <div class="row">
+            <select id="fProje" onchange="loadAssets()"><option value="">Tüm projeler</option></select>
             <select id="fKategori" onchange="loadAssets()"><option value="">Tüm türler</option></select>
             <select id="fLokasyon" onchange="loadAssets()"><option value="">Tüm lokasyonlar</option></select>
             <select id="fMarka" onchange="loadAssets()"><option value="">Tüm markalar</option></select>
@@ -1227,6 +1228,16 @@
           .map(x => `<option value="${x.id}">${x.name}</option>`).join('');
         el.value = secili;
       };
+      // Proje kodları ayrı uçtan gelir (cihaz sayısıyla birlikte)
+      const projeler = await api('/assets/proje-kodlari').catch(() => []);
+      const pEl = document.getElementById('fProje');
+      if (pEl) {
+        const secili = pEl.value;
+        pEl.innerHTML = '<option value="">Tüm projeler</option>' + projeler
+          .map(x => `<option value="${x.proje_kodu}">${x.proje_kodu}` +
+                    ` (${x.cihaz_sayisi})</option>`).join('');
+        pEl.value = secili;
+      }
       doldur('fKategori', kat, 'Tüm türler');
       doldur('fLokasyon', lok, 'Tüm lokasyonlar');
       doldur('fMarka', mar, 'Tüm markalar');
@@ -1243,7 +1254,7 @@
     }
 
     function filtreTemizle() {
-      ['fKategori','fLokasyon','fMarka','fDurum','fZimmet','fAra']
+      ['fProje','fKategori','fLokasyon','fMarka','fDurum','fZimmet','fAra']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
       loadAssets();
     }
@@ -1254,6 +1265,7 @@
         const v = document.getElementById(id)?.value;
         if (v) p.set(ad, v);
       };
+      ekle('fProje', 'proje_kodu');
       ekle('fKategori', 'category_id');
       ekle('fLokasyon', 'location_id');
       ekle('fMarka', 'manufacturer_id');
@@ -1307,7 +1319,7 @@
         const el = document.getElementById(id);
         if (el?.value) etiketler.push(`${on}: ${el.selectedOptions?.[0]?.text ?? el.value}`);
       };
-      ekle('fKategori', 'Tür'); ekle('fLokasyon', 'Lokasyon');
+      ekle('fProje', 'Proje'); ekle('fKategori', 'Tür'); ekle('fLokasyon', 'Lokasyon');
       ekle('fMarka', 'Marka'); ekle('fDurum', 'Durum');
       ekle('fZimmet', 'Zimmet'); ekle('fAra', 'Arama');
       if (bilgi) bilgi.innerHTML = etiketler.length

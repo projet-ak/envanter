@@ -52,6 +52,7 @@ def list_assets(
     category_id: int | None = Query(None, description="Cihaz türü (model üzerinden)"),
     manufacturer_id: int | None = Query(None, description="Marka (model üzerinden)"),
     user_id: int | None = Query(None, description="Zimmetli olduğu personel"),
+    proje_kodu: str | None = Query(None, description="Lokasyonun proje kodu (örn. U023)"),
     assigned: bool | None = Query(None, description="true=zimmetli, false=boşta"),
     q: str | None = Query(None, description="Etiket/seri/ad/demirbaş içinde ara"),
     db: Session = Depends(get_db),
@@ -65,6 +66,11 @@ def list_assets(
         stmt = stmt.where(models.Asset.model_id == model_id)
     if user_id is not None:
         stmt = stmt.where(models.Asset.assigned_user_id == user_id)
+    # Proje kodu lokasyonda tutulur; cihazın lokasyonu üzerinden filtrele
+    if proje_kodu:
+        stmt = stmt.join(
+            models.Location, models.Asset.location_id == models.Location.id
+        ).where(models.Location.proje_kodu == proje_kodu)
     # Kategori ve marka bilgisi modelde tutulur; model üzerinden filtrele
     if category_id is not None or manufacturer_id is not None:
         stmt = stmt.join(
@@ -91,6 +97,24 @@ def list_assets(
     return db.scalars(stmt).all()
 
 
+@router.get("/proje-kodlari", dependencies=READ)
+def proje_kodlari(db: Session = Depends(get_db)):
+    """Tanımlı proje kodları ve her birindeki cihaz sayısı (filtre listesi için)."""
+    from sqlalchemy import func
+
+    rows = db.execute(
+        select(models.Location.proje_kodu, func.count(models.Asset.id))
+        .select_from(models.Location)
+        .join(models.Asset, models.Asset.location_id == models.Location.id,
+              isouter=True)
+        .where(models.Location.proje_kodu.is_not(None),
+               models.Location.proje_kodu != "")
+        .group_by(models.Location.proje_kodu)
+        .order_by(models.Location.proje_kodu)
+    ).all()
+    return [{"proje_kodu": kod, "cihaz_sayisi": adet} for kod, adet in rows]
+
+
 @router.get("/sayi", dependencies=READ)
 def asset_sayisi(
     status_id: int | None = None,
@@ -98,6 +122,7 @@ def asset_sayisi(
     category_id: int | None = None,
     manufacturer_id: int | None = None,
     user_id: int | None = None,
+    proje_kodu: str | None = None,
     assigned: bool | None = None,
     q: str | None = None,
     db: Session = Depends(get_db),
@@ -112,6 +137,10 @@ def asset_sayisi(
         stmt = stmt.where(models.Asset.location_id == location_id)
     if user_id is not None:
         stmt = stmt.where(models.Asset.assigned_user_id == user_id)
+    if proje_kodu:
+        stmt = stmt.join(
+            models.Location, models.Asset.location_id == models.Location.id
+        ).where(models.Location.proje_kodu == proje_kodu)
     if category_id is not None or manufacturer_id is not None:
         stmt = stmt.join(
             models.AssetModel, models.Asset.model_id == models.AssetModel.id
