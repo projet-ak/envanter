@@ -153,6 +153,32 @@ else
 fi
 
 # --------------------------------------------------------------------------- #
+baslik "5b. Yedekler"
+YED="$(grep -E '^BACKUP_DIR=' .env 2>/dev/null | cut -d= -f2- | tr -d '"'"'"'')"
+YED="${YED:-yedekler}"
+[[ "$YED" = /* ]] || YED="${PROJE_DIZIN}/${YED}"
+if [[ -d "$YED" ]]; then
+    adet="$(find "$YED" -maxdepth 1 -type f \( -name 'envanter_*' -o -name 'dosyalar_*' \) 2>/dev/null | wc -l)"
+    if [[ "$adet" -gt 0 ]]; then
+        ok "${adet} yedek var: ${YED}"
+        son="$(find "$YED" -maxdepth 1 -type f -name 'envanter_*' -printf '%T@ %p\n' 2>/dev/null \
+               | sort -rn | head -1 | cut -d' ' -f2-)"
+        [[ -n "$son" ]] && printf "      son: %s (%s)\n" "$(basename "$son")" \
+                                  "$(date -r "$son" '+%d.%m.%Y %H:%M')"
+    else
+        uyar "Yedek klasörü boş: ${YED}" "Ayarlar → Yedekleme'den yedek alın"
+    fi
+else
+    uyar "Yedek klasörü yok: ${YED}" "ilk yedekte kendiliğinden oluşur"
+fi
+if crontab -l 2>/dev/null | grep -q 'envanter-yedek'; then
+    ok "Otomatik yedek cron işi tanımlı"
+else
+    uyar "Otomatik yedek kurulmamış" \
+         "sudo cp deploy/yedek.sh /usr/local/bin/envanter-yedek && crontab -e"
+fi
+
+# --------------------------------------------------------------------------- #
 baslik "6. Servis"
 if systemctl is-active --quiet "$SERVIS" 2>/dev/null; then
     ok "systemd servisi çalışıyor (${SERVIS})"

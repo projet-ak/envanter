@@ -22,6 +22,12 @@ def cihaz(client):
     return client.post("/assets", json={"asset_tag": "DSY-1", "name": "Laptop"}).json()
 
 
+def _diskteki_dosyalar():
+    """Yükleme klasörü altındaki tüm dosyalar (alt klasörler dahil)."""
+    from pathlib import Path
+    return sorted(y for y in Path(settings.upload_dir).rglob("*") if y.is_file())
+
+
 def _yukle(client, asset_id, ad, icerik, tur, ct="application/octet-stream"):
     return client.post(
         f"/assets/{asset_id}/dosyalar",
@@ -75,13 +81,11 @@ def test_cihazin_dosyalari_listelenir(client, cihaz):
 
 def test_dosya_silinir_ve_diskten_kalkar(client, cihaz):
     d = _yukle(client, cihaz["id"], "a.png", PNG, "gorsel", "image/png").json()
-    from pathlib import Path
-    diskte = list(Path(settings.upload_dir).iterdir())
-    assert len(diskte) == 1
+    assert len(_diskteki_dosyalar()) == 1
 
     assert client.delete(f"/dosyalar/{d['id']}").status_code == 204
     assert client.get(f"/assets/{cihaz['id']}/dosyalar").json() == []
-    assert list(Path(settings.upload_dir).iterdir()) == []
+    assert _diskteki_dosyalar() == []
 
 
 def test_turkce_dosya_adi_korunur(client, cihaz):
@@ -101,16 +105,15 @@ def test_tehlikeli_uzanti_reddedilir(client, cihaz):
 
 
 def test_yol_gecisi_dosya_adi_zarar_vermez(client, cihaz, tmp_path):
-    """'../' içeren ad diskte dizin dışına yazmamalı."""
+    """'../' içeren ad yükleme klasörünün dışına yazmamalı."""
     r = _yukle(client, cihaz["id"], "../../../../etc/kotu.png", PNG, "gorsel",
                "image/png")
     assert r.status_code == 201
-    from pathlib import Path
-    yazilanlar = list(Path(settings.upload_dir).iterdir())
+    yazilanlar = _diskteki_dosyalar()
     assert len(yazilanlar) == 1
-    # Diskteki ad sunucu üretimi: cihaz kimliği + rastgele
+    # Diskteki yol sunucu üretimi: klasör/yıl/ay/<id>-<rastgele>
+    assert ".." not in r.json()["yol"]
     assert yazilanlar[0].name.startswith(f"{cihaz['id']}-")
-    assert ".." not in yazilanlar[0].name
     # Görünen ad da dizin bileşeni taşımamalı
     assert r.json()["dosya_adi"] == "kotu.png"
 
@@ -180,3 +183,66 @@ def test_detay_ucu_dosyalari_icerir(client, cihaz):
 
 def test_dosyasiz_cihazda_liste_bos(client, cihaz):
     assert client.get(f"/detay/asset/{cihaz['id']}").json()["dosyalar"] == []
+
+
+# --------------------------------------------------------------------------- #
+# Klasör düzeni — görseller ve belgeler ayrı, veritabanında yalnızca yol
+# --------------------------------------------------------------------------- #
+import datetime as _dt  # noqa: E402
+
+
+def _bugun_alt() -> str:
+    return f"{_dt.date.today():%Y/%m}"
+
+
+def test_gorseller_ayri_klasore_yazilir(client, cihaz):
+    d = _yukle(client, cihaz["id"], "on.png", PNG, "gorsel", "image/png").json()
+    assert d["yol"].startswith(f"gorseller/{_bugun_alt()}/")
+    from pathlib import Path
+    assert (Path(settings.upload_dir) / d["yol"]).is_file()
+
+
+def test_belgeler_ayri_klasore_yazilir(client, cihaz):
+    imza = _yukle(client, cihaz["id"], "imzali.pdf", PDF, "zimmet_formu").json()
+    diger = _yukle(client, cihaz["id"], "not.txt", b"metin", "diger").json()
+    assert imza["yol"].startswith(f"belgeler/{_bugun_alt()}/")
+    assert diger["yol"].startswith(f"belgeler/{_bugun_alt()}/")
+
+
+def test_faturalar_ayri_klasore_yazilir(client, cihaz):
+    d = _yukle(client, cihaz["id"], "fat.pdf", PDF, "fatura").json()
+    assert d["yol"].startswith(f"faturalar/{_bugun_alt()}/")
+
+
+def test_gorsel_ve_belge_ayni_klasorde_degil(client, cihaz):
+    g = _yukle(client, cihaz["id"], "a.png", PNG, "gorsel", "image/png").json()
+    b = _yukle(client, cihaz["id"], "b.pdf", PDF, "zimmet_formu").json()
+    from pathlib import Path
+    assert Path(g["yol"]).parent != Path(b["yol"]).parent
+
+
+def test_veritabaninda_yalnizca_goreli_yol_durur(client, cihaz):
+    """Mutlak yol tutulmamalı: sunucu/klasör değişince kayıtlar geçersiz olmasın."""
+    d = _yukle(client, cihaz["id"], "a.png", PNG, "gorsel", "image/png").json()
+    assert not d["yol"].startswith("/")
+    assert settings.upload_dir not in d["yol"]
+
+
+def test_kayit_yolu_kurcalanirsa_disari_cikilamaz(client, cihaz, db_session):
+    """Veritabanındaki yol elle bozulsa bile kök klasörün dışı okunamamalı."""
+    from app import models
+
+    d = _yukle(client, cihaz["id"], "a.png", PNG, "gorsel", "image/png").json()
+    kayit = db_session.get(models.AssetFile, d["id"])
+    kayit.yol = "../../../../etc/passwd"
+    db_session.commit()
+
+    r = client.get(f"/dosyalar/{d['id']}")
+    assert r.status_code == 400
+    assert "passwd" not in r.text
+
+
+def test_ayni_ay_icinde_cakisma_olmaz(client, cihaz):
+    yollar = {_yukle(client, cihaz["id"], "ayni.png", PNG, "gorsel",
+                     "image/png").json()["yol"] for _ in range(5)}
+    assert len(yollar) == 5

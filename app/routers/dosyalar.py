@@ -1,12 +1,24 @@
 """Cihaz dosya ekleri: fotoğraf, imzalı zimmet formu, fatura…
 
-Dosyalar veritabanına değil diske yazılır (`settings.upload_dir`). Yükleme
-adları kullanıcıdan gelmez — sunucu üretir — böylece yol geçişi (``../``) ve
-ad çakışması mümkün olmaz.
+İçerik veritabanında değil diskte durur; veritabanında yalnızca **göreli yol**
+saklanır (`AssetFile.yol`). Klasörler türe ve tarihe göre ayrılır:
+
+    yuklemeler/
+      gorseller/2026/08/12-a1b2c3d4e5f6a7b8.png
+      belgeler/2026/08/12-9f8e7d6c5b4a3210.pdf
+      faturalar/2026/08/...
+
+Neden tarih klasörü: tek klasörde on binlerce dosya biriktiğinde listeleme ve
+yedekleme yavaşlar; ay bazlı bölme bunu önler ve arşivlemeyi kolaylaştırır.
+
+Dosya adları kullanıcıdan gelmez — sunucu üretir — böylece yol geçişi (``../``)
+ve ad çakışması mümkün olmaz. Okuma sırasında da yolun kök klasörün altında
+kaldığı ayrıca doğrulanır.
 """
 
 from __future__ import annotations
 
+import datetime as dt
 import mimetypes
 import secrets
 import unicodedata
@@ -35,6 +47,15 @@ IZINLI_UZANTILAR = {
 GORSEL_UZANTILAR = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"}
 
 
+# Tür -> klasör adı
+KLASORLER = {
+    models.DosyaTuru.gorsel: "gorseller",
+    models.DosyaTuru.zimmet_formu: "belgeler",
+    models.DosyaTuru.fatura: "faturalar",
+    models.DosyaTuru.diger: "belgeler",
+}
+
+
 def yukleme_dizini() -> Path:
     d = Path(settings.upload_dir)
     d.mkdir(parents=True, exist_ok=True)
@@ -52,8 +73,24 @@ def _guvenli_ad(ad: str) -> str:
     return ad[:200] or "dosya"
 
 
-def _dosya_yolu(kayit: models.AssetFile) -> Path:
-    return yukleme_dizini() / kayit.saklama_adi
+def yeni_yol(asset_id: int, tur: models.DosyaTuru, uzanti: str) -> str:
+    """Yeni dosya için göreli yol üretir: <klasör>/<yıl>/<ay>/<id>-<rastgele><uz>."""
+    bugun = dt.date.today()
+    return (f"{KLASORLER.get(tur, 'belgeler')}/{bugun:%Y/%m}/"
+            f"{asset_id}-{secrets.token_hex(8)}{uzanti}")
+
+
+def tam_yol(goreli: str) -> Path:
+    """Göreli yolu diskteki tam yola çevirir ve kök klasörün altında tutar.
+
+    Veritabanındaki değer bozulsa ya da elle değiştirilse bile yükleme
+    klasörünün dışına çıkılamaz.
+    """
+    kok = yukleme_dizini().resolve()
+    hedef = (kok / goreli).resolve()
+    if not hedef.is_relative_to(kok):
+        raise HTTPException(400, "Geçersiz dosya yolu")
+    return hedef
 
 
 @router.get("/assets/{asset_id}/dosyalar",
@@ -101,15 +138,17 @@ async def dosya_yukle(
     if not icerik:
         raise HTTPException(400, "Dosya boş")
 
-    # Diskteki ad sunucu tarafından üretilir: çakışma ve yol geçişi olmaz.
-    saklama_adi = f"{asset_id}-{secrets.token_hex(8)}{uzanti}"
-    (yukleme_dizini() / saklama_adi).write_bytes(icerik)
+    # Diskteki yol sunucu tarafından üretilir: çakışma ve yol geçişi olmaz.
+    goreli = yeni_yol(asset_id, tur, uzanti)
+    hedef = tam_yol(goreli)
+    hedef.parent.mkdir(parents=True, exist_ok=True)
+    hedef.write_bytes(icerik)
 
     kayit = models.AssetFile(
         asset_id=asset_id,
         tur=tur,
         dosya_adi=ad,
-        saklama_adi=saklama_adi,
+        yol=goreli,
         content_type=file.content_type or mimetypes.guess_type(ad)[0],
         boyut=len(icerik),
         aciklama=aciklama,
@@ -130,7 +169,7 @@ def dosya_indir(dosya_id: int, db: Session = Depends(get_db)):
     kayit = db.get(models.AssetFile, dosya_id)
     if kayit is None:
         raise HTTPException(404, "Dosya bulunamadı")
-    yol = _dosya_yolu(kayit)
+    yol = tam_yol(kayit.yol)
     if not yol.exists():
         raise HTTPException(404, "Dosya diskte bulunamadı")
 
@@ -150,7 +189,7 @@ def dosya_sil(dosya_id: int, db: Session = Depends(get_db)):
     kayit = db.get(models.AssetFile, dosya_id)
     if kayit is None:
         raise HTTPException(404, "Dosya bulunamadı")
-    _dosya_yolu(kayit).unlink(missing_ok=True)
+    tam_yol(kayit.yol).unlink(missing_ok=True)
     db.add(models.ActivityLog(
         action=models.ActivityAction.update, item_type="asset",
         item_id=kayit.asset_id, note=f"Dosya silindi: {kayit.dosya_adi}",

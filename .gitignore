@@ -13,3 +13,6 @@ build/
 
 # Yüklenen dosyalar (cihaz görselleri, imzalı zimmet formları)
 yuklemeler/
+
+# Yedekler
+yedekler/

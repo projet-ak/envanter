@@ -12,7 +12,7 @@ from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.routers import (
     assets, auth, csv_io, detay, documents, dosyalar, excel_io, invoices,
-    lookups, personel, reports, search,
+    lookups, personel, reports, search, yedekleme,
 )
 from app.seed import seed_defaults
 
@@ -67,6 +67,7 @@ app.include_router(invoices.router)
 app.include_router(excel_io.router)
 app.include_router(detay.router)
 app.include_router(dosyalar.router)
+app.include_router(yedekleme.router)
 
 
 @app.get("/", include_in_schema=False)

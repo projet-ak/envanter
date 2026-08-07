@@ -74,13 +74,14 @@ Giriş JWT ile yapılır. Üç rol vardır:
 
 ### Kullanıcı ayarları
 
-**Ayarlar** ekranı üç bölümdür:
+**Ayarlar** ekranının bölümleri:
 
 | Bölüm | Kim görür | Ne yapar |
 |---|---|---|
 | Profilim | herkes | Ad, soyad, e-posta, telefon |
 | Parola | herkes | Kendi parolasını değiştirir (mevcut parola sorulur) |
 | Kullanıcı hesapları | yalnızca `admin` | Kullanıcı adı, yetki, parola sıfırlama, hesap açma/kapatma |
+| Yedekleme | yalnızca `admin` | Yedek al, listele, indir, sil (bkz. *Yedekleme*) |
 
 Ayrı bir kullanıcı tablosu yoktur — aynı kişi hem personel hem kullanıcıdır.
 **+ Kullanıcı ekle** penceresi iki yol sunar:
@@ -99,6 +100,9 @@ curl -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
   -d '{"username":"mehmet","yeni_parola":"GucluParola1","role":"editor"}' \
   "$API/users/42/hesap"
 ```
+
+Bir kullanıcıyı **yönetici yapmak** için hesap listesindeki yetki kutusundan
+"Yönetici"yi seçmeniz yeterli; yeni kullanıcı eklerken de yetki formda seçilir.
 
 Sistem yöneticisiz kalamaz: kendi yetkinizi düşüremez, kendi hesabınızı
 kapatamazsınız; giriş yapabilen son yöneticiyi devre dışı bırakacak her
@@ -333,7 +337,20 @@ curl -X DELETE -H "Authorization: Bearer $T" \
 
 Her cihaza fotoğraf, **imzalı/taranmış zimmet formu**, fatura ve diğer belgeler
 eklenebilir. Dosyalar veritabanında değil diskte (`UPLOAD_DIR`, varsayılan
-`yuklemeler/`) tutulur.
+`yuklemeler/`) tutulur; veritabanında **yalnızca göreli yol** saklanır.
+
+Klasörler türe ve aya göre ayrılır:
+
+```
+yuklemeler/
+  gorseller/2026/08/12-a1b2c3d4e5f6a7b8.png
+  belgeler/2026/08/12-9f8e7d6c5b4a3210.pdf      ← imzalı zimmet formu, diğer belgeler
+  faturalar/2026/08/...
+```
+
+> Tek klasörde on binlerce dosya biriktiğinde listeleme ve yedekleme yavaşlar;
+> ay bazlı bölme bunu önler. Yol **göreli** tutulur — sunucu ya da klasör
+> değişince kayıtlar geçersiz olmasın diye.
 
 ```bash
 curl -H "Authorization: Bearer $T" -F "file=@imzali.pdf" -F "tur=zimmet_formu" \
@@ -352,7 +369,46 @@ Yürütülebilir dosyalar (`.exe`, `.sh`, `.php`…) reddedilir; boyut sınırı
 dosya adındaki `../` gibi ifadeler zarar veremez.
 
 > **Yedeklemede `yuklemeler/` klasörünü de al** — veritabanı yedeği bu
-> dosyaları içermez.
+> dosyaları içermez. Arayüzdeki yedekleme bunu kendiliğinden yapar
+> (bkz. *Yedekleme*).
+
+## Yedekleme
+
+**Ayarlar → Yedekleme** (yalnızca yönetici):
+
+- **Şimdi yedek al** — veritabanının tam dökümü + yüklenen dosyaların arşivi,
+  iki ayrı dosya olarak
+- Mevcut yedekleri listeleme, **indirme** ve silme
+- `BACKUP_KEEP_DAYS` (varsayılan 30) günden eski yedekler otomatik silinir
+
+```bash
+curl -H "Authorization: Bearer $T" "$API/yedek"          # liste
+curl -X POST -H "Authorization: Bearer $T" "$API/yedek"  # şimdi al
+```
+
+| Veritabanı | Üretilen dosya | Kullanılan araç |
+|---|---|---|
+| PostgreSQL | `envanter_<tarih>.dump` | `pg_dump -Fc` |
+| MySQL / MariaDB | `envanter_<tarih>.sql` | `mysqldump --single-transaction` |
+| SQLite | `envanter_<tarih>.sqlite` | `sqlite3 .backup` (tutarlı kopya) |
+
+Yüklenen dosyalar ayrıca `dosyalar_<tarih>.tar.gz` olarak arşivlenir.
+
+> Parola hiçbir zaman komut satırına yazılmaz (`ps` çıktısı tüm kullanıcılara
+> açıktır): PostgreSQL için `PGPASSWORD`, MySQL için geçici `--defaults-extra-file`
+> kullanılır. Dış araçların hata çıktısı da maskelenir — bağlantı dizesi
+> içerebilir.
+
+**Her gece otomatik yedek** için sunucuda bir kez:
+
+```bash
+sudo cp deploy/yedek.sh /usr/local/bin/envanter-yedek
+sudo chmod +x /usr/local/bin/envanter-yedek
+echo "0 3 * * * /usr/local/bin/envanter-yedek" | sudo crontab -
+```
+
+> ⚠️ Yedekler sunucunun kendi diskinde durur. Disk arızasına karşı düzenli
+> olarak başka bir yere (harici disk, bulut) kopyalayın.
 
 ## Zimmet verme
 
@@ -507,6 +563,8 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/assets/ozellik-sablonu` | Bilinen özellik grupları ve alan adları |
 | `GET/POST` | `/assets/{id}/dosyalar` | Cihaz dosyalarını listele / yükle |
 | `GET/DELETE` | `/dosyalar/{id}` | Dosyayı indir/göster / sil |
+| `GET/POST` | `/yedek` | Yedekleri listele / şimdi yedek al (admin) |
+| `GET/DELETE` | `/yedek/{ad}` | Yedeği indir / sil (admin) |
 | `POST` | `/search` | Doğal dil araması |
 | `GET` | `/io/assets.csv` | Varlıkları CSV olarak indir |
 | `POST` | `/io/assets/import` | CSV'den varlık içe aktar (etikete göre ekle/güncelle) |
@@ -550,6 +608,7 @@ app/
   crud_factory.py    # Referans tabloları için jenerik CRUD
   seed.py            # Varsayılan durum etiketleri
   santiye.py         # Cihazları proje koduna göre şantiyelere dağıtma
+  yedek.py           # Veritabanı dökümü + dosya arşivi
   arama.py           # Türkçe duyarlı yazdıkça arama (cihaz/personel/lokasyon)
   pdf/               # Zimmet formu ve barkod/QR etiket üretimi
   ai/search.py       # Doğal dil → yapısal filtre (Claude)

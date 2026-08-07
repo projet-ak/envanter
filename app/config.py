@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     upload_dir: str = "yuklemeler"
     max_upload_mb: int = 20
 
+    # Yedekler (Ayarlar → Yedekleme ve deploy/yedek.sh aynı klasörü kullanır)
+    backup_dir: str = "yedekler"
+    backup_keep_days: int = 30
+
     # Kimlik doğrulama (JWT)
     # ÜRETİMDE mutlaka değiştir! (örn: `openssl rand -hex 32`)
     secret_key: str = "dev-insecure-change-me-0123456789abcdef-please-set-SECRET_KEY"

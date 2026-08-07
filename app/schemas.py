@@ -403,6 +403,7 @@ class AssetFileRead(ORMModel):
     asset_id: int
     tur: DosyaTuru
     dosya_adi: str
+    yol: str
     content_type: str | None = None
     boyut: int
     aciklama: str | None = None

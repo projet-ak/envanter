@@ -2303,7 +2303,10 @@
 
     function renderAyarlarView() {
       const sekmeler = [['profil', '👤 Profilim'], ['parola', '🔒 Parola']];
-      if (me.role === 'admin') sekmeler.push(['hesaplar', '🛡️ Kullanıcı hesapları']);
+      if (me.role === 'admin') {
+        sekmeler.push(['hesaplar', '🛡️ Kullanıcı hesapları']);
+        sekmeler.push(['yedek', '💾 Yedekleme']);
+      }
 
       document.getElementById('view').innerHTML =
         sayfaBasligi('⚙️', 'Ayarlar', 'Hesabınızı ve kullanıcı yetkilerini yönetin') + `
@@ -2321,6 +2324,7 @@
     function ayarIcerikCiz() {
       if (ayarBolum === 'profil') return ayarProfil();
       if (ayarBolum === 'parola') return ayarParola();
+      if (ayarBolum === 'yedek') return ayarYedek();   // mesajsız
       return ayarHesaplar();
     }
 
@@ -2447,7 +2451,15 @@
             <td><b>${esc(h.username)}</b></td>
             <td>${kacir([h.first_name, h.last_name].filter(Boolean).join(' '))}</td>
             <td class="muted">${esc(h.email)}</td>
-            <td><span class="tag role">${ROL_ADI[h.role] || h.role}</span></td>
+            <td>
+              <select data-onceki="${h.role}"
+                      onchange="rolDegistir(${h.id}, this.value, this)"
+                      ${h.id === me.id ? 'disabled title="Kendi yetkinizi buradan değiştiremezsiniz"' : ''}>
+                <option value="viewer"${h.role === 'viewer' ? ' selected' : ''}>Görüntüleyici</option>
+                <option value="editor"${h.role === 'editor' ? ' selected' : ''}>Düzenleyici</option>
+                <option value="admin"${h.role === 'admin' ? ' selected' : ''}>Yönetici</option>
+              </select>
+            </td>
             <td>${h.active
                   ? (h.girebilir ? '<span class="tag free">etkin</span>'
                                  : '<span class="tag used">parolasız</span>')
@@ -2455,9 +2467,141 @@
             <td><button class="ghost mini"
                   onclick="hesapDuzenle(${h.id})">✏️ Düzenle</button></td>
           </tr>`).join('')}</tbody></table>
-          <div class="note">Yetkiler: <b>Yönetici</b> her şey + kullanıcı yönetimi ·
-            <b>Düzenleyici</b> kayıt ekler/değiştirir · <b>Görüntüleyici</b> yalnızca okur.</div>
+          <div class="note">Yetkiyi listeden doğrudan değiştirebilirsiniz —
+            birini <b>yönetici</b> yapmak için yetki kutusundan “Yönetici”yi seçin.</div>
+          <div class="note">
+            <b>Yönetici</b>: her şey + kullanıcı yönetimi ve yedekleme ·
+            <b>Düzenleyici</b>: kayıt ekler/değiştirir, zimmet verir ·
+            <b>Görüntüleyici</b>: yalnızca okur.</div>
         </div>`;
+    }
+
+    // Listeden tek adımda yetki değiştirme (yönetici yapma dahil)
+    async function rolDegistir(kisiId, rol, secim) {
+      // Önceki değer data-onceki'de duruyor: onchange tetiklendiğinde
+      // selectedIndex zaten yeni değeri gösterdiği için oradan okunamaz.
+      const onceki = secim.dataset.onceki;
+      secim.disabled = true;
+      try {
+        await api(`/users/${kisiId}/hesap`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: rol }),
+        });
+        ayarHesaplar();          // durumu tazele
+      } catch (e) {
+        alert('⚠ ' + (e.detail || 'Yetki değiştirilemedi'));
+        secim.value = onceki;    // eski yetkiye dön
+        secim.disabled = false;
+      }
+    }
+
+    // ---------- Yedekleme ----------
+    function boyutYaz(bayt) {
+      if (!bayt) return '—';
+      const birim = ['B', 'KB', 'MB', 'GB'];
+      let i = 0, n = bayt;
+      while (n >= 1024 && i < birim.length - 1) { n /= 1024; i++; }
+      return `${n.toFixed(n < 10 && i ? 1 : 0)} ${birim[i]}`;
+    }
+
+    async function ayarYedek(mesaj = '') {
+      const kutu = document.getElementById('ayarIcerik');
+      kutu.innerHTML = '<div class="panel"><h2>Yedekleme</h2>Yükleniyor…</div>';
+      let d;
+      try { d = await api('/yedek'); }
+      catch (e) {
+        kutu.innerHTML = `<div class="panel">⚠ ${e.detail || 'Alınamadı'}</div>`;
+        return;
+      }
+      const TUR_ADI = { veritabani: '🗄️ Veritabanı', dosyalar: '📎 Yüklenen dosyalar' };
+
+      kutu.innerHTML = `
+        <div class="panel">
+          <div class="row" style="align-items:center; margin-bottom:6px">
+            <h2 style="margin:0; flex:1">Yedek al</h2>
+            <button class="primary" id="ydDug" onclick="yedekAl()">
+              💾 Şimdi yedek al</button>
+          </div>
+          <div class="note">Veritabanının tamamı ve yüklenen dosyalar
+            (görseller, imzalı formlar) ayrı dosyalar hâlinde arşivlenir.
+            Yedekler <code>${kacir(d.klasor)}</code> klasöründe tutulur ve
+            ${d.saklama_gun} günden eskiler otomatik silinir.</div>
+          <div id="ydBilgi" class="note">${mesaj}</div>
+        </div>
+        <div class="panel">
+          <h2>Mevcut yedekler (${d.yedekler.length})</h2>
+          ${d.yedekler.length ? `<table><thead><tr>
+            <th>Dosya</th><th>İçerik</th><th>Boyut</th><th>Tarih</th><th></th>
+            </tr></thead><tbody>
+            ${d.yedekler.map(y => `<tr>
+              <td><b>${kacir(y.ad)}</b></td>
+              <td>${TUR_ADI[y.tur] || y.tur}</td>
+              <td class="muted">${boyutYaz(y.boyut)}</td>
+              <td class="muted">${new Date(y.tarih).toLocaleString('tr-TR')}</td>
+              <td>
+                <button class="ghost mini" onclick="yedekIndir('${
+                  encodeURIComponent(y.ad)}')">⬇ İndir</button>
+                <button class="ghost mini tehlike" onclick="yedekSil('${
+                  encodeURIComponent(y.ad)}')">🗑</button>
+              </td></tr>`).join('')}</tbody></table>`
+            : '<div class="muted">Henüz yedek alınmamış.</div>'}
+        </div>
+        <div class="panel">
+          <h2>Otomatik yedek</h2>
+          <div class="note">Her gece otomatik yedek için sunucuda bir kez
+            şu komutu çalıştırın:</div>
+          <pre style="background:var(--cizgi2); padding:12px; border-radius:9px;
+                      overflow-x:auto; font-size:12.5px"><code>sudo cp deploy/yedek.sh /usr/local/bin/envanter-yedek
+sudo chmod +x /usr/local/bin/envanter-yedek
+echo "0 3 * * * /usr/local/bin/envanter-yedek" | sudo crontab -</code></pre>
+          <div class="note">⚠ Yedekler sunucunun kendi diskinde durur. Disk
+            arızasına karşı düzenli olarak başka bir yere (harici disk, bulut)
+            kopyalayın.</div>
+        </div>`;
+    }
+
+    async function yedekAl() {
+      const dug = document.getElementById('ydDug');
+      const bilgi = document.getElementById('ydBilgi');
+      dug.disabled = true;
+      dug.textContent = '⏳ Yedek alınıyor…';
+      bilgi.textContent = '';
+      try {
+        const s = await api('/yedek', { method: 'POST' });
+        // Mesajı tazelemeye taşı: panel yeniden çizilince kaybolmasın
+        const metin = `<span style="color:var(--ok)">✓ Yedek alındı:
+          ${kacir(s.veritabani)} (${boyutYaz(s.veritabani_boyut)})` +
+          (s.dosyalar ? ` · ${kacir(s.dosyalar)} (${boyutYaz(s.dosyalar_boyut)})` : '') +
+          (s.silinen_eski ? ` · ${s.silinen_eski} eski yedek silindi` : '') + '</span>';
+        bilgi.innerHTML = metin;
+        ayarYedek(metin);
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${
+          e.detail || 'Yedek alınamadı'}</span>`;
+      } finally {
+        dug.disabled = false;
+        dug.textContent = '💾 Şimdi yedek al';
+      }
+    }
+
+    async function yedekIndir(adKodlu) {
+      try {
+        const r = await fetch(url('/yedek/' + adKodlu),
+                              { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'İndirilemedi' }));
+        const baglanti = URL.createObjectURL(await r.blob());
+        const a = document.createElement('a');
+        a.href = baglanti; a.download = decodeURIComponent(adKodlu); a.click();
+        setTimeout(() => URL.revokeObjectURL(baglanti), 60000);
+      } catch (e) { alert('⚠ ' + (e.detail || e.message || 'İndirilemedi')); }
+    }
+
+    async function yedekSil(adKodlu) {
+      if (!confirm(`"${decodeURIComponent(adKodlu)}" silinsin mi?`)) return;
+      try {
+        await api('/yedek/' + adKodlu, { method: 'DELETE' });
+        ayarYedek();
+      } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
     }
 
     // Personel kaydına giriş yetkisi verme (kişi arayarak)

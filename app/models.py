@@ -377,8 +377,11 @@ class AssetFile(Base):
     """Cihaza bağlı dosya eki: fotoğraf, imzalı zimmet formu, fatura…
 
     İçerik veritabanında değil diskte tutulur (`settings.upload_dir`); burada
-    yalnızca künyesi durur. Böylece yedek boyutu şişmez ve büyük dosyalar
-    doğrudan dosya sisteminden servis edilir.
+    yalnızca künyesi ve **göreli yolu** durur. Böylece yedek boyutu şişmez ve
+    büyük dosyalar doğrudan dosya sisteminden servis edilir.
+
+    Klasör düzeni türe ve aya göre ayrılır (bkz. app/routers/dosyalar.py):
+    gorseller/, belgeler/, faturalar/ → YYYY/MM/
     """
 
     __tablename__ = "asset_files"
@@ -391,7 +394,10 @@ class AssetFile(Base):
         Enum(DosyaTuru), default=DosyaTuru.diger, index=True
     )
     dosya_adi: Mapped[str] = mapped_column(String(255))      # kullanıcının gördüğü ad
-    saklama_adi: Mapped[str] = mapped_column(String(255), unique=True)  # diskteki ad
+    # Yükleme klasörüne göre GÖRELİ yol, örn. "gorseller/2026/08/12-a1b2.png".
+    # Mutlak yol tutulmaz: sunucu taşınınca ya da klasör değişince kayıtlar
+    # geçersiz olmasın diye.
+    yol: Mapped[str] = mapped_column(String(500), unique=True)
     content_type: Mapped[str | None] = mapped_column(String(120))
     boyut: Mapped[int] = mapped_column(Integer, default=0)
     aciklama: Mapped[str | None] = mapped_column(String(500))
