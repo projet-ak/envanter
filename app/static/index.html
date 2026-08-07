@@ -213,6 +213,7 @@
     }
 
     function logout() {
+      canliDurdur();
       token = ''; me = null;
       localStorage.removeItem('token'); localStorage.removeItem('me');
       document.getElementById('app').classList.add('hidden');
@@ -245,7 +246,8 @@
       activeTab = tab;
       document.querySelectorAll('#tabs button').forEach(b =>
         b.classList.toggle('active', b.dataset.tab === tab));
-      if (tab === 'dashboard') renderDashboard();
+      if (tab !== 'dashboard') canliDurdur();
+      if (tab === 'dashboard') { renderDashboard(); canliBaslat(); }
       else if (tab === 'assets') renderAssetsView();
       else if (tab === 'invoice') renderInvoiceView();
       else if (tab === 'personel') renderPersonelView();
@@ -346,9 +348,11 @@
     async function loadTanim() {
       const cfg = TANIMLAR[aktifTanim];
       const items = await api(cfg.endpoint + '?limit=500');
-      const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('');
-      const rows = items.map(it => '<tr>' +
-        cfg.cols.map(([k]) => `<td>${esc(it[k])}</td>`).join('') + '</tr>').join('');
+      const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
+        (canWrite() ? '<th></th>' : '');
+      const rows = items.map(it => `<tr${canWrite() ? ' class="tikla" onclick="tanimDuzenle(' + it.id + ')"' : ''}>` +
+        cfg.cols.map(([k]) => `<td>${esc(it[k])}</td>`).join('') +
+        (canWrite() ? '<td class="muted">✏️</td>' : '') + '</tr>').join('');
       document.getElementById('tanimIcerik').innerHTML = `
         ${canWrite() ? `<div class="panel">
           <h2>${cfg.label} — ekle</h2>
@@ -364,6 +368,68 @@
           <h2>${cfg.label} (${items.length})</h2>
           <table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
         </div>`;
+    }
+
+    // Tanım kaydını düzenle (lokasyon, kategori, üretici…)
+    async function tanimDuzenle(id) {
+      const cfg = TANIMLAR[aktifTanim];
+      const kayit = await api(`${cfg.endpoint}/${id}`);
+      // Düzenlemede tüm görünür sütunlar + ekleme alanları birleşir
+      const anahtarlar = [...new Set([
+        ...cfg.add.map(([k, l, t]) => [k, l, t]).map(x => JSON.stringify(x)),
+        ...cfg.cols.filter(([k]) => k !== 'type')
+                   .map(([k, l]) => JSON.stringify([k, l, 'text'])),
+      ])].map(x => JSON.parse(x));
+
+      modalAc(`✏️ ${cfg.label} — ${kayit.name} düzenle`, `
+        <div class="alan-grid">
+          ${anahtarlar.map(([k, l, t]) => `<div>
+            <div class="stat-l" style="margin-bottom:3px">${l}</div>
+            <input id="td_${k}" type="${t || 'text'}" style="width:100%"
+              value="${kayit[k] ?? ''}" /></div>`).join('')}
+        </div>
+        <div class="row" style="margin-top:16px">
+          <button class="primary" onclick="tanimKaydet(${id})">Kaydet</button>
+          <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+          <span class="grow"></span>
+          <button class="ghost" onclick="tanimSil(${id})"
+            style="color:var(--err)">Sil</button>
+        </div>
+        <div id="tdInfo" class="note"></div>`);
+    }
+
+    async function tanimKaydet(id) {
+      const cfg = TANIMLAR[aktifTanim];
+      const govde = {};
+      for (const el of document.querySelectorAll('[id^="td_"]')) {
+        const v = el.value.trim();
+        govde[el.id.slice(3)] = v === '' ? null : v;
+      }
+      if (!govde.name) {
+        document.getElementById('tdInfo').textContent = 'Ad zorunlu.'; return;
+      }
+      try {
+        await api(`${cfg.endpoint}/${id}`, { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
+        modalKapat(); loadTanim();
+        filtreSecenekleriDoldur();   // filtre listeleri güncel kalsın
+      } catch (e) {
+        document.getElementById('tdInfo').innerHTML =
+          `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
+      }
+    }
+
+    async function tanimSil(id) {
+      const cfg = TANIMLAR[aktifTanim];
+      if (!confirm(`Bu ${cfg.label.toLowerCase()} kaydı silinsin mi?\n` +
+                   `Bu kayda bağlı cihazlar silinmez, yalnızca bağlantı kalkar.`)) return;
+      try {
+        await api(`${cfg.endpoint}/${id}`, { method: 'DELETE' });
+        modalKapat(); loadTanim(); filtreSecenekleriDoldur();
+      } catch (e) {
+        document.getElementById('tdInfo').innerHTML =
+          `<span style="color:var(--err)">⚠ ${e.detail || 'Silinemedi'}</span>`;
+      }
     }
 
     async function addTanim() {
@@ -619,9 +685,42 @@
       }).join('');
     }
 
-    async function renderDashboard() {
+    // Canlı dashboard: sekme açıkken belirli aralıkla kendini yeniler
+    let canliZaman = null;
+    let canliAralik = Number(localStorage.getItem('canliAralik') || 30);
+
+    function canliDurdur() {
+      if (canliZaman) { clearInterval(canliZaman); canliZaman = null; }
+    }
+
+    function canliBaslat() {
+      canliDurdur();
+      if (!canliAralik) return;
+      canliZaman = setInterval(() => {
+        // Yalnızca Özet sekmesi açık ve sayfa görünürken yenile
+        if (activeTab === 'dashboard' && !document.hidden && !document.getElementById('modalArka'))
+          renderDashboard(true);
+      }, canliAralik * 1000);
+    }
+
+    function canliAralikDegistir(saniye) {
+      canliAralik = Number(saniye);
+      localStorage.setItem('canliAralik', canliAralik);
+      canliBaslat();
+      const et = document.getElementById('canliDurum');
+      if (et) et.textContent = canliAralik
+        ? `● canlı — ${canliAralik} sn'de bir yenileniyor` : '○ otomatik yenileme kapalı';
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      // Sekmeye geri dönüldüğünde hemen tazele
+      if (!document.hidden && activeTab === 'dashboard') renderDashboard(true);
+    });
+
+    async function renderDashboard(sessiz = false) {
       const view = document.getElementById('view');
-      view.innerHTML = '<div class="panel"><h2>Özet</h2><div class="muted">Yükleniyor…</div></div>';
+      if (!sessiz)
+        view.innerHTML = '<div class="panel"><h2>Özet</h2><div class="muted">Yükleniyor…</div></div>';
       const [ozet, dag, dusuk, garanti, personel] = await Promise.all([
         api('/reports/ozet'), api('/reports/dagilim'), api('/reports/dusuk-stok'),
         api('/reports/garanti?gun=90'), api('/reports/personel-zimmet'),
@@ -632,6 +731,22 @@
       const maxL = Math.max(1, ...dag.lokasyon.map(x => x.adet));
 
       view.innerHTML = `
+        <div class="row" style="align-items:center; margin-bottom:14px">
+          <span id="canliDurum" class="note" style="margin:0">${canliAralik
+            ? `● canlı — ${canliAralik} sn'de bir yenileniyor`
+            : '○ otomatik yenileme kapalı'}</span>
+          <span class="grow"></span>
+          <span class="note" style="margin:0">Son güncelleme:
+            ${new Date().toLocaleTimeString('tr-TR')}</span>
+          <select onchange="canliAralikDegistir(this.value)">
+            <option value="0"${!canliAralik ? ' selected' : ''}>Kapalı</option>
+            <option value="10"${canliAralik === 10 ? ' selected' : ''}>10 sn</option>
+            <option value="30"${canliAralik === 30 ? ' selected' : ''}>30 sn</option>
+            <option value="60"${canliAralik === 60 ? ' selected' : ''}>1 dk</option>
+            <option value="300"${canliAralik === 300 ? ' selected' : ''}>5 dk</option>
+          </select>
+          <button class="ghost" onclick="renderDashboard(true)" title="Şimdi yenile">⟳</button>
+        </div>
         <div class="stats">
           ${statCard('Toplam varlık', ozet.varlik_toplam)}
           ${statCard('Zimmetli', ozet.zimmetli)}
@@ -793,14 +908,28 @@
         </div>
         ${dagilim ? `<div class="row" style="margin-bottom:14px">${dagilim}</div>` : ''}
         <div class="bolum"><h4>Cihazlar (${d.cihaz_sayisi})</h4>${tablo}</div>`,
-        d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
-          onclick="openPdf('/documents/zimmet/user/${id}.pdf')">📄</button>` : '');
+        (d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
+          onclick="openPdf('/documents/zimmet/user/${id}.pdf')">📄</button>` : '') +
+        (canWrite() ? `<button class="ghost" onclick="kisiDuzenle(${id})">✏️ Düzenle</button>` : ''));
     }
 
     // ---------- Cihaz düzenleme ----------
+    function secenekler(liste, secili) {
+      return '<option value="">— seçilmedi —</option>' + liste
+        .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+        .map(x => `<option value="${x.id}"${x.id === secili ? ' selected' : ''}>
+                   ${x.name}</option>`).join('');
+    }
+
     async function cihazDuzenle(id) {
-      const a = await api('/assets/' + id);
-      const alanlarListe = [
+      const [a, modeller, lokasyonlar, durumlar, tedarikciler, sirketler] =
+        await Promise.all([
+          api('/assets/' + id), api('/models?limit=1000'), api('/locations?limit=500'),
+          api('/status-labels?limit=200'), api('/suppliers?limit=500'),
+          api('/companies?limit=500'),
+        ]);
+
+      const metinAlanlar = [
         ['asset_tag','Cihaz NO','text'],['name','Ad','text'],['serial','Seri No','text'],
         ['demirbas_no','Demirbaş No','text'],['muhasebe_kodu','IFS Kodu','text'],
         ['barkod','Barkod','text'],['ip_address','IP','text'],['hostname','Hostname','text'],
@@ -810,13 +939,27 @@
         ['warranty_end','Garanti Bitiş','date'],['purchase_cost','Bedel (TL)','number'],
         ['notes','Açıklama','text'],
       ];
+      const iliskiAlanlar = [
+        ['model_id','Model (tür/marka buradan gelir)', modeller],
+        ['location_id','Lokasyon', lokasyonlar],
+        ['status_id','Durum', durumlar],
+        ['supplier_id','Tedarikçi', tedarikciler],
+        ['company_id','Şirket', sirketler],
+      ];
+
       modalAc(`✏️ ${a.asset_tag} düzenle`, `
-        <div class="alan-grid">
-          ${alanlarListe.map(([k, l, t]) => `<div>
+        <div class="bolum"><h4>İlişkiler</h4><div class="alan-grid">
+          ${iliskiAlanlar.map(([k, l, liste]) => `<div>
+            <div class="stat-l" style="margin-bottom:3px">${l}</div>
+            <select id="s_${k}" style="width:100%">${secenekler(liste, a[k])}</select>
+            </div>`).join('')}
+        </div></div>
+        <div class="bolum"><h4>Bilgiler</h4><div class="alan-grid">
+          ${metinAlanlar.map(([k, l, t]) => `<div>
             <div class="stat-l" style="margin-bottom:3px">${l}</div>
             <input id="e_${k}" type="${t}" style="width:100%"
               value="${a[k] ?? ''}" /></div>`).join('')}
-        </div>
+        </div></div>
         <div class="row" style="margin-top:16px">
           <button class="primary" onclick="cihazKaydet(${id})">Kaydet</button>
           <button class="ghost" onclick="cihazDetay(${id})">Vazgeç</button>
@@ -831,13 +974,65 @@
         const v = el.value.trim();
         govde[k] = v === '' ? null : (el.type === 'number' ? Number(v) : v);
       }
+      for (const el of document.querySelectorAll('[id^="s_"]')) {
+        govde[el.id.slice(2)] = el.value ? Number(el.value) : null;
+      }
       try {
         await api('/assets/' + id, { method: 'PUT',
           headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
         cihazDetay(id);
-        if (activeTab === 'assets') loadAssets();
+        if (activeTab === 'assets') loadAssets(true);
       } catch (e) {
         document.getElementById('duzInfo').innerHTML =
+          `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
+      }
+    }
+
+    // ---------- Personel düzenleme ----------
+    async function kisiDuzenle(id) {
+      const [k, lokasyonlar] = await Promise.all([
+        api('/users/' + id), api('/locations?limit=500'),
+      ]);
+      const alanlarListe = [
+        ['first_name','Ad','text'],['last_name','Soyad','text'],
+        ['employee_num','Sicil No','text'],['department','Departman','text'],
+        ['job_title','Unvan','text'],['sube','Şube','text'],
+        ['email','E-posta','text'],['telefon','Telefon','text'],
+        ['tckn','TCKN','text'],['ise_giris','İşe Giriş','date'],
+        ['username','Kullanıcı Adı (giriş için)','text'],
+      ];
+      modalAc(`✏️ ${k.first_name} ${k.last_name ?? ''} düzenle`, `
+        <div class="alan-grid">
+          ${alanlarListe.map(([a, l, t]) => `<div>
+            <div class="stat-l" style="margin-bottom:3px">${l}</div>
+            <input id="u_${a}" type="${t}" style="width:100%"
+              value="${k[a] ?? ''}" /></div>`).join('')}
+          <div><div class="stat-l" style="margin-bottom:3px">Lokasyon</div>
+            <select id="ul_location_id" style="width:100%">
+              ${secenekler(lokasyonlar, k.location_id)}</select></div>
+        </div>
+        <div class="row" style="margin-top:16px">
+          <button class="primary" onclick="kisiKaydet(${id})">Kaydet</button>
+          <button class="ghost" onclick="kisiDetay(${id})">Vazgeç</button>
+        </div>
+        <div id="kisiDuzInfo" class="note"></div>`);
+    }
+
+    async function kisiKaydet(id) {
+      const govde = {};
+      for (const el of document.querySelectorAll('[id^="u_"]')) {
+        const v = el.value.trim();
+        govde[el.id.slice(2)] = v === '' ? null : v;
+      }
+      const lok = document.getElementById('ul_location_id');
+      govde.location_id = lok?.value ? Number(lok.value) : null;
+      try {
+        await api('/users/' + id, { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
+        kisiDetay(id);
+        if (activeTab === 'personel') loadPersonel();
+      } catch (e) {
+        document.getElementById('kisiDuzInfo').innerHTML =
           `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
       }
     }
@@ -879,11 +1074,87 @@
           <div id="addInfo" class="note"></div>
         </div>` : ''}
         <div class="panel">
-          <h2>Varlıklar (<span id="count">0</span>)</h2>
-          <table><thead><tr><th>Etiket</th><th>Demirbaş</th><th>Ad</th><th>Seri</th><th>Durum</th><th>Zimmet</th><th></th></tr></thead>
+          <h2>Filtreler</h2>
+          <div class="row">
+            <select id="fKategori" onchange="loadAssets()"><option value="">Tüm türler</option></select>
+            <select id="fLokasyon" onchange="loadAssets()"><option value="">Tüm lokasyonlar</option></select>
+            <select id="fMarka" onchange="loadAssets()"><option value="">Tüm markalar</option></select>
+            <select id="fDurum" onchange="loadAssets()"><option value="">Tüm durumlar</option></select>
+            <select id="fZimmet" onchange="loadAssets()">
+              <option value="">Zimmet: hepsi</option>
+              <option value="true">Sadece zimmetli</option>
+              <option value="false">Sadece boşta</option>
+            </select>
+            <input id="fAra" class="grow" placeholder="Etiket / seri / demirbaş / IP ara…"
+                   oninput="gecikmeliAra()" />
+            <button class="ghost" onclick="filtreTemizle()">Temizle</button>
+          </div>
+          <div id="filtreBilgi" class="note"></div>
+        </div>
+        <div class="panel">
+          <h2>Varlıklar (<span id="count">0</span><span id="toplamBilgi"></span>)</h2>
+          <table><thead><tr><th>Etiket</th><th>Demirbaş</th><th>Ad</th><th>Tür</th>
+            <th>Lokasyon</th><th>Seri</th><th>Zimmet</th><th></th></tr></thead>
           <tbody id="rows"></tbody></table>
+          <div id="dahaFazla" class="row" style="margin-top:12px"></div>
         </div>`;
+      filtreSecenekleriDoldur();
       loadAssets();
+    }
+
+    // Filtre açılır listelerini referans tablolardan doldur
+    let refKategori = {}, refLokasyon = {}, refMarka = {}, refModelKat = {};
+    async function filtreSecenekleriDoldur() {
+      const [kat, lok, mar, dur] = await Promise.all([
+        api('/categories?limit=500'), api('/locations?limit=500'),
+        api('/manufacturers?limit=500'), api('/status-labels?limit=200'),
+      ]);
+      refKategori = Object.fromEntries(kat.map(x => [x.id, x.name]));
+      refLokasyon = Object.fromEntries(lok.map(x => [x.id, x.name]));
+      refMarka = Object.fromEntries(mar.map(x => [x.id, x.name]));
+      const doldur = (id, liste, bos) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const secili = el.value;
+        el.innerHTML = `<option value="">${bos}</option>` + liste
+          .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+          .map(x => `<option value="${x.id}">${x.name}</option>`).join('');
+        el.value = secili;
+      };
+      doldur('fKategori', kat, 'Tüm türler');
+      doldur('fLokasyon', lok, 'Tüm lokasyonlar');
+      doldur('fMarka', mar, 'Tüm markalar');
+      doldur('fDurum', dur, 'Tüm durumlar');
+      // Model -> kategori/marka eşlemesi (listede tür göstermek için)
+      const modeller = await api('/models?limit=1000');
+      refModelKat = Object.fromEntries(modeller.map(m => [m.id, m]));
+    }
+
+    let araZaman = null;
+    function gecikmeliAra() {
+      clearTimeout(araZaman);
+      araZaman = setTimeout(loadAssets, 350);
+    }
+
+    function filtreTemizle() {
+      ['fKategori','fLokasyon','fMarka','fDurum','fZimmet','fAra']
+        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      loadAssets();
+    }
+
+    function filtreSorgusu() {
+      const p = new URLSearchParams();
+      const ekle = (id, ad) => {
+        const v = document.getElementById(id)?.value;
+        if (v) p.set(ad, v);
+      };
+      ekle('fKategori', 'category_id');
+      ekle('fLokasyon', 'location_id');
+      ekle('fMarka', 'manufacturer_id');
+      ekle('fDurum', 'status_id');
+      ekle('fZimmet', 'assigned');
+      ekle('fAra', 'q');
+      return p;
     }
 
     function renderAssets(assets) {
@@ -900,18 +1171,56 @@
                      onclick="openPdf('/documents/zimmet/asset/${a.id}.pdf')">📄</button>`;
         btn += ` <button class="ghost" title="Etiket bas (QR + barkod)"
                    onclick="openPdf('/documents/etiket/asset/${a.id}.pdf')">🏷️</button>`;
+        const mdl = refModelKat[a.model_id];
+        const tur = mdl ? refKategori[mdl.category_id] : null;
         return `<tr class="tikla" onclick="if(!event.target.closest('button'))cihazDetay(${a.id})">
           <td><b>${a.asset_tag}</b></td><td class="muted">${esc(a.demirbas_no)}</td>
-          <td>${esc(a.name)}</td>
-          <td class="muted">${esc(a.serial)}</td><td>${esc(statusMap[a.status_id])}</td>
+          <td>${esc(a.name)}</td><td>${esc(tur)}</td>
+          <td class="muted">${esc(refLokasyon[a.location_id])}</td>
+          <td class="muted">${esc(a.serial)}</td>
           <td>${assigned}</td><td>${btn}</td></tr>`;
       }).join('');
     }
 
-    async function loadAssets() {
+    let gosterilenSayi = 200;
+
+    async function loadAssets(devam = false) {
       const info = document.getElementById('searchInfo'); if (info) info.textContent = '';
-      renderAssets(await api('/assets?limit=200'));
+      if (!devam) gosterilenSayi = 200;
+      const p = filtreSorgusu();
+      p.set('limit', gosterilenSayi);
+      const [liste, sayi] = await Promise.all([
+        api('/assets?' + p.toString()),
+        api('/assets/sayi?' + filtreSorgusu().toString()).catch(() => null),
+      ]);
+      renderAssets(liste);
+
+      const bilgi = document.getElementById('filtreBilgi');
+      const etiketler = [];
+      const ekle = (id, on) => {
+        const el = document.getElementById(id);
+        if (el?.value) etiketler.push(`${on}: ${el.selectedOptions?.[0]?.text ?? el.value}`);
+      };
+      ekle('fKategori', 'Tür'); ekle('fLokasyon', 'Lokasyon');
+      ekle('fMarka', 'Marka'); ekle('fDurum', 'Durum');
+      ekle('fZimmet', 'Zimmet'); ekle('fAra', 'Arama');
+      if (bilgi) bilgi.innerHTML = etiketler.length
+        ? etiketler.map(e => `<span class="pill">${e}</span>`).join(' ')
+        : '<span class="muted">Filtre yok — tüm kayıtlar</span>';
+
+      const toplam = sayi?.toplam;
+      const bilgiEl = document.getElementById('toplamBilgi');
+      if (bilgiEl && toplam != null && toplam > liste.length)
+        bilgiEl.textContent = ` / ${toplam}`;
+      else if (bilgiEl) bilgiEl.textContent = '';
+
+      const daha = document.getElementById('dahaFazla');
+      if (daha) daha.innerHTML = (toplam != null && liste.length < toplam)
+        ? `<button class="ghost" onclick="dahaGoster()">↓ Daha fazla göster
+             (${liste.length}/${toplam})</button>` : '';
     }
+
+    function dahaGoster() { gosterilenSayi += 300; loadAssets(true); }
 
     async function doSearch() {
       const q = document.getElementById('q').value.trim();
@@ -1016,7 +1325,8 @@
     // ---------- Adet bazlı türler (genel) ----------
     function renderStockView(tab) {
       const cfg = STOCK[tab];
-      const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('');
+      const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
+        (canWrite() ? '<th></th>' : '');
       const addForm = canWrite() ? `<div class="panel">
         <h2>${cfg.label} — hızlı ekle</h2>
         <div class="row">
