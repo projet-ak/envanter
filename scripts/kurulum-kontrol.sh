@@ -15,8 +15,25 @@ set -uo pipefail
 
 PROJE_DIZIN="${PROJE_DIZIN:-$(cd "$(dirname "$0")/.." && pwd)}"
 SERVIS="${SERVIS:-envanter}"
-YEREL="${YEREL:-http://127.0.0.1:8000}"
 ADRES="${ADRES:-}"
+
+# Uygulamanın portu servis tanımından okunur (deploy/envanter.service: 8901),
+# elle çalıştırılan uvicorn için 8000'e düşülür. PORT= ile elle de verilebilir.
+port_bul() {
+    [[ -n "${PORT:-}" ]] && { echo "$PORT"; return; }
+    local komut p
+    komut="$(systemctl show -p ExecStart --value "$SERVIS" 2>/dev/null)"
+    p="$(grep -oE -- '--port[= ]+[0-9]+' <<<"$komut" | grep -oE '[0-9]+' | head -1)"
+    [[ -n "$p" ]] && { echo "$p"; return; }
+    for aday in 8901 8000; do
+        if (exec 3<>"/dev/tcp/127.0.0.1/${aday}") 2>/dev/null; then
+            exec 3<&- 3>&-
+            echo "$aday"; return
+        fi
+    done
+    echo 8901
+}
+YEREL="${YEREL:-http://127.0.0.1:$(port_bul)}"
 
 cd "$PROJE_DIZIN" || exit 1
 
@@ -145,7 +162,7 @@ else
 fi
 
 # --------------------------------------------------------------------------- #
-baslik "7. Uygulama uçları (yerel)"
+baslik "7. Uygulama uçları (${YEREL})"
 kod() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null; }
 
 saglik="$(kod "${YEREL}/health")"
