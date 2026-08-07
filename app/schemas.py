@@ -643,6 +643,10 @@ class AuthUser(ORMModel):
     username: str | None = None
     first_name: str
     last_name: str | None = None
+    email: str | None = None
+    department: str | None = None
+    job_title: str | None = None
+    telefon: str | None = None
     role: UserRole
 
 
@@ -650,3 +654,41 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: AuthUser
+
+
+# --------------------------------------------------------------------------- #
+# Kullanıcı ayarları
+# --------------------------------------------------------------------------- #
+class ProfilGuncelle(BaseModel):
+    """Kullanıcının kendi düzenleyebildiği alanlar (rol buraya dahil değil)."""
+
+    first_name: str | None = Field(None, min_length=1, max_length=120)
+    last_name: str | None = None
+    email: str | None = None
+    telefon: str | None = None
+
+
+class ParolaDegistir(BaseModel):
+    mevcut_parola: str
+    yeni_parola: str = Field(min_length=8, max_length=200)
+
+
+class HesapAyarla(BaseModel):
+    """Yöneticinin bir personele giriş yetkisi vermesi / düzenlemesi."""
+
+    username: str | None = Field(None, min_length=3, max_length=120)
+    role: UserRole | None = None
+    active: bool | None = None
+    yeni_parola: str | None = Field(None, min_length=8, max_length=200)
+
+
+class HesapRead(ORMModel):
+    id: int
+    username: str | None = None
+    first_name: str
+    last_name: str | None = None
+    email: str | None = None
+    department: str | None = None
+    role: UserRole
+    active: bool
+    girebilir: bool = False        # parolası var mı (giriş yapabilir mi)

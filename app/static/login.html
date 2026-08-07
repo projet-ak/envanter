@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Giriş — Envanter Takip Sistemi</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
+  <style>
+    :root {
+      --koyu:#0d4d3f; --koyu2:#0a3a30; --yesil:#12a37d; --acik:#2dd4a7;
+      --zemin:#eef2f1; --kart:#ffffff; --cizgi:#dfe6e3;
+      --metin:#16241f; --soluk:#6b7d76; --hata:#dc2626;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; min-height:100vh; display:flex;
+      font:15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+      background:var(--zemin); color:var(--metin);
+    }
+
+    /* Sol tanıtım paneli */
+    .yan {
+      flex:0 0 46%; padding:56px 60px; color:#eaf6f2; display:flex;
+      flex-direction:column; justify-content:center; gap:28px;
+      background:linear-gradient(150deg, var(--koyu) 0%, var(--koyu2) 100%);
+    }
+    .marka { display:flex; align-items:center; gap:14px; }
+    .marka .logo {
+      width:52px; height:52px; border-radius:14px; display:grid; place-items:center;
+      background:rgba(255,255,255,.12); font-size:26px;
+    }
+    .marka b { display:block; font-size:19px; letter-spacing:.02em; }
+    .marka span { font-size:12px; opacity:.75; letter-spacing:.12em;
+                  text-transform:uppercase; }
+    .yan h1 { margin:0; font-size:30px; line-height:1.25; font-weight:650; }
+    .yan p { margin:0; opacity:.8; max-width:44ch; }
+    .ozet { display:grid; gap:12px; margin-top:6px; }
+    .ozet div { display:flex; gap:11px; align-items:center; font-size:14.5px;
+                opacity:.9; }
+    .ozet i { font-style:normal; width:26px; height:26px; border-radius:8px;
+              display:grid; place-items:center; background:rgba(255,255,255,.12);
+              font-size:14px; }
+
+    /* Giriş formu */
+    .alan { flex:1; display:grid; place-items:center; padding:40px 24px; }
+    .kutu { width:100%; max-width:400px; }
+    .kutu h2 { margin:0 0 6px; font-size:23px; }
+    .kutu .alt { margin:0 0 26px; color:var(--soluk); font-size:14px; }
+    label { display:block; font-size:13px; color:var(--soluk); margin:0 0 6px;
+            font-weight:500; }
+    input {
+      width:100%; padding:12px 14px; font-size:15px; margin-bottom:16px;
+      border:1px solid var(--cizgi); border-radius:10px; background:var(--kart);
+      color:var(--metin); font-family:inherit;
+    }
+    input:focus { outline:none; border-color:var(--yesil);
+                  box-shadow:0 0 0 3px rgba(18,163,125,.15); }
+    button {
+      width:100%; padding:12px; font-size:15px; font-weight:600; cursor:pointer;
+      border:none; border-radius:10px; background:var(--koyu); color:#fff;
+      font-family:inherit;
+    }
+    button:hover { background:var(--yesil); }
+    button:disabled { opacity:.6; cursor:progress; }
+    .hata {
+      display:none; margin-bottom:16px; padding:11px 13px; border-radius:10px;
+      background:#fee2e2; color:#991b1b; font-size:14px;
+      border:1px solid #fecaca;
+    }
+    .hata.gorunur { display:block; }
+    .dipnot { margin-top:22px; text-align:center; font-size:12.5px;
+              color:var(--soluk); }
+    .dipnot a { color:var(--yesil); text-decoration:none; }
+
+    @media (max-width:900px) {
+      body { display:block; }
+      .yan { flex:none; padding:32px 26px; gap:18px; }
+      .yan h1 { font-size:23px; }
+      .ozet { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="yan">
+    <div class="marka">
+      <div class="logo">📦</div>
+      <div>
+        <b>Envanter</b>
+        <span>Takip Sistemi</span>
+      </div>
+    </div>
+    <h1>Cihazlarınız, zimmetleriniz ve şantiyeleriniz tek yerde.</h1>
+    <p>Bilgisayardan telefona, kameradan lisansa kadar tüm demirbaşı kaydedin;
+       kimde ne var anında görün.</p>
+    <div class="ozet">
+      <div><i>📋</i> Zimmet formu üretimi ve imzalı form arşivi</div>
+      <div><i>🏗️</i> Proje kodlu şantiye bazlı takip</div>
+      <div><i>🔎</i> İsim, cihaz no ve seri no ile anında arama</div>
+      <div><i>📊</i> Canlı kontrol paneli ve raporlar</div>
+    </div>
+  </aside>
+
+  <main class="alan">
+    <form class="kutu" id="form" autocomplete="on">
+      <h2>Giriş yap</h2>
+      <p class="alt">Devam etmek için hesap bilgilerinizi girin.</p>
+
+      <div class="hata" id="hata"></div>
+
+      <label for="ku">Kullanıcı adı</label>
+      <input id="ku" name="username" autocomplete="username" autofocus required />
+
+      <label for="pa">Parola</label>
+      <input id="pa" name="password" type="password"
+             autocomplete="current-password" required />
+
+      <button type="submit" id="btn">Giriş</button>
+
+      <div class="dipnot">
+        Sorun mu var? Sistem yöneticinizle görüşün ·
+        <a id="docs" href="../docs">API dokümanı</a>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    // Uygulama alt klasörde de yayınlanabilir (örn. /envanter/login).
+    // Taban yolu adresten türetiyoruz ki API çağrıları doğru yere gitsin.
+    const BASE = window.location.pathname.replace(/\/(login|ui\/login\.html)\/?$/, '');
+    document.getElementById('docs').href = (BASE || '') + '/docs';
+
+    // Nereye dönüleceği: ?redirect=... (yoksa arayüzün kökü)
+    const VARSAYILAN = (BASE || '') + '/ui/';
+    function hedef() {
+      const ham = new URLSearchParams(location.search).get('redirect');
+      if (!ham) return VARSAYILAN;
+      // Yalnızca bu sitedeki yollara dön: "//baska.site" ya da tam URL kabul etme
+      if (!ham.startsWith('/') || ham.startsWith('//')) return VARSAYILAN;
+      return ham;
+    }
+
+    const hataKutu = document.getElementById('hata');
+    const btn = document.getElementById('btn');
+
+    function hataGoster(metin) {
+      hataKutu.textContent = metin;
+      hataKutu.classList.add('gorunur');
+    }
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hataKutu.classList.remove('gorunur');
+      btn.disabled = true;
+      btn.textContent = 'Giriş yapılıyor…';
+      try {
+        const r = await fetch((BASE || '') + '/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('ku').value.trim(),
+            password: document.getElementById('pa').value,
+          }),
+        });
+        if (!r.ok) {
+          hataGoster(r.status === 401
+            ? 'Kullanıcı adı veya parola hatalı.'
+            : 'Giriş yapılamadı, lütfen tekrar deneyin.');
+          return;
+        }
+        const d = await r.json();
+        localStorage.setItem('token', d.access_token);
+        localStorage.setItem('me', JSON.stringify(d.user));
+        location.replace(hedef());
+      } catch {
+        hataGoster('Sunucuya ulaşılamadı.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Giriş';
+      }
+    });
+  </script>
+</body>
+</html>

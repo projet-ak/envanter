@@ -3,158 +3,330 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Envanter</title>
+  <title>Envanter Takip Sistemi</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
   <style>
-    :root { --bg:#0f172a; --panel:#1e293b; --line:#334155; --txt:#e2e8f0;
-            --mut:#94a3b8; --acc:#38bdf8; --ok:#34d399; --warn:#fbbf24; --err:#f87171; }
-    * { box-sizing: border-box; }
-    body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--txt); }
-    header { padding:16px 24px; border-bottom:1px solid var(--line); display:flex;
-             align-items:center; gap:12px; }
-    header h1 { margin:0; font-size:20px; }
-    header .sub { color:var(--mut); font-size:13px; }
-    header .spacer { flex:1; }
+    /* ---------------------------------------------------------------------
+       Renk değişkenleri. Koyu tema <html data-tema="koyu"> ile açılır.
+       --------------------------------------------------------------------- */
+    :root {
+      --yan:#0d4d3f; --yan2:#0a3a30; --yan-metin:#d7ece5; --yan-soluk:#8fb5a9;
+      --yesil:#0f766e; --acc:#12a37d; --acc-acik:#2dd4a7;
+      --zemin:#f1f5f4; --kart:#ffffff; --cizgi:#e2e8e6; --cizgi2:#eef2f1;
+      --metin:#16241f; --mut:#6b7d76;
+      --ok:#059669; --warn:#d97706; --err:#dc2626; --bilgi:#2563eb;
+      --golge:0 1px 2px rgba(16,40,32,.05), 0 1px 3px rgba(16,40,32,.06);
+      --yuvarlak:12px;
+    }
+    html[data-tema="koyu"] {
+      --yan:#0b1a17; --yan2:#08120f; --yan-metin:#cfe6df; --yan-soluk:#7d9b92;
+      --zemin:#0f1714; --kart:#16211d; --cizgi:#25332e; --cizgi2:#1d2823;
+      --metin:#e4efeb; --mut:#93a8a1;
+      --golge:0 1px 3px rgba(0,0,0,.4);
+    }
 
-    /* Üst bar canlı arama */
-    #hizliKutu { position:relative; margin-left:16px; }
-    #hizliAra { width:320px; padding:8px 12px; border-radius:8px;
-                border:1px solid var(--line); background:#0b1220; color:var(--txt); }
-    #hizliAra:focus { outline:none; border-color:var(--acc); }
-    #hizliSonuc { position:absolute; top:calc(100% + 6px); left:0; width:440px;
-                  max-height:60vh; overflow-y:auto; background:#0b1220; z-index:60;
-                  border:1px solid var(--line); border-radius:10px; padding:6px;
-                  box-shadow:0 12px 32px rgba(0,0,0,.5); }
-    #hizliSonuc .baslik { font-size:11px; letter-spacing:.5px; text-transform:uppercase;
-                          color:var(--mut); padding:8px 10px 4px; }
-    #hizliSonuc .satir { padding:8px 10px; border-radius:6px; cursor:pointer;
-                         display:flex; gap:8px; align-items:baseline; }
-    #hizliSonuc .satir:hover, #hizliSonuc .satir.secili { background:#16233a; }
-    #hizliSonuc .satir .ikincil { color:var(--mut); font-size:12px; }
-    #hizliSonuc .bos { padding:14px 10px; color:var(--mut); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--zemin); color:var(--metin);
+           font:14.5px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .hidden { display:none !important; }
+    a { color:var(--acc); }
+
+    /* ---------------- Yerleşim ---------------- */
+    #kabuk { display:flex; min-height:100vh; }
+    #icerik { flex:1; min-width:0; display:flex; flex-direction:column; }
+    main#view { padding:22px 26px 60px; }
+
+    /* ---------------- Sol menü ---------------- */
+    #yanmenu {
+      flex:0 0 246px; display:flex; flex-direction:column; color:var(--yan-metin);
+      background:linear-gradient(165deg, var(--yan) 0%, var(--yan2) 100%);
+      position:sticky; top:0; height:100vh;
+    }
+    .yan-bas { display:flex; align-items:center; gap:12px; padding:18px 20px;
+               border-bottom:1px solid rgba(255,255,255,.08); }
+    .yan-bas .logo { width:38px; height:38px; border-radius:10px; font-size:19px;
+                     display:grid; place-items:center; background:rgba(255,255,255,.12); }
+    .yan-bas b { display:block; font-size:15px; line-height:1.25; }
+    .yan-bas span { font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
+                    color:var(--yan-soluk); }
+    .yan-gez { flex:1; overflow-y:auto; padding:12px 10px; }
+    .yan-baslik { font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
+                  color:var(--yan-soluk); padding:16px 12px 6px; }
+    .yan-gez button {
+      width:100%; display:flex; align-items:center; gap:11px; cursor:pointer;
+      padding:10px 12px; margin-bottom:2px; font:inherit; font-size:14px;
+      background:none; border:none; border-radius:9px; color:var(--yan-metin);
+      text-align:left; border-left:3px solid transparent;
+    }
+    .yan-gez button:hover { background:rgba(255,255,255,.07); }
+    .yan-gez button.aktif { background:rgba(255,255,255,.11); color:var(--acc-acik);
+                            border-left-color:var(--acc-acik); font-weight:600; }
+    .yan-gez button .ikon { width:20px; text-align:center; font-size:15px; }
+    .yan-gez button .rozet { margin-left:auto; font-size:11px; padding:1px 7px;
+                             border-radius:99px; background:rgba(255,255,255,.15); }
+    .yan-alt { display:flex; align-items:center; gap:10px; padding:14px 16px;
+               border-top:1px solid rgba(255,255,255,.08); }
+    .yan-alt .ad { flex:1; min-width:0; }
+    .yan-alt .ad b { display:block; font-size:13.5px; white-space:nowrap;
+                     overflow:hidden; text-overflow:ellipsis; }
+    .yan-alt .ad span { font-size:11.5px; color:var(--yan-soluk); }
+    .yan-alt .cik { background:none; border:none; color:var(--yan-soluk);
+                    cursor:pointer; font-size:16px; padding:4px; }
+    .yan-alt .cik:hover { color:#fff; }
+    .avatar { width:34px; height:34px; border-radius:50%; flex:none;
+              display:grid; place-items:center; font-size:12.5px; font-weight:700;
+              background:var(--acc); color:#04211a; letter-spacing:.02em; }
+
+    /* ---------------- Üst bar ---------------- */
+    #ustbar { display:flex; align-items:center; gap:14px; padding:10px 22px;
+              background:var(--kart); border-bottom:1px solid var(--cizgi);
+              position:sticky; top:0; z-index:40; }
+    #hizliKutu { position:relative; flex:1; max-width:460px; }
+    #hizliAra { width:100%; padding:9px 13px; font:inherit; font-size:14px;
+                border:1px solid var(--cizgi); border-radius:9px;
+                background:var(--zemin); color:var(--metin); }
+    #hizliAra:focus { outline:none; border-color:var(--acc);
+                      box-shadow:0 0 0 3px rgba(18,163,125,.13); }
+    #hizliSonuc { position:absolute; top:calc(100% + 6px); left:0; width:min(560px,92vw);
+                  max-height:64vh; overflow-y:auto; background:var(--kart); z-index:60;
+                  border:1px solid var(--cizgi); border-radius:12px; padding:6px;
+                  box-shadow:0 14px 38px rgba(16,40,32,.16); }
+    #hizliSonuc .baslik { font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+                          color:var(--mut); padding:9px 11px 4px; }
+    #hizliSonuc .satir { padding:8px 11px; border-radius:8px; cursor:pointer;
+                         display:flex; gap:10px; align-items:baseline; }
+    #hizliSonuc .satir:hover { background:var(--cizgi2); }
+    #hizliSonuc .satir .ikincil { color:var(--mut); font-size:12.5px;
+                                  margin-left:auto; text-align:right; }
+    #hizliSonuc .bos { padding:14px 11px; color:var(--mut); }
+
+    .ust-sag { margin-left:auto; display:flex; align-items:center; gap:10px; }
+    .sayac { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--mut);
+             padding:6px 11px; border-radius:99px; background:var(--zemin);
+             border:1px solid var(--cizgi); font-variant-numeric:tabular-nums; }
+    .sayac.azaliyor { color:var(--err); border-color:#fca5a5; background:#fef2f2; }
+    .tema-dug { background:none; border:1px solid var(--cizgi); border-radius:9px;
+                width:34px; height:34px; cursor:pointer; font-size:15px;
+                color:var(--mut); }
+    .tema-dug:hover { border-color:var(--acc); color:var(--acc); }
+    .kul-cip { display:flex; align-items:center; gap:9px; cursor:pointer;
+               padding:4px 8px 4px 4px; border-radius:99px; border:1px solid transparent; }
+    .kul-cip:hover { border-color:var(--cizgi); background:var(--zemin); }
+    .kul-cip .ad b { display:block; font-size:13px; line-height:1.2; }
+    .kul-cip .ad span { font-size:11.5px; color:var(--mut); }
+
+    /* ---------------- Sayfa başlığı ---------------- */
+    .sayfa-bas { margin:0 0 18px; }
+    .sayfa-bas h1 { margin:0; font-size:25px; display:flex; align-items:center; gap:10px; }
+    .sayfa-bas .alt { color:var(--mut); font-size:13.5px; margin-top:4px;
+                      display:flex; align-items:center; gap:7px; }
+
+    /* ---------------- Kartlar ---------------- */
+    .panel { background:var(--kart); border:1px solid var(--cizgi);
+             border-radius:var(--yuvarlak); padding:18px; margin-bottom:18px;
+             box-shadow:var(--golge); }
+    .panel > h2 { margin:0 0 14px; font-size:13px; letter-spacing:.08em;
+                  text-transform:uppercase; color:var(--mut); font-weight:600; }
+    .panel > h2:only-child { margin-bottom:0; }
+
+    .two-col { display:grid; gap:14px; margin-bottom:18px;
+               grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+    .two-col > .panel { margin-bottom:0; }
+
+    /* Hızlı işlem kartları */
+    .kisayollar { display:grid; gap:14px; margin-bottom:18px;
+                  grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); }
+    .kisayol { background:var(--kart); border:1px solid var(--cizgi); cursor:pointer;
+               border-radius:var(--yuvarlak); padding:20px 14px; text-align:center;
+               font:inherit; color:var(--metin); box-shadow:var(--golge); }
+    .kisayol:hover { border-color:var(--acc); transform:translateY(-1px); }
+    .kisayol .ikon { font-size:22px; display:block; margin-bottom:8px; }
+    .kisayol b { font-size:14px; font-weight:600; }
+
+    /* KPI kartları — sol kenarı renkli */
+    .stats { display:grid; gap:14px; margin-bottom:14px;
+             grid-template-columns:repeat(auto-fit,minmax(205px,1fr)); }
+    .stat { background:var(--kart); border:1px solid var(--cizgi);
+            border-left:4px solid var(--acc); border-radius:var(--yuvarlak);
+            padding:16px 18px; display:flex; align-items:center; gap:14px;
+            box-shadow:var(--golge); }
+    .stat .kutu { width:42px; height:42px; border-radius:11px; flex:none;
+                  display:grid; place-items:center; font-size:19px;
+                  background:rgba(18,163,125,.12); }
+    .stat-v { font-size:24px; font-weight:700; line-height:1.15;
+              font-variant-numeric:tabular-nums; }
+    .stat-l { font-size:11px; color:var(--mut); text-transform:uppercase;
+              letter-spacing:.05em; margin-top:2px; white-space:nowrap; }
+    .stat.mavi   { border-left-color:var(--bilgi); }
+    .stat.mavi   .kutu { background:rgba(37,99,235,.12); }
+    .stat.sari   { border-left-color:var(--warn); }
+    .stat.sari   .kutu { background:rgba(217,119,6,.13); }
+    .stat.kirmizi{ border-left-color:var(--err); }
+    .stat.kirmizi .kutu { background:rgba(220,38,38,.12); }
+    .stat.mor    { border-left-color:#7c3aed; }
+    .stat.mor    .kutu { background:rgba(124,58,237,.12); }
+
+    /* İkincil küçük kartlar */
+    .mini-stats { display:grid; gap:12px; margin-bottom:18px;
+                  grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); }
+    .mini { background:var(--kart); border:1px solid var(--cizgi); padding:12px 15px;
+            border-radius:var(--yuvarlak); display:flex; align-items:center; gap:12px; }
+    .mini .kutu { width:34px; height:34px; border-radius:9px; flex:none;
+                  display:grid; place-items:center; font-size:15px;
+                  background:var(--cizgi2); }
+    .mini b { font-size:16px; font-variant-numeric:tabular-nums; }
+    .mini span { display:block; font-size:11.5px; color:var(--mut); }
+
+    /* ---------------- Form ögeleri ---------------- */
+    input, select, textarea {
+      font:inherit; font-size:14px; padding:9px 11px; border-radius:9px;
+      border:1px solid var(--cizgi); background:var(--kart); color:var(--metin);
+    }
+    input:focus, select:focus, textarea:focus {
+      outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(18,163,125,.13); }
+    input::placeholder { color:var(--mut); }
+    button { font:inherit; font-size:14px; cursor:pointer; border-radius:9px;
+             padding:9px 15px; border:1px solid var(--cizgi);
+             background:var(--kart); color:var(--metin); }
+    button:hover { border-color:var(--acc); color:var(--acc); }
+    button.primary { background:var(--yesil); border-color:var(--yesil); color:#fff;
+                     font-weight:600; }
+    button.primary:hover { background:var(--acc); border-color:var(--acc); color:#fff; }
+    button.ghost { background:transparent; }
+    button.tehlike { color:var(--err); border-color:#fca5a5; }
+    button.tehlike:hover { background:var(--err); color:#fff; border-color:var(--err); }
+    button.mini { padding:2px 7px; font-size:11.5px; margin-left:6px; }
+    button.sec { border-color:var(--acc); color:var(--acc); }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .grow { flex:1; min-width:180px; }
+    .form-grid { display:grid; gap:12px 16px;
+                 grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); }
+    .form-grid label { display:block; font-size:12.5px; color:var(--mut);
+                       font-weight:500; }
+    .form-grid label input, .form-grid label select {
+      width:100%; margin-top:4px; }
+    .note { font-size:13px; color:var(--mut); margin-top:8px; }
+    .muted { color:var(--mut); }
+
+    /* ---------------- Tablolar ---------------- */
+    table { width:100%; border-collapse:collapse; font-size:13.5px; }
+    th { text-align:left; font-size:11.5px; text-transform:uppercase;
+         letter-spacing:.06em; color:var(--mut); font-weight:600;
+         padding:9px 10px; border-bottom:1px solid var(--cizgi); }
+    td { padding:10px; border-bottom:1px solid var(--cizgi2); vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:none; }
+    tr.tikla { cursor:pointer; }
+    tr.tikla:hover { background:var(--cizgi2); }
+
+    .tag { display:inline-block; padding:2px 9px; border-radius:99px;
+           font-size:11.5px; font-weight:600; }
+    .tag.free { background:rgba(5,150,105,.13); color:var(--ok); }
+    .tag.used { background:rgba(217,119,6,.15); color:var(--warn); }
+    .tag.role { background:rgba(37,99,235,.13); color:var(--bilgi); }
+    .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:12px;
+            background:var(--cizgi2); border:1px solid var(--cizgi); color:var(--mut); }
+
+    /* ---------------- Grafik çubukları ---------------- */
+    .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:7px;
+               font-size:13px; }
+    .bar-lbl { flex:0 0 40%; overflow:hidden; text-overflow:ellipsis;
+               white-space:nowrap; }
+    .bar-track { flex:1; height:8px; background:var(--cizgi2); border-radius:99px;
+                 overflow:hidden; }
+    .bar-fill { display:block; height:100%; background:var(--acc); border-radius:99px; }
+    .bar-num { flex:0 0 44px; text-align:right; color:var(--mut);
+               font-variant-numeric:tabular-nums; }
+
+    /* ---------------- Pencere (modal) ---------------- */
+    .modal-arka { position:fixed; inset:0; background:rgba(11,26,23,.55); z-index:70;
+                  display:flex; align-items:flex-start; justify-content:center;
+                  padding:40px 16px; overflow:auto; }
+    .modal { background:var(--kart); border:1px solid var(--cizgi); border-radius:14px;
+             width:min(940px,100%); box-shadow:0 20px 60px rgba(11,26,23,.28); }
+    .modal-bas { display:flex; align-items:center; gap:10px; padding:15px 20px;
+                 border-bottom:1px solid var(--cizgi); position:sticky; top:0;
+                 background:var(--kart); border-radius:14px 14px 0 0; z-index:2; }
+    .modal-bas h3 { margin:0; font-size:17px; flex:1; }
+    .modal-govde { padding:20px; }
+    .kapat { background:none; border:none; color:var(--mut); font-size:20px;
+             cursor:pointer; line-height:1; padding:4px 8px; }
+    .kapat:hover { color:var(--err); border-color:transparent; }
+
+    .alan-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(235px,1fr));
+                 gap:9px 20px; }
+    .alan { display:flex; gap:8px; font-size:13.5px; padding:6px 0;
+            border-bottom:1px solid var(--cizgi2); }
+    .alan .et { color:var(--mut); flex:0 0 42%; }
+    .alan .dg { flex:1; word-break:break-word; }
+    .bolum { margin-top:20px; }
+    .bolum > h4 { margin:0 0 8px; font-size:11.5px; color:var(--acc);
+                  text-transform:uppercase; letter-spacing:.07em; }
 
     /* Cihaz görselleri */
     .gorsel-serit { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
     .gorsel-serit figure { margin:0; position:relative; }
     .gorsel-serit img { width:150px; height:110px; object-fit:cover; cursor:zoom-in;
-                        border:1px solid var(--line); border-radius:8px; display:block; }
+                        border:1px solid var(--cizgi); border-radius:10px; display:block; }
     .gorsel-serit figure button { position:absolute; top:4px; right:4px; }
-    button.mini { padding:1px 5px; font-size:11px; margin-left:6px; }
-    nav { display:flex; gap:4px; padding:0 24px; border-bottom:1px solid var(--line);
-          background:#0b1220; flex-wrap:wrap; }
-    nav button { background:none; border:none; color:var(--mut); padding:12px 16px;
-                 cursor:pointer; font:inherit; border-bottom:2px solid transparent; }
-    nav button.active { color:var(--acc); border-bottom-color:var(--acc); font-weight:600; }
-    main { max-width:1100px; margin:0 auto; padding:24px; }
-    .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-             padding:16px; margin-bottom:20px; }
-    .panel h2 { margin:0 0 12px; font-size:15px; color:var(--mut); text-transform:uppercase;
-                letter-spacing:.05em; }
-    input, select, button { font:inherit; padding:8px 10px; border-radius:7px;
-                            border:1px solid var(--line); background:#0b1220; color:var(--txt); }
-    button.primary { background:var(--acc); color:#03263a; border:none; cursor:pointer; font-weight:600; }
-    button.ghost { background:transparent; border:1px solid var(--line); color:var(--txt); cursor:pointer; }
-    button.ghost.sec { border-color:var(--acc); color:var(--acc); font-weight:600; }
-    button:hover { opacity:.9; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; }
-    .grow { flex:1; min-width:160px; }
-    table { width:100%; border-collapse:collapse; font-size:14px; }
-    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
-    th { color:var(--mut); font-weight:600; }
-    .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:12px; }
-    .tag.free { background:#064e3b; color:var(--ok); }
-    .tag.used { background:#78350f; color:var(--warn); }
-    .tag.role { background:#1e3a5f; color:var(--acc); }
-    .tag.low { background:#7f1d1d; color:var(--err); }
-    .muted { color:var(--mut); }
-    .note { font-size:13px; color:var(--mut); margin-top:8px; }
-    .pill { background:#0b1220; border:1px solid var(--line); border-radius:6px;
-            padding:2px 8px; font-size:12px; color:var(--acc); }
-    a { color:var(--acc); }
-    #login { position:fixed; inset:0; background:var(--bg); display:flex;
-             align-items:center; justify-content:center; }
-    #login .box { background:var(--panel); border:1px solid var(--line); border-radius:12px;
-                  padding:28px; width:320px; }
-    #login h1 { margin:0 0 4px; font-size:22px; }
-    #login p { margin:0 0 18px; color:var(--mut); font-size:13px; }
-    #login input { width:100%; margin-bottom:10px; }
-    #login button { width:100%; }
-    #loginErr { color:var(--err); font-size:13px; min-height:18px; margin-top:6px; }
-    .hidden { display:none !important; }
-    /* Dashboard */
-    .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
-             gap:12px; margin-bottom:20px; }
-    .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px;
-            padding:14px 16px; }
-    .stat-v { font-size:24px; font-weight:700; color:var(--acc); }
-    .stat-l { font-size:12px; color:var(--mut); text-transform:uppercase;
-              letter-spacing:.05em; margin-top:2px; }
-    .two-col { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
-               gap:20px; }
-    .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:7px; font-size:13px; }
-    .bar-lbl { flex:0 0 40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .bar-track { flex:1; height:8px; background:#0b1220; border-radius:99px; overflow:hidden; }
-    .bar-fill { display:block; height:100%; background:var(--acc); border-radius:99px; }
-    .bar-num { flex:0 0 34px; text-align:right; color:var(--mut); }
-    /* Detay penceresi */
-    .modal-arka { position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:50;
-                  display:flex; align-items:flex-start; justify-content:center;
-                  padding:40px 16px; overflow:auto; }
-    .modal { background:var(--panel); border:1px solid var(--line); border-radius:12px;
-             width:min(900px,100%); }
-    .modal-bas { display:flex; align-items:center; gap:12px; padding:16px 20px;
-                 border-bottom:1px solid var(--line); position:sticky; top:0;
-                 background:var(--panel); border-radius:12px 12px 0 0; }
-    .modal-bas h3 { margin:0; font-size:17px; flex:1; }
-    .modal-govde { padding:20px; }
-    .kapat { background:none; border:none; color:var(--mut); font-size:22px;
-             cursor:pointer; line-height:1; }
-    .alan-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
-                 gap:10px 20px; }
-    .alan { display:flex; gap:8px; font-size:13.5px; padding:5px 0;
-            border-bottom:1px solid #24314a; }
-    .alan .et { color:var(--mut); flex:0 0 42%; }
-    .alan .dg { flex:1; word-break:break-word; }
-    .bolum { margin-top:20px; }
-    .bolum > h4 { margin:0 0 8px; font-size:13px; color:var(--acc);
-                  text-transform:uppercase; letter-spacing:.04em; }
-    tr.tikla { cursor:pointer; }
-    tr.tikla:hover { background:#243049; }
+
+    @media (max-width:900px) {
+      #yanmenu { position:fixed; left:-246px; z-index:80; transition:left .2s; }
+      #yanmenu.acik { left:0; }
+      #menuDug { display:inline-flex !important; }
+      main#view { padding:16px 14px 50px; }
+    }
+    #menuDug { display:none; }
   </style>
 </head>
 <body>
-  <div id="login">
-    <div class="box">
-      <h1>📦 Envanter</h1>
-      <p>Devam etmek için giriş yap</p>
-      <input id="lu" placeholder="Kullanıcı adı" autocomplete="username"
-             onkeydown="if(event.key==='Enter')login()" />
-      <input id="lp" type="password" placeholder="Parola" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter')login()" />
-      <button class="primary" onclick="login()">Giriş</button>
-      <div id="loginErr"></div>
+  <div id="kabuk">
+    <!-- Sol menü -->
+    <aside id="yanmenu">
+      <div class="yan-bas">
+        <div class="logo">📦</div>
+        <div>
+          <b>Envanter</b>
+          <span>Takip Sistemi</span>
+        </div>
+      </div>
+      <nav class="yan-gez" id="gez"></nav>
+      <div class="yan-alt">
+        <div class="avatar" id="yanAvatar">—</div>
+        <div class="ad">
+          <b id="yanAd">—</b>
+          <span id="yanRol">—</span>
+        </div>
+        <button class="cik" onclick="logout()" title="Çıkış">⏻</button>
+      </div>
+    </aside>
+
+    <!-- Sağ taraf -->
+    <div id="icerik">
+      <header id="ustbar">
+        <button id="menuDug" class="ghost" onclick="menuAcKapa()" title="Menü">☰</button>
+        <div id="hizliKutu">
+          <input id="hizliAra" autocomplete="off"
+                 placeholder="🔎 İsim, cihaz no, seri no, şantiye…"
+                 oninput="hizliAra()" onfocus="hizliAra()"
+                 onkeydown="if(event.key==='Escape')hizliKapat()" />
+          <div id="hizliSonuc" class="hidden"></div>
+        </div>
+        <div class="ust-sag">
+          <span class="sayac" id="oturumSayac" title="Oturum süresi">🕐 —</span>
+          <button class="tema-dug" id="temaDug" onclick="temaDegistir()"
+                  title="Koyu / açık tema">🌙</button>
+          <div class="kul-cip" onclick="selectTab('ayarlar')" title="Kullanıcı ayarları">
+            <div class="avatar" id="ustAvatar">—</div>
+            <div class="ad">
+              <b id="ustAd">—</b>
+              <span id="ustRol">—</span>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main id="view"></main>
     </div>
   </div>
-
-  <div id="app" class="hidden">
-    <header>
-      <h1>📦 Envanter</h1>
-      <span class="sub"><a id="docsLink" href="docs">API dokümanı</a></span>
-      <div id="hizliKutu">
-        <input id="hizliAra" autocomplete="off"
-               placeholder="🔎 İsim, cihaz no, seri no, şantiye…"
-               oninput="hizliAra()" onfocus="hizliAra()"
-               onkeydown="if(event.key==='Escape')hizliKapat()" />
-        <div id="hizliSonuc" class="hidden"></div>
-      </div>
-      <span class="spacer"></span>
-      <span class="sub" id="who"></span>
-      <button class="ghost" onclick="logout()">Çıkış</button>
-    </header>
-    <nav id="tabs"></nav>
-    <main id="view"></main>
-  </div>
-
   <script>
     let token = localStorage.getItem('token') || '';
     let me = JSON.parse(localStorage.getItem('me') || 'null');
@@ -165,18 +337,22 @@
     // Adet bazlı türlerin yapılandırması (veri-odaklı arayüz)
     const STOCK = {
       accessories: { label: 'Aksesuarlar', endpoint: '/accessories',
+        ikon: '🎧', alt: 'Klavye, mouse, kulaklık gibi adet bazlı malzemeler',
         cols: [['name','Ad'],['model_number','Model No'],['qty','Adet'],['min_qty','Min']],
         add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
         lowStock: true },
       consumables: { label: 'Sarf Malzeme', endpoint: '/consumables',
+        ikon: '📦', alt: 'Toner, kablo, pil gibi tüketilen malzemeler',
         cols: [['name','Ad'],['qty','Adet'],['min_qty','Min']],
         add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
         lowStock: true },
       components: { label: 'Bileşenler', endpoint: '/components',
+        ikon: '🔩', alt: 'RAM, disk, ekran kartı gibi cihaz parçaları',
         cols: [['name','Ad'],['serial','Seri'],['qty','Adet'],['min_qty','Min']],
         add: [['name','Ad','text'],['serial','Seri','text'],['qty','Adet','number'],['min_qty','Min','number']],
         lowStock: true },
       licenses: { label: 'Lisanslar', endpoint: '/licenses',
+        ikon: '🔑', alt: 'Yazılım lisansları ve koltuk sayıları',
         cols: [['name','Ad'],['seats','Koltuk'],['license_key','Anahtar'],['expiration_date','Bitiş']],
         add: [['name','Ad','text'],['seats','Koltuk','number'],['license_key','Anahtar','text']],
         lowStock: false },
@@ -214,11 +390,13 @@
     const BASE = window.location.pathname.replace(/\/ui\/?$/, '');
     const url = (path) => BASE + path;
 
-    // API dokümanı bağlantısını taban yola göre ayarla
-    document.addEventListener('DOMContentLoaded', () => {
-      const el = document.getElementById('docsLink');
-      if (el) el.href = (BASE || '') + '/docs';
-    });
+    // ---------- Giriş / oturum ----------
+    // Giriş ayrı bir sayfada (/login). Oturum yoksa oraya gidilir; kullanıcı
+    // giriş yapınca ?redirect ile bulunduğu sayfaya geri döner.
+    function girisSayfasi() {
+      const nereye = location.pathname + location.search;
+      location.replace(`${BASE || ''}/login?redirect=${encodeURIComponent(nereye)}`);
+    }
 
     async function api(path, opt = {}) {
       opt.headers = Object.assign({ 'Authorization': `Bearer ${token}` }, opt.headers || {});
@@ -228,57 +406,92 @@
       return r.status === 204 ? null : r.json();
     }
 
-    async function login() {
-      const username = document.getElementById('lu').value.trim();
-      const password = document.getElementById('lp').value;
-      try {
-        const r = await fetch(url('/auth/login'), {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
-        });
-        if (!r.ok) throw 0;
-        const data = await r.json();
-        token = data.access_token; me = data.user;
-        localStorage.setItem('token', token);
-        localStorage.setItem('me', JSON.stringify(me));
-        showApp();
-      } catch { document.getElementById('loginErr').textContent = 'Kullanıcı adı veya parola hatalı.'; }
-    }
-
     function logout() {
       canliDurdur();
       token = ''; me = null;
       localStorage.removeItem('token'); localStorage.removeItem('me');
-      document.getElementById('app').classList.add('hidden');
-      document.getElementById('login').classList.remove('hidden');
+      girisSayfasi();
     }
 
-    async function showApp() {
-      document.getElementById('login').classList.add('hidden');
-      document.getElementById('app').classList.remove('hidden');
-      document.getElementById('who').innerHTML =
-        `${me.username || me.first_name} <span class="tag role">${me.role}</span>`;
-      buildTabs();
-      const s = await api('/status-labels');
-      statusMap = Object.fromEntries(s.map(x => [x.id, x.name]));
-      selectTab('dashboard');
+    // ---------- Tema ----------
+    function temaUygula(tema) {
+      document.documentElement.dataset.tema = tema;
+      const d = document.getElementById('temaDug');
+      if (d) d.textContent = tema === 'koyu' ? '☀️' : '🌙';
+    }
+    function temaDegistir() {
+      const yeni = document.documentElement.dataset.tema === 'koyu' ? 'acik' : 'koyu';
+      localStorage.setItem('tema', yeni);
+      temaUygula(yeni);
     }
 
-    function buildTabs() {
-      const tabs = [['dashboard', 'Özet'], ['assets', 'Varlıklar'],
-                    ['personel', 'Personel'],
-                    ...Object.entries(STOCK).map(([k, v]) => [k, v.label]),
-                    ['tanimlar', 'Tanımlar']];
-      tabs.push(['excel', 'Excel']);
-      if (canWrite()) tabs.push(['invoice', 'Fatura Oku']);
-      document.getElementById('tabs').innerHTML = tabs.map(([k, label]) =>
-        `<button data-tab="${k}" onclick="selectTab('${k}')">${label}</button>`).join('');
+    // ---------- Oturum sayacı ----------
+    // Jetonun bitiş anı (exp) içinde yazılıdır; kalan süreyi oradan gösteriyoruz.
+    let sayacZaman = null;
+    function jetonBitisi() {
+      try {
+        const govde = JSON.parse(atob(token.split('.')[1]));
+        return govde.exp ? govde.exp * 1000 : null;
+      } catch { return null; }
+    }
+    function sayacBaslat() {
+      clearInterval(sayacZaman);
+      const bitis = jetonBitisi();
+      const el = document.getElementById('oturumSayac');
+      if (!bitis || !el) { el?.classList.add('hidden'); return; }
+      const iki = (n) => String(n).padStart(2, '0');
+      const tik = () => {
+        const kalan = Math.max(0, Math.floor((bitis - Date.now()) / 1000));
+        const sa = Math.floor(kalan / 3600);
+        const dk = Math.floor((kalan % 3600) / 60);
+        // Oturum 8 saat olabiliyor; saat varken sa:dd:ss, yokken dd:ss göster
+        el.textContent = sa ? `🕐 ${sa}:${iki(dk)}:${iki(kalan % 60)}`
+                            : `🕐 ${iki(dk)}:${iki(kalan % 60)}`;
+        el.classList.toggle('azaliyor', kalan < 300);
+        if (kalan === 0) { clearInterval(sayacZaman); logout(); }
+      };
+      tik();
+      sayacZaman = setInterval(tik, 1000);
+    }
+
+    // ---------- Menü ----------
+    // [anahtar, etiket, ikon, yalnızca-yazma-yetkisi?]
+    const MENU_ANA = [
+      ['dashboard', 'Kontrol Paneli', '📊'],
+      ['assets', 'Varlıklar', '💻'],
+      ['personel', 'Personel', '👥'],
+      ['accessories', 'Aksesuarlar', '🎧'],
+      ['consumables', 'Sarf Malzeme', '📦'],
+      ['components', 'Bileşenler', '🔩'],
+      ['licenses', 'Lisanslar', '🔑'],
+    ];
+    const MENU_YONETIM = [
+      ['tanimlar', 'Tanımlar', '🗂️'],
+      ['excel', 'Excel Aktarım', '📄'],
+      ['invoice', 'Fatura Oku', '🧾', true],
+      ['ayarlar', 'Ayarlar', '⚙️'],
+    ];
+
+    function menuKur() {
+      const dugme = ([k, label, ikon]) =>
+        `<button data-tab="${k}" onclick="selectTab('${k}')">
+           <span class="ikon">${ikon}</span>${label}</button>`;
+      const yonetim = MENU_YONETIM.filter(([, , , yazar]) => !yazar || canWrite());
+      document.getElementById('gez').innerHTML =
+        MENU_ANA.map(dugme).join('') +
+        '<div class="yan-baslik">Yönetim</div>' +
+        yonetim.map(dugme).join('');
+    }
+
+    function menuAcKapa() {
+      document.getElementById('yanmenu').classList.toggle('acik');
     }
 
     function selectTab(tab) {
       activeTab = tab;
-      document.querySelectorAll('#tabs button').forEach(b =>
-        b.classList.toggle('active', b.dataset.tab === tab));
+      document.querySelectorAll('#gez button').forEach(b =>
+        b.classList.toggle('aktif', b.dataset.tab === tab));
+      document.getElementById('yanmenu').classList.remove('acik');
       if (tab !== 'dashboard') canliDurdur();
       if (tab === 'dashboard') { renderDashboard(); canliBaslat(); }
       else if (tab === 'assets') renderAssetsView();
@@ -286,12 +499,45 @@
       else if (tab === 'personel') renderPersonelView();
       else if (tab === 'tanimlar') renderTanimlarView();
       else if (tab === 'excel') renderExcelView();
+      else if (tab === 'ayarlar') renderAyarlarView();
       else renderStockView(tab);
+    }
+
+    // Sayfa başlığı — her ekranın üstünde aynı düzende
+    function sayfaBasligi(ikon, baslik, altMetin = '') {
+      return `<div class="sayfa-bas">
+        <h1>${ikon} ${kacir(baslik)}</h1>
+        ${altMetin ? `<div class="alt">${altMetin}</div>` : ''}
+      </div>`;
+    }
+
+    function bashharfler(ad) {
+      return (ad || '?').trim().split(/\s+/).slice(0, 2)
+        .map(p => p[0] || '').join('').toLocaleUpperCase('tr');
+    }
+
+    const ROL_ADI = { admin: 'Yönetici', editor: 'Düzenleyici', viewer: 'Görüntüleyici' };
+
+    async function showApp() {
+      const ad = [me.first_name, me.last_name].filter(Boolean).join(' ') || me.username;
+      for (const [id, deger] of [['yanAd', ad], ['ustAd', ad],
+                                 ['yanRol', ROL_ADI[me.role] || me.role],
+                                 ['ustRol', ROL_ADI[me.role] || me.role],
+                                 ['yanAvatar', bashharfler(ad)],
+                                 ['ustAvatar', bashharfler(ad)]]) {
+        document.getElementById(id).textContent = deger;
+      }
+      menuKur();
+      sayacBaslat();
+      const s = await api('/status-labels');
+      statusMap = Object.fromEntries(s.map(x => [x.id, x.name]));
+      selectTab('dashboard');
     }
 
     // ---------- Personel ----------
     async function renderPersonelView() {
-      document.getElementById('view').innerHTML = `
+      document.getElementById('view').innerHTML =
+        sayfaBasligi('👥', 'Personel', 'Çalışanlar ve zimmetindeki cihazlar') + `
         <div class="panel">
           <div class="row" style="align-items:center">
             <h2 style="margin:0; flex:1">Personel (<span id="pCount">0</span>)</h2>
@@ -481,7 +727,9 @@
       const alt = Object.entries(TANIMLAR).map(([k, v]) =>
         `<button class="ghost ${k === aktifTanim ? 'sec' : ''}"
            onclick="secTanim('${k}')">${v.label}</button>`).join(' ');
-      document.getElementById('view').innerHTML = `
+      document.getElementById('view').innerHTML =
+        sayfaBasligi('🗂️', 'Tanımlar',
+          'Lokasyon, kategori, marka, model ve diğer referans tabloları') + `
         <div class="panel"><h2>Tanım tablosu seç</h2>
           <div class="row">${alt}</div></div>
         <div id="tanimIcerik"></div>`;
@@ -596,7 +844,9 @@
     let excelVeri = null;
 
     function renderExcelView() {
-      document.getElementById('view').innerHTML = `
+      document.getElementById('view').innerHTML =
+        sayfaBasligi('📄', 'Excel Aktarım',
+          'Cihaz listesini Excel dosyasından içe aktarın ya da dışa alın') + `
         <div class="panel">
           <h2>Excel'den içe aktar</h2>
           <p class="note" style="margin-top:0">
@@ -718,7 +968,9 @@
     let invoiceData = null;
 
     function renderInvoiceView() {
-      document.getElementById('view').innerHTML = `
+      document.getElementById('view').innerHTML =
+        sayfaBasligi('🧾', 'Fatura Oku',
+          'Fatura veya irsaliye görselinden cihazları otomatik çıkarın') + `
         <div class="panel">
           <h2>Fatura / irsaliye oku</h2>
           <p class="note" style="margin-top:0">
@@ -815,9 +1067,19 @@
     }
 
     // ---------- Özet / dashboard ----------
-    function statCard(label, value, extra = '') {
-      return `<div class="stat"><div class="stat-v">${value}</div>
-              <div class="stat-l">${label}</div>${extra}</div>`;
+    // KPI kartı: ikon + büyük sayı + etiket, sol kenarı renk kodlu
+    function statCard(label, value, ikon = '📦', renk = '', extra = '') {
+      return `<div class="stat ${renk}">
+        <div class="kutu">${ikon}</div>
+        <div><div class="stat-v">${value}</div>
+             <div class="stat-l">${label}</div>${extra}</div>
+      </div>`;
+    }
+
+    // Hızlı işlem kartı
+    function kisayol(ikon, etiket, islev) {
+      return `<button class="kisayol" onclick="${islev}">
+        <span class="ikon">${ikon}</span><b>${etiket}</b></button>`;
     }
 
     function barList(items, max) {
@@ -875,16 +1137,22 @@
       const maxK = Math.max(1, ...dag.kategori.map(x => x.adet));
       const maxL = Math.max(1, ...dag.lokasyon.map(x => x.adet));
 
-      view.innerHTML = `
-        <div class="row" style="align-items:center; margin-bottom:14px">
-          <span id="canliDurum" class="note" style="margin:0">${canliAralik
-            ? `● canlı — ${canliAralik} sn'de bir yenileniyor`
-            : '○ otomatik yenileme kapalı'}</span>
-          <span class="grow"></span>
-          <span class="note" style="margin:0">Son güncelleme:
-            ${new Date().toLocaleTimeString('tr-TR')}</span>
-          <select onchange="canliAralikDegistir(this.value)">
-            <option value="0"${!canliAralik ? ' selected' : ''}>Kapalı</option>
+      view.innerHTML =
+        sayfaBasligi('📊', 'Kontrol Paneli',
+          `<span id="canliDurum">${canliAralik
+             ? `● canlı — ${canliAralik} sn'de bir yenileniyor`
+             : '○ otomatik yenileme kapalı'}</span>
+           <span>·</span>
+           <span>Son güncelleme: ${new Date().toLocaleTimeString('tr-TR')}</span>`) + `
+        <div class="kisayollar">
+          ${kisayol('➕', 'Yeni cihaz', "selectTab('assets')")}
+          ${kisayol('🔳', 'Barkod okut', "selectTab('assets')")}
+          ${kisayol('👥', 'Personel', "selectTab('personel')")}
+          ${kisayol('📄', 'Excel aktarım', "selectTab('excel')")}
+        </div>
+        <div class="row" style="justify-content:flex-end; margin-bottom:12px">
+          <select onchange="canliAralikDegistir(this.value)" title="Otomatik yenileme">
+            <option value="0"${!canliAralik ? ' selected' : ''}>Yenileme: kapalı</option>
             <option value="10"${canliAralik === 10 ? ' selected' : ''}>10 sn</option>
             <option value="30"${canliAralik === 30 ? ' selected' : ''}>30 sn</option>
             <option value="60"${canliAralik === 60 ? ' selected' : ''}>1 dk</option>
@@ -893,12 +1161,12 @@
           <button class="ghost" onclick="renderDashboard(true)" title="Şimdi yenile">⟳</button>
         </div>
         <div class="stats">
-          ${statCard('Toplam varlık', ozet.varlik_toplam)}
-          ${statCard('Zimmetli', ozet.zimmetli)}
-          ${statCard('Boşta', ozet.bosta)}
-          ${statCard('Toplam değer', tl)}
-          ${statCard('Personel', ozet.personel)}
-          ${statCard('Lisans', ozet.lisans)}
+          ${statCard('Toplam varlık', ozet.varlik_toplam, '📦')}
+          ${statCard('Zimmetli', ozet.zimmetli, '🤝', 'sari')}
+          ${statCard('Boşta', ozet.bosta, '📥', 'mavi')}
+          ${statCard('Toplam değer', tl, '₺', 'mor')}
+          ${statCard('Personel', ozet.personel, '👥', 'mavi')}
+          ${statCard('Lisans', ozet.lisans, '🔑', 'kirmizi')}
         </div>
         <div class="two-col">
           <div class="panel"><h2>Kategoriye göre</h2>${barList(dag.kategori, maxK)}</div>
@@ -1530,7 +1798,8 @@
 
     // ---------- Varlıklar ----------
     function renderAssetsView() {
-      document.getElementById('view').innerHTML = `
+      document.getElementById('view').innerHTML =
+        sayfaBasligi('💻', 'Varlıklar', 'Tüm cihazlar — filtreleyin, zimmetleyin, düzenleyin') + `
         <div class="panel">
           <h2>Barkod / QR okut</h2>
           <div class="row">
@@ -1988,7 +2257,8 @@
         </div>
         <div id="stockInfo" class="note"></div>
       </div>` : '';
-      document.getElementById('view').innerHTML = `${addForm}
+      document.getElementById('view').innerHTML =
+        sayfaBasligi(cfg.ikon || '📦', cfg.label, cfg.alt || '') + `${addForm}
         <div class="panel">
           <h2>${cfg.label} (<span id="scount">0</span>)</h2>
           <table><thead><tr>${head}</tr></thead><tbody id="srows"></tbody></table>
@@ -2028,8 +2298,276 @@
       } catch (e) { stockInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
     }
 
+    // ---------- Ayarlar: profil, parola, hesap yönetimi ----------
+    let ayarBolum = 'profil';
+
+    function renderAyarlarView() {
+      const sekmeler = [['profil', '👤 Profilim'], ['parola', '🔒 Parola']];
+      if (me.role === 'admin') sekmeler.push(['hesaplar', '🛡️ Kullanıcı hesapları']);
+
+      document.getElementById('view').innerHTML =
+        sayfaBasligi('⚙️', 'Ayarlar', 'Hesabınızı ve kullanıcı yetkilerini yönetin') + `
+        <div class="panel">
+          <div class="row">${sekmeler.map(([k, l]) =>
+            `<button class="ghost ${k === ayarBolum ? 'sec' : ''}"
+               onclick="ayarSec('${k}')">${l}</button>`).join('')}</div>
+        </div>
+        <div id="ayarIcerik"></div>`;
+      ayarIcerikCiz();
+    }
+
+    function ayarSec(bolum) { ayarBolum = bolum; renderAyarlarView(); }
+
+    function ayarIcerikCiz() {
+      if (ayarBolum === 'profil') return ayarProfil();
+      if (ayarBolum === 'parola') return ayarParola();
+      return ayarHesaplar();
+    }
+
+    function ayarProfil() {
+      document.getElementById('ayarIcerik').innerHTML = `
+        <div class="panel">
+          <h2>Kişisel bilgiler</h2>
+          <div class="form-grid">
+            <label>Ad <input id="pfAd" value="${kacir(me.first_name || '')}" /></label>
+            <label>Soyad <input id="pfSoyad" value="${kacir(me.last_name || '')}" /></label>
+            <label>E-posta <input id="pfMail" type="email"
+                   value="${kacir(me.email || '')}" /></label>
+            <label>Telefon <input id="pfTel" value="${kacir(me.telefon || '')}" /></label>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <button class="primary" onclick="profilKaydet()">Kaydet</button>
+            <span id="pfBilgi" class="note"></span>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Hesap</h2>
+          <div class="alan-grid">
+            <div class="alan"><span class="et">Kullanıcı adı</span>
+              <span class="dg">${esc(me.username)}</span></div>
+            <div class="alan"><span class="et">Yetki</span>
+              <span class="dg"><span class="tag role">${ROL_ADI[me.role] || me.role}</span></span></div>
+            <div class="alan"><span class="et">Departman</span>
+              <span class="dg">${esc(me.department)}</span></div>
+          </div>
+          <div class="note">Kullanıcı adı ve yetki yalnızca yönetici tarafından
+            değiştirilebilir.</div>
+        </div>`;
+    }
+
+    async function profilKaydet() {
+      const bilgi = document.getElementById('pfBilgi');
+      try {
+        me = await api('/auth/me', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            first_name: document.getElementById('pfAd').value.trim(),
+            last_name: document.getElementById('pfSoyad').value.trim() || null,
+            email: document.getElementById('pfMail').value.trim() || null,
+            telefon: document.getElementById('pfTel').value.trim() || null,
+          }),
+        });
+        localStorage.setItem('me', JSON.stringify(me));
+        bilgi.innerHTML = '<span style="color:var(--ok)">✓ Kaydedildi.</span>';
+        // Menüdeki ve üst bardaki ad da güncellensin
+        const ad = [me.first_name, me.last_name].filter(Boolean).join(' ');
+        for (const id of ['yanAd', 'ustAd']) document.getElementById(id).textContent = ad;
+        for (const id of ['yanAvatar', 'ustAvatar'])
+          document.getElementById(id).textContent = bashharfler(ad);
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
+      }
+    }
+
+    function ayarParola() {
+      document.getElementById('ayarIcerik').innerHTML = `
+        <div class="panel">
+          <h2>Parola değiştir</h2>
+          <div class="form-grid">
+            <label>Mevcut parola
+              <input id="paEski" type="password" autocomplete="current-password" /></label>
+            <label>Yeni parola (en az 8 karakter)
+              <input id="paYeni" type="password" autocomplete="new-password" /></label>
+            <label>Yeni parola (tekrar)
+              <input id="paYeni2" type="password" autocomplete="new-password" /></label>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <button class="primary" onclick="parolaKaydet()">Parolayı değiştir</button>
+            <span id="paBilgi" class="note"></span>
+          </div>
+        </div>`;
+    }
+
+    async function parolaKaydet() {
+      const bilgi = document.getElementById('paBilgi');
+      const yeni = document.getElementById('paYeni').value;
+      if (yeni !== document.getElementById('paYeni2').value) {
+        bilgi.innerHTML = '<span style="color:var(--err)">⚠ Yeni parolalar aynı değil.</span>';
+        return;
+      }
+      if (yeni.length < 8) {
+        bilgi.innerHTML = '<span style="color:var(--err)">⚠ Parola en az 8 karakter olmalı.</span>';
+        return;
+      }
+      try {
+        await api('/auth/parola', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mevcut_parola: document.getElementById('paEski').value,
+            yeni_parola: yeni,
+          }),
+        });
+        bilgi.innerHTML = '<span style="color:var(--ok)">✓ Parola değiştirildi.</span>';
+        ['paEski', 'paYeni', 'paYeni2'].forEach(i =>
+          document.getElementById(i).value = '');
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Değiştirilemedi'}</span>`;
+      }
+    }
+
+    async function ayarHesaplar() {
+      const kutu = document.getElementById('ayarIcerik');
+      kutu.innerHTML = '<div class="panel"><h2>Kullanıcı hesapları</h2>Yükleniyor…</div>';
+      let liste;
+      try { liste = await api('/users/hesaplar'); }
+      catch (e) {
+        kutu.innerHTML = `<div class="panel">⚠ ${e.detail || 'Alınamadı'}</div>`;
+        return;
+      }
+      kutu.innerHTML = `
+        <div class="panel">
+          <div class="row" style="align-items:center; margin-bottom:12px">
+            <h2 style="margin:0; flex:1">Kullanıcı hesapları (${liste.length})</h2>
+            <button class="primary" onclick="hesapAc()">+ Giriş yetkisi ver</button>
+          </div>
+          <table><thead><tr>
+            <th>Kullanıcı adı</th><th>Ad Soyad</th><th>E-posta</th>
+            <th>Yetki</th><th>Durum</th><th></th></tr></thead><tbody>
+          ${liste.map(h => `<tr>
+            <td><b>${esc(h.username)}</b></td>
+            <td>${kacir([h.first_name, h.last_name].filter(Boolean).join(' '))}</td>
+            <td class="muted">${esc(h.email)}</td>
+            <td><span class="tag role">${ROL_ADI[h.role] || h.role}</span></td>
+            <td>${h.active
+                  ? (h.girebilir ? '<span class="tag free">etkin</span>'
+                                 : '<span class="tag used">parolasız</span>')
+                  : '<span class="tag used">kapalı</span>'}</td>
+            <td><button class="ghost mini"
+                  onclick="hesapDuzenle(${h.id})">✏️ Düzenle</button></td>
+          </tr>`).join('')}</tbody></table>
+          <div class="note">Yetkiler: <b>Yönetici</b> her şey + kullanıcı yönetimi ·
+            <b>Düzenleyici</b> kayıt ekler/değiştirir · <b>Görüntüleyici</b> yalnızca okur.</div>
+        </div>`;
+    }
+
+    // Personel kaydına giriş yetkisi verme (kişi arayarak)
+    function hesapAc() {
+      modalAc('Giriş yetkisi ver', `
+        <div class="row">
+          <input id="hyAra" class="grow" autocomplete="off"
+                 placeholder="Personel ara: ad soyad, sicil no, departman…"
+                 oninput="hesapKisiAra()" />
+        </div>
+        <div id="hySonuc" class="note">Yükleniyor…</div>`);
+      setTimeout(() => document.getElementById('hyAra')?.focus(), 60);
+      hesapKisiAra();
+    }
+
+    let hyZaman = null;
+    function hesapKisiAra() {
+      clearTimeout(hyZaman);
+      hyZaman = setTimeout(async () => {
+        const kutu = document.getElementById('hySonuc');
+        if (!kutu) return;
+        const q = document.getElementById('hyAra')?.value.trim() || '';
+        const liste = await api('/users/ara?limit=15&q=' + encodeURIComponent(q))
+          .catch(() => []);
+        kutu.innerHTML = liste.length
+          ? `<table><tbody>${liste.map(k => `
+              <tr class="tikla" onclick="hesapDuzenle(${k.id})">
+                <td><b>👤 ${kacir(k.ad)}</b></td>
+                <td class="muted">${esc(k.employee_num)}</td>
+                <td class="muted">${esc(k.department)}</td>
+                <td><button class="primary">Seç</button></td></tr>`).join('')}</tbody></table>`
+          : '<div class="muted">Eşleşen personel yok.</div>';
+      }, 180);
+    }
+
+    async function hesapDuzenle(kisiId) {
+      const k = await api('/users/' + kisiId).catch(() => null);
+      if (!k) return alert('⚠ Personel bulunamadı.');
+      const ad = [k.first_name, k.last_name].filter(Boolean).join(' ');
+      const benim = me.id === kisiId;
+
+      modalAc(`Hesap — ${kacir(ad)}`, `
+        <div class="form-grid">
+          <label>Kullanıcı adı
+            <input id="hsKadi" value="${kacir(k.username || '')}"
+                   placeholder="örn. tayyar" /></label>
+          <label>Yetki
+            <select id="hsRol" ${benim ? 'disabled' : ''}>
+              <option value="viewer"${k.role === 'viewer' ? ' selected' : ''}>Görüntüleyici</option>
+              <option value="editor"${k.role === 'editor' ? ' selected' : ''}>Düzenleyici</option>
+              <option value="admin"${k.role === 'admin' ? ' selected' : ''}>Yönetici</option>
+            </select></label>
+          <label>Yeni parola (boş bırakılırsa değişmez)
+            <input id="hsParola" type="password" autocomplete="new-password"
+                   placeholder="en az 8 karakter" /></label>
+          <label>Hesap durumu
+            <select id="hsAktif" ${benim ? 'disabled' : ''}>
+              <option value="true"${k.active ? ' selected' : ''}>Etkin</option>
+              <option value="false"${!k.active ? ' selected' : ''}>Kapalı</option>
+            </select></label>
+        </div>
+        ${benim ? `<div class="note">Kendi yetkinizi ve hesap durumunuzu buradan
+           değiştiremezsiniz — sistemin yöneticisiz kalmaması için.</div>` : ''}
+        <div class="row" style="margin-top:14px">
+          <button class="primary" onclick="hesapKaydet(${kisiId})">Kaydet</button>
+          <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+          <span id="hsBilgi" class="note"></span>
+        </div>`);
+    }
+
+    async function hesapKaydet(kisiId) {
+      const bilgi = document.getElementById('hsBilgi');
+      const govde = {};
+      const kadi = document.getElementById('hsKadi').value.trim();
+      if (kadi) govde.username = kadi;
+      const parola = document.getElementById('hsParola').value;
+      if (parola) {
+        if (parola.length < 8) {
+          bilgi.innerHTML = '<span style="color:var(--err)">⚠ Parola en az 8 karakter.</span>';
+          return;
+        }
+        govde.yeni_parola = parola;
+      }
+      const rolEl = document.getElementById('hsRol');
+      const aktifEl = document.getElementById('hsAktif');
+      if (!rolEl.disabled) govde.role = rolEl.value;
+      if (!aktifEl.disabled) govde.active = aktifEl.value === 'true';
+
+      try {
+        await api(`/users/${kisiId}/hesap`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(govde),
+        });
+        modalKapat();
+        ayarBolum = 'hesaplar';
+        renderAyarlarView();
+      } catch (e) {
+        bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
+      }
+    }
+
+    // ---------- Açılış ----------
+    temaUygula(localStorage.getItem('tema') || 'acik');
     (async () => {
-      if (token && me) { try { await api('/auth/me'); showApp(); } catch { logout(); } }
+      if (!token || !me) return girisSayfasi();
+      try {
+        me = await api('/auth/me');            // jeton hâlâ geçerli mi?
+        localStorage.setItem('me', JSON.stringify(me));
+        showApp();
+      } catch { logout(); }
     })();
   </script>
 </body>

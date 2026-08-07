@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
@@ -65,6 +65,12 @@ def root(request: Request):
     # Alt klasörde yayınlanırken doğru hedefe yönlendir (örn. /envanter/ui/)
     prefix = request.scope.get("root_path", "").rstrip("/")
     return RedirectResponse(url=f"{prefix}/ui/")
+
+
+@app.get("/login", include_in_schema=False)
+def login_sayfasi():
+    """Ayrı giriş sayfası. `?redirect=/yol` ile giriş sonrası hedef verilebilir."""
+    return FileResponse(STATIC_DIR / "login.html")
 
 
 @app.get("/health", tags=["Sistem"])

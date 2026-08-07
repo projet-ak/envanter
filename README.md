@@ -40,7 +40,29 @@ python scripts/create_admin.py --username admin --password "GucluParola"
 - API dokümanı: <http://localhost:8000/docs>
 - Sağlık kontrolü: <http://localhost:8000/health>
 
+## Arayüz
+
+Sol menü + üst bar düzeni. Menü iki bölümdür: günlük işler (Kontrol Paneli,
+Varlıklar, Personel, Aksesuar/Sarf/Bileşen/Lisans) ve **Yönetim** (Tanımlar,
+Excel Aktarım, Fatura Oku, Ayarlar). Üst barda her yerden çalışan arama
+kutusu, oturum sayacı, koyu/açık tema düğmesi ve kullanıcı kartı bulunur.
+
+Tema tercihi tarayıcıda saklanır; oturum sayacı jetonun bitişini gösterir ve
+süre dolduğunda giriş sayfasına döner.
+
 ## Kimlik doğrulama ve roller
+
+Giriş ayrı bir sayfadadır: **`/login`**. Oturumu olmayan kullanıcı arayüze
+girmeye çalıştığında `?redirect=` ile buraya yönlenir ve giriş sonrası
+bulunduğu sayfaya geri döner:
+
+```
+https://site.com/envanter/login?redirect=%2Fenvanter%2Fui%2F
+```
+
+> `redirect` yalnızca **bu sitedeki yollara** izin verir (`/…`). Tam URL ya da
+> `//baska.site` gelirse yok sayılıp arayüzün köküne dönülür — açık
+> yönlendirme (open redirect) açığı oluşmasın diye.
 
 Giriş JWT ile yapılır. Üç rol vardır:
 
@@ -49,6 +71,29 @@ Giriş JWT ile yapılır. Üç rol vardır:
 | `admin` | Her şey + kullanıcı yönetimi |
 | `editor` | Okuma + yazma (ekle/güncelle/sil, zimmet) |
 | `viewer` | Sadece okuma |
+
+### Kullanıcı ayarları
+
+**Ayarlar** ekranı üç bölümdür:
+
+| Bölüm | Kim görür | Ne yapar |
+|---|---|---|
+| Profilim | herkes | Ad, soyad, e-posta, telefon |
+| Parola | herkes | Kendi parolasını değiştirir (mevcut parola sorulur) |
+| Kullanıcı hesapları | yalnızca `admin` | Kullanıcı adı, yetki, parola sıfırlama, hesap açma/kapatma |
+
+Personel kaydına kullanıcı adı + parola verilerek giriş yetkisi açılır —
+ayrı bir kullanıcı tablosu yoktur, aynı kişi hem personel hem kullanıcıdır.
+
+```bash
+curl -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/json" \
+  -d '{"username":"mehmet","yeni_parola":"GucluParola1","role":"editor"}' \
+  "$API/users/42/hesap"
+```
+
+Sistem yöneticisiz kalamaz: kendi yetkinizi düşüremez, kendi hesabınızı
+kapatamazsınız; giriş yapabilen son yöneticiyi devre dışı bırakacak her
+değişiklik geri alınır.
 
 ```bash
 # Giriş → token al
@@ -433,6 +478,10 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/assets/proje-kodlari` | Proje kodları + cihaz sayıları |
 | `GET` | `/assets/ara` | Yazdıkça arama (cihaz + personel + lokasyon, Türkçe duyarlı) |
 | `GET` | `/users/ara` | Zimmet için personel arama (cihaz sayılarıyla) |
+| `GET/PUT` | `/auth/me` | Kendi bilgilerini gör / güncelle |
+| `POST` | `/auth/parola` | Kendi parolasını değiştir |
+| `GET` | `/users/hesaplar` | Giriş yetkisi olan kullanıcılar (admin) |
+| `PUT` | `/users/{id}/hesap` | Kullanıcı adı / yetki / parola / durum (admin) |
 | `PUT/DELETE` | `/assets/{id}/ozellik` | Teknik özellik ekle-güncelle / sil |
 | `GET` | `/assets/ozellik-sablonu` | Bilinen özellik grupları ve alan adları |
 | `GET/POST` | `/assets/{id}/dosyalar` | Cihaz dosyalarını listele / yükle |
@@ -485,7 +534,8 @@ app/
   ai/search.py       # Doğal dil → yapısal filtre (Claude)
   excel/             # Excel içe/dışa aktarım (sütun şeması + aktarım)
   routers/           # API uçları
-  static/index.html  # Basit web arayüzü
+  static/index.html  # Web arayüzü (sol menü + üst bar)
+  static/login.html  # Giriş sayfası (/login)
 alembic/             # Veritabanı göçleri
 scripts/
   import_snipeit.py  # Snipe-IT'ten veri taşıma
