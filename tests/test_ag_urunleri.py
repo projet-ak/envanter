@@ -279,3 +279,18 @@ def test_giris_sart(anon_client):
 ])
 def test_yazim_varyantlari_da_yakalanir(kategori, beklenen):
     assert ag.tur_bul(kategori) == beklenen
+
+
+@pytest.mark.parametrize("kategori,beklenen", [
+    # Dongle ve bridge erişim noktası değil — "diğer ağ ürünü"
+    ("Wi-Fi Dongle", "diger"),
+    ("Wireless Bridge", "diger"),
+    ("Wireless Adapter", "diger"),
+    # Gerçek erişim noktaları access_point kalmalı
+    ("Access Point", "access_point"),
+    ("Kablosuz Erişim Noktası", "access_point"),
+    # Ağ ile ilgisi olmayan dongle eşleşmemeli
+    ("Bluetooth Dongle", None),
+])
+def test_dongle_ve_bridge_dogru_siniflanir(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen

@@ -135,6 +135,10 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
     # Yaygın yazım hataları da dahil ("swich", "swtich" gerçek veride görüldü)
     (("switch", "swich", "swtich", "anahtar"), "switch"),
     (("sfp", "transceiver", "gbic", "qsfp", "fiber modul", "optik modul"), "sfp"),
+    # Dongle ve bridge'ler erişim noktası DEĞİL: biri USB adaptör, diğeri
+    # noktadan noktaya bağlantı. access_point'ten ÖNCE eşleşmeliler.
+    (("wifi dongle", "wi-fi dongle", "wireless dongle", "wireless adapter",
+      "wireless bridge", "wifi bridge", "kablosuz kopru"), "diger"),
     (("access point", "accesspoint", "erisim noktasi", "wifi", "wi-fi",
       "kablosuz"), "access_point"),
     (("router", "firewall", "guvenlik duvari", "modem", "yonlendirici"), "router"),
