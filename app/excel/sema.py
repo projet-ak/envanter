@@ -220,6 +220,33 @@ def cihaz_tipi_normalle(ham: str) -> str:
     return " ".join(w.capitalize() for w in ham.split()) or "Diğer"
 
 
+def proje_kodu_normalle(ham: str | None) -> str | None:
+    """Proje kodunu tekilleştirir: 'u023' ve 'U023 ' aynı koda iner."""
+    if not ham:
+        return None
+    kod = re.sub(r"\s+", "", str(ham)).upper()
+    return kod or None
+
+
+def santiye_adi(yer: str | None, proje_kodu: str | None) -> str | None:
+    """Şantiye lokasyonunun adını üretir.
+
+    Excel'de 'Bulunduğu Yer' çoğunlukla genel bir değer ("ŞANTİYE"), asıl
+    ayrım 'Kullanılan Birim' (U023, U026…) sütunundadır. Her şantiyenin ayrı
+    lokasyon olması için ikisi birleştirilir: "ŞANTİYE U026".
+    """
+    yer = (yer or "").strip()
+    kod = proje_kodu_normalle(proje_kodu)
+    if not kod:
+        return yer or None
+    if not yer:
+        return kod
+    # Ad zaten kodu içeriyorsa tekrarlama
+    if kod.lower() in _sadelestir(yer).replace(" ", ""):
+        return yer
+    return f"{yer} {kod}"
+
+
 def ad_normalle(ham: str) -> str:
     """Kişi/yer adındaki fazla boşlukları temizler."""
     return re.sub(r"\s+", " ", (ham or "").strip())

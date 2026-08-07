@@ -242,6 +242,18 @@ class _Onbellek:
         harita[anahtar] = nesne
         return nesne
 
+    def proje_lokasyonu(self, proje: str) -> models.Location | None:
+        """Adı zaten o projeye özel olan mevcut lokasyonu bulur.
+
+        Genel "ŞANTİYE" lokasyonu eski içe aktarımlardan bir proje kodu taşıyor
+        olabilir; hedef sayılması için adının o projeyi içermesi gerekir.
+        """
+        for l in self._yukle(models.Location).values():
+            if (l.proje_kodu == proje and l.name
+                    and sema.santiye_adi(l.name, proje) == l.name):
+                return l
+        return None
+
     def kullanici(self, tam_ad: str) -> models.User | None:
         tam_ad = sema.ad_normalle(tam_ad)
         if not tam_ad:
@@ -283,6 +295,30 @@ def _benzersiz_etiket(db: Session, istenen: str | None, seri: str | None,
     return aday
 
 
+def _yer_adi(s: dict) -> str | None:
+    """Satırın lokasyon adı: "Bulunduğu Yer" yoksa ve kullanıcı bir yer adıysa o."""
+    yer = s.get("lokasyon")
+    if not yer and not s.get("kisi_mi") and s.get("kullanici"):
+        yer = s["kullanici"]
+    return (yer or "").strip() or None
+
+
+def _proje_yerleri(satirlar: list[dict]) -> dict[str, str]:
+    """Her proje kodu için dosyadaki asıl şantiye adını belirler.
+
+    Yer bilgisi olmayan satırların adı yalnızca kodun kendisi olurdu ("U026").
+    Satırların tamamına önceden bakıp projenin gerçek şantiye adını ("ŞANTİYE
+    U026") saptıyoruz ki aynı proje iki lokasyona bölünmesin.
+    """
+    yerler: dict[str, str] = {}
+    for s in satirlar:
+        proje = sema.proje_kodu_normalle(s.get("birim"))
+        yer = _yer_adi(s)
+        if proje and yer:
+            yerler.setdefault(proje, sema.santiye_adi(yer, proje))
+    return yerler
+
+
 def aktar(db: Session, satirlar: list[dict], *, varsayilan_durum_id: int | None = None,
           guncelle: bool = True) -> dict:
     """Önizlemeden gelen satırları veritabanına işler.
@@ -294,6 +330,7 @@ def aktar(db: Session, satirlar: list[dict], *, varsayilan_durum_id: int | None 
     hatalar: list[str] = []
     kullanilan_etiketler: set[str] = set()
     onbellek = _Onbellek(db)
+    proje_yerleri = _proje_yerleri(satirlar)
 
     if varsayilan_durum_id is None:
         durum = db.scalar(
@@ -310,15 +347,23 @@ def aktar(db: Session, satirlar: list[dict], *, varsayilan_durum_id: int | None 
             tedarikci = onbellek.al(models.Supplier, s.get("tedarikci"))
             sirket = onbellek.al(models.Company, s.get("sirket"))
 
-            # Lokasyon: "Bulunduğu Yer" yoksa ve kullanıcı bir yer adıysa onu kullan
-            lokasyon_adi = s.get("lokasyon")
-            if not lokasyon_adi and not s.get("kisi_mi") and s.get("kullanici"):
-                lokasyon_adi = s["kullanici"]
+            # Her şantiye ayrı lokasyon olsun: "Bulunduğu Yer" genel bir değer
+            # ("ŞANTİYE") olduğu için proje kodu ("Kullanılan Birim") ile
+            # birleştirilir -> "ŞANTİYE U026".
+            yer = _yer_adi(s)
+            proje = sema.proje_kodu_normalle(s.get("birim"))
+            lokasyon_adi = sema.santiye_adi(yer, proje)
+            if proje and not yer:
+                # Yer bilgisi yok: projenin dosyadaki ya da veritabanındaki asıl
+                # şantiyesine bağla, "U026" diye ikinci bir lokasyon açma.
+                mevcut = onbellek.proje_lokasyonu(proje)
+                lokasyon_adi = (proje_yerleri.get(proje)
+                                or (mevcut.name if mevcut else None)
+                                or lokasyon_adi)
+
             lokasyon = onbellek.al(models.Location, lokasyon_adi)
-            # Excel'deki "Kullanılan Birim" (U023, U026…) proje kodudur;
-            # lokasyonda boşsa doldur.
-            if lokasyon is not None and s.get("birim") and not lokasyon.proje_kodu:
-                lokasyon.proje_kodu = s["birim"]
+            if lokasyon is not None and proje and not lokasyon.proje_kodu:
+                lokasyon.proje_kodu = proje
 
             model_adi = s.get("model") or (
                 f"{s.get('marka')} {s.get('cihaz_tipi')}".strip()

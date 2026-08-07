@@ -27,7 +27,10 @@ def test_proje_kodu_guncellenir(client):
 
 
 def test_excel_kullanilan_birim_proje_koduna_yazilir(client):
-    """Excel'deki 'Kullanılan Birim' (U023) lokasyonun proje kodudur."""
+    """'Kullanılan Birim' (U023) hem şantiye adına hem proje koduna yansır.
+
+    Ayrım kuralları ayrıntılı olarak tests/test_santiye.py'de sınanır.
+    """
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(sema.STANDART_SUTUNLAR)
@@ -42,13 +45,15 @@ def test_excel_kullanilan_birim_proje_koduna_yazilir(client):
                      files={"file": ("t.xlsx", io.BytesIO(tampon.getvalue()), CT)})
     client.post("/excel/aktar", json={"satirlar": on.json()["satirlar"]})
 
-    lok = next(x for x in client.get("/locations").json() if x["name"] == "ŞANTİYE")
+    lok = next(x for x in client.get("/locations").json()
+               if x["name"] == "ŞANTİYE U023")
     assert lok["proje_kodu"] == "U023"
 
 
 def test_mevcut_proje_kodu_ezilmez(client):
     """Elle girilen proje kodu içe aktarımda değiştirilmemeli."""
-    client.post("/locations", json={"name": "ŞANTİYE", "proje_kodu": "ELLE-GIRILDI"})
+    client.post("/locations", json={"name": "ŞANTİYE U099",
+                                    "proje_kodu": "ELLE-GIRILDI"})
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.append(sema.STANDART_SUTUNLAR)
@@ -63,8 +68,12 @@ def test_mevcut_proje_kodu_ezilmez(client):
                      files={"file": ("t.xlsx", io.BytesIO(tampon.getvalue()), CT)})
     client.post("/excel/aktar", json={"satirlar": on.json()["satirlar"]})
 
-    lok = next(x for x in client.get("/locations").json() if x["name"] == "ŞANTİYE")
+    # Satır bu lokasyona düşer ("ŞANTİYE" + "U099"), ama kodu ezilmez
+    lok = next(x for x in client.get("/locations").json()
+               if x["name"] == "ŞANTİYE U099")
     assert lok["proje_kodu"] == "ELLE-GIRILDI"
+    assert client.get("/assets", params={"q": "PK-2"}).json()[0]["location_id"] \
+        == lok["id"]
 
 
 # --------------------------------------------------------------------------- #

@@ -181,6 +181,42 @@ alanlar (hepsi CSV içe/dışa aktarımda ve aramada desteklenir):
 Bunların dışında kalan her şey için `custom` (JSON) alanı var — şema
 değiştirmeden istediğin alanı ekleyebilirsin.
 
+## Şantiyeler ve proje kodları
+
+Her lokasyonun bir **proje kodu** (`proje_kodu`, örn. `U023`) olabilir.
+Varlıklar bu koda göre filtrelenir:
+
+```bash
+curl -H "Authorization: Bearer $T" "$API/assets?proje_kodu=U023"
+curl -H "Authorization: Bearer $T" "$API/assets/proje-kodlari"   # kod + cihaz sayısı
+```
+
+Excel'de "Bulunduğu Yer" genellikle tek bir genel değerdir ("ŞANTİYE");
+şantiye ayrımı **"Kullanılan Birim"** sütununda durur. İçe aktarım bu ikisini
+birleştirip her proje için ayrı lokasyon açar ve kodu ona yazar:
+
+| Bulunduğu Yer | Kullanılan Birim | Oluşan lokasyon | Proje kodu |
+|---|---|---|---|
+| ŞANTİYE | U023 | `ŞANTİYE U023` | `U023` |
+| ŞANTİYE | u026 | `ŞANTİYE U026` | `U026` |
+| *(boş)* | U023 | `ŞANTİYE U023` *(mevcut şantiyeye katılır)* | `U023` |
+
+Elle girilmiş bir proje kodu içe aktarımda **ezilmez**.
+
+### Eski veriyi şantiyelere ayırma
+
+Bu ayrım eklenmeden önce aktarılmış kayıtlar tek bir lokasyonda toplanmıştı.
+Onları dağıtmak için (tekrar çalıştırılabilir, taşınacak cihaz kalmadığında
+hiçbir şeyi değiştirmez):
+
+```bash
+./.venv/bin/python scripts/santiye-ayir.py --dry-run   # önce ne olacağını gör
+./.venv/bin/python scripts/santiye-ayir.py             # uygula
+```
+
+Proje kodu olmayan cihazlara dokunulmaz. Yalnızca belirli bir lokasyonu
+ayırmak için `--kaynak "ŞANTİYE"` kullan.
+
 ## Zimmet / iade tutanağı (PDF)
 
 Personele cihaz teslim ederken imzalatılacak tutanağı sistem üretir — Türkçe
@@ -274,6 +310,8 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `POST` | `/assets/{id}/checkout` | Zimmetle (kullanıcı/lokasyon/varlık) |
 | `POST` | `/assets/{id}/checkin` | İade al |
 | `GET` | `/assets/{id}/history` | Varlık geçmişi |
+| `GET` | `/assets/sayi` | Filtrelere uyan toplam sayı (sayfalamadan bağımsız) |
+| `GET` | `/assets/proje-kodlari` | Proje kodları + cihaz sayıları |
 | `POST` | `/search` | Doğal dil araması |
 | `GET` | `/io/assets.csv` | Varlıkları CSV olarak indir |
 | `POST` | `/io/assets/import` | CSV'den varlık içe aktar (etikete göre ekle/güncelle) |
@@ -316,12 +354,15 @@ app/
   schemas.py         # Pydantic şemaları
   crud_factory.py    # Referans tabloları için jenerik CRUD
   seed.py            # Varsayılan durum etiketleri
+  santiye.py         # Cihazları proje koduna göre şantiyelere dağıtma
   ai/search.py       # Doğal dil → yapısal filtre (Claude)
+  excel/             # Excel içe/dışa aktarım (sütun şeması + aktarım)
   routers/           # API uçları
   static/index.html  # Basit web arayüzü
 alembic/             # Veritabanı göçleri
 scripts/
   import_snipeit.py  # Snipe-IT'ten veri taşıma
   create_admin.py    # Admin kullanıcı oluştur/yükselt
+  santiye-ayir.py    # Eski veriyi şantiyelere ayır (tekrar çalıştırılabilir)
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```

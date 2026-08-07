@@ -64,6 +64,16 @@ def db_session_factory(tmp_path):
 
 
 @pytest.fixture
+def db_session(db_session_factory):
+    """HTTP katmanı olmadan servis kodunu sınamak için doğrudan oturum."""
+    db = db_session_factory()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture
 def _app_db(db_session_factory):
     def override():
         db = db_session_factory()
