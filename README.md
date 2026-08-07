@@ -290,16 +290,26 @@ dosya adındaki `../` gibi ifadeler zarar veremez.
 
 ## Zimmet verme
 
-**Zimmetle** düğmesi kişi seçme penceresi açar — kimlik numarası sorulmaz.
-Pencere açılır açılmaz en çok cihaz taşıyan personel listelenir; yazdıkça
-ad soyad, sicil no, departman veya şubeye göre süzülür (Türkçe duyarlı:
-`atesoglu` → **Ateşoğlu**). Her satırda kişinin kaç cihaz taşıdığı görünür.
+Kimlik numarası hiçbir yerde sorulmaz. İki yönde de aynı pencere açılır:
+
+| Nereden | Ne seçilir |
+|---|---|
+| **Varlıklar** → cihazın *Zimmetle* düğmesi, cihaz detayı | **kişi** aranır |
+| **Personel** → satırın *+ Zimmetle* düğmesi, kişi detayı → *+ Zimmet ekle* | **cihaz** aranır |
+
+Pencere açılır açılmaz seçilebilecek kayıtlar listelenir (kişi tarafında en çok
+cihaz taşıyanlar, cihaz tarafında boştaki cihazlar) ve yazdıkça süzülür.
+Arama Türkçe duyarlıdır (`atesoglu` → **Ateşoğlu**, `santiye` → **ŞANTİYE**).
+
+- Kişi listesinde her satırda **kaç cihaz taşıdığı**,
+- Cihaz listesinde **tür, bulunduğu şantiye ve seri no** görünür.
 
 ```bash
-curl -H "Authorization: Bearer $T" "$API/users/ara?q=ertekin"
+curl -H "Authorization: Bearer $T" "$API/users/ara?q=ertekin"       # kişi ara
+curl -H "Authorization: Bearer $T" "$API/assets?assigned=false&q=hilook"  # boştaki cihaz
 ```
 
-Pencereden ayrıca:
+Kişi seçme penceresinde ayrıca:
 
 - **+ Yeni personel** — kayıtlı olmayan kişiyi oradan ekleyip aynı anda
   zimmetleyebilirsin (arama kutusuna yazdığın ad forma hazır gelir).

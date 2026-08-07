@@ -363,53 +363,66 @@
       }
     }
 
-    // ---------- Zimmet atama (kişi sayfasından) ----------
+    // ---------- Zimmet atama (kişi tarafı: kişi belli, cihaz seçilir) ----------
+    // Cihaz tarafındaki pencerenin ikizi; orada kişi aranır, burada cihaz.
     let zimmetHedefKisi = null;
+    let zimmetHedefAd = '';
+    let zimmetSonrasi = null;
 
-    function zimmetPaneliAc(kisiId) {
+    function zimmetPaneliAc(kisiId, adKodlu = '', sonra = null) {
       zimmetHedefKisi = kisiId;
-      const panel = document.getElementById('zimmetPanel');
-      if (!panel) return;
-      panel.innerHTML = `
+      zimmetHedefAd = decodeURIComponent(adKodlu);
+      zimmetSonrasi = sonra || (() => kisiDetay(kisiId));
+      modalAc(`Zimmetle${zimmetHedefAd ? ' — ' + kacir(zimmetHedefAd) : ''}`, `
         <div class="row">
-          <input id="zAra" class="grow" autofocus
-                 placeholder="Cihaz ara: etiket, seri no, demirbaş, IP…"
-                 oninput="zimmetAra()" onkeydown="if(event.key==='Enter')zimmetAra()" />
-          <button class="ghost" onclick="zimmetPaneliKapat()">Kapat</button>
+          <input id="zAra" class="grow" autocomplete="off"
+                 placeholder="Cihaz ara: etiket, seri no, demirbaş, tür, şantiye…"
+                 oninput="zimmetAra()" />
         </div>
-        <div id="zSonuc" class="note">Aramak için yazmaya başla (boştaki cihazlar listelenir).</div>`;
+        <div id="zSonuc" class="note">Yükleniyor…</div>`);
       setTimeout(() => document.getElementById('zAra')?.focus(), 60);
-      zimmetAra();
-    }
-
-    function zimmetPaneliKapat() {
-      const panel = document.getElementById('zimmetPanel');
-      if (panel) panel.innerHTML = '';
+      zimmetAraCalistir();
+      // Tür/lokasyon adları yalnızca Varlıklar sekmesi açıldığında yükleniyor;
+      // Personel sekmesinden gelindiyse önce onları getir, sonra listeyi tazele.
+      if (!Object.keys(refLokasyon).length) {
+        filtreSecenekleriDoldur().then(zimmetAraCalistir).catch(() => {});
+      }
     }
 
     let zAraZaman = null;
     function zimmetAra() {
       clearTimeout(zAraZaman);
-      zAraZaman = setTimeout(async () => {
-        const q = document.getElementById('zAra')?.value.trim() || '';
-        const p = new URLSearchParams({ assigned: 'false', limit: '25' });
-        if (q) p.set('q', q);
-        const liste = await api('/assets?' + p.toString());
-        const kutu = document.getElementById('zSonuc');
-        if (!liste.length) {
-          kutu.innerHTML = q
-            ? '<span class="muted">Eşleşen boştaki cihaz yok.</span>'
-            : '<span class="muted">Boştaki cihaz yok.</span>';
-          return;
-        }
-        kutu.innerHTML = `<table style="margin-top:6px"><thead><tr>
-          <th>Etiket</th><th>Ad</th><th>Seri</th><th></th></tr></thead><tbody>
-          ${liste.map(a => `<tr>
-            <td><b>${a.asset_tag}</b></td><td>${esc(a.name)}</td>
+      zAraZaman = setTimeout(zimmetAraCalistir, 180);
+    }
+
+    async function zimmetAraCalistir() {
+      const kutu = document.getElementById('zSonuc');
+      if (!kutu) return;
+      const q = document.getElementById('zAra')?.value.trim() || '';
+      const p = new URLSearchParams({ assigned: 'false', limit: '25' });
+      if (q) p.set('q', q);
+      let liste;
+      try { liste = await api('/assets?' + p.toString()); }
+      catch { kutu.textContent = 'Cihaz listesi alınamadı.'; return; }
+
+      if (!liste.length) {
+        kutu.innerHTML = `<div class="muted">${q
+          ? 'Eşleşen boştaki cihaz yok.' : 'Boştaki cihaz yok.'}</div>`;
+        return;
+      }
+      kutu.innerHTML = `<div class="muted" style="margin-bottom:6px">
+          ${q ? 'Boştaki eşleşen cihazlar' : 'Boştaki cihazlar'} — seçmek için tıkla</div>
+        <table><tbody>${liste.map(a => {
+          const mdl = refModelKat[a.model_id];
+          const tur = mdl ? refKategori[mdl.category_id] : null;
+          return `<tr class="tikla" onclick="zimmetVer(${a.id})">
+            <td><b>💻 ${kacir(a.asset_tag)}</b></td>
+            <td>${esc(a.name)}</td>
+            <td class="muted">${esc(tur)}</td>
+            <td class="muted">${esc(refLokasyon[a.location_id])}</td>
             <td class="muted">${esc(a.serial)}</td>
-            <td><button class="primary" onclick="zimmetVer(${a.id})">Zimmetle</button></td>
-            </tr>`).join('')}</tbody></table>`;
-      }, 300);
+            <td><button class="primary">Seç</button></td></tr>`;
+        }).join('')}</tbody></table>`;
     }
 
     async function zimmetVer(assetId) {
@@ -417,8 +430,8 @@
         await api(`/assets/${assetId}/checkout`, { method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ assigned_type: 'user', assigned_id: zimmetHedefKisi }) });
-        kisiDetay(zimmetHedefKisi);         // listeyi tazele
-        setTimeout(() => zimmetPaneliAc(zimmetHedefKisi), 250);  // panel açık kalsın
+        modalKapat();
+        zimmetSonrasi?.();
       } catch (e) { alert('⚠ ' + (e.detail || 'Zimmetlenemedi')); }
     }
 
@@ -443,18 +456,23 @@
       document.getElementById('pCount').textContent = liste.length;
       document.getElementById('pRows').innerHTML = liste.map(k => {
         const adet = sayac[k.id] || 0;
+        const tamAd = [k.first_name, k.last_name].filter(Boolean).join(' ');
+        const zimmetle = canWrite()
+          ? `<button class="ghost" title="Bu kişiye cihaz zimmetle"
+               onclick="zimmetPaneliAc(${k.id}, '${encodeURIComponent(tamAd)}',
+                        () => loadPersonel())">+ Zimmetle</button>` : '';
         const fis = adet
           ? `<button class="ghost" title="Zimmet fişi (PDF)"
                onclick="openPdf('/documents/zimmet/user/${k.id}.pdf')">📄</button>` : '';
         return `<tr class="tikla" onclick="if(!event.target.closest('button'))kisiDetay(${k.id})">
-          <td><b>${k.first_name} ${k.last_name ?? ''}</b></td>
+          <td><b>${kacir(tamAd)}</b></td>
           <td class="muted">${esc(k.employee_num)}</td>
           <td>${esc(k.department)}</td>
           <td class="muted">${esc(k.sube)}</td>
           <td class="muted">${esc(k.email)}</td>
           <td>${adet ? `<span class="tag used">${adet} cihaz</span>`
                      : '<span class="muted">—</span>'}</td>
-          <td>${fis}</td></tr>`;
+          <td>${zimmetle}${fis}</td></tr>`;
       }).join('');
     }
 
@@ -1376,10 +1394,9 @@
         <div class="bolum">
           <div class="row" style="align-items:center; margin-bottom:8px">
             <h4 style="margin:0; flex:1">Cihazlar (${d.cihaz_sayisi})</h4>
-            ${canWrite() ? `<button class="primary" onclick="zimmetPaneliAc(${id})">
-              + Zimmet ekle</button>` : ''}
+            ${canWrite() ? `<button class="primary" onclick="zimmetPaneliAc(${id}, '${
+                encodeURIComponent(k.ad || '')}')">+ Zimmet ekle</button>` : ''}
           </div>
-          <div id="zimmetPanel"></div>
           ${tablo}
         </div>`,
         (d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
