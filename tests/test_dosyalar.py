@@ -339,3 +339,92 @@ def test_cihaz_ve_kisi_ekleri_birbirine_karismaz(client, cihaz, kisi):
     ad = lambda r: r.headers["content-disposition"].rsplit("''", 1)[-1]
     assert ad(client.get(f"/dosyalar/{cihaz_dosya['id']}")) == "cihaz.pdf"
     assert ad(client.get(f"/kisi-dosyalari/{kisi_dosya['id']}")) == "kisi.pdf"
+
+
+# --------------------------------------------------------------------------- #
+# Stok ekleri — aksesuar / sarf / bileşen / lisans
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("uc,kayit_turu,on_ek", [
+    ("/accessories", "accessory", "a"),
+    ("/consumables", "consumable", "s"),
+    ("/components", "component", "b"),
+    ("/licenses", "license", "l"),
+])
+def test_stok_kaydina_dosya_eklenir(client, uc, kayit_turu, on_ek):
+    kayit = client.post(uc, json={"name": "Test"}).json()
+    r = client.post(f"/stok/{kayit_turu}/{kayit['id']}/dosyalar",
+                    files={"file": ("urun.png", io.BytesIO(PNG), "image/png")},
+                    data={"tur": "gorsel"})
+    assert r.status_code == 201, r.text
+    assert r.json()["kayit_turu"] == kayit_turu
+    assert r.json()["kayit_id"] == kayit["id"]
+
+    yollar = [str(y) for y in _diskteki_dosyalar()]
+    assert len(yollar) == 1 and "/gorseller/" in yollar[0]
+    assert f"/{on_ek}{kayit['id']}-" in yollar[0], "kayıt türü ön eki yok"
+
+    liste = client.get(f"/stok/{kayit_turu}/{kayit['id']}/dosyalar").json()
+    assert [f["dosya_adi"] for f in liste] == ["urun.png"]
+    indir = client.get(f"/stok/dosyalari/{liste[0]['id']}")
+    assert indir.status_code == 200 and indir.content == PNG
+    assert "inline" in indir.headers["content-disposition"]   # görsel gösterilir
+
+
+def test_stok_dosyasi_silinir(client):
+    a = client.post("/accessories", json={"name": "Klavye"}).json()
+    d = client.post(f"/stok/accessory/{a['id']}/dosyalar",
+                    files={"file": ("f.pdf", io.BytesIO(PDF),
+                                    "application/pdf")}).json()
+    assert client.delete(f"/stok/dosyalari/{d['id']}").status_code == 204
+    assert client.get(f"/stok/accessory/{a['id']}/dosyalar").json() == []
+    assert _diskteki_dosyalar() == []
+
+
+def test_stok_kaydi_silinince_ekleri_de_gider(client):
+    """Yabancı anahtar yok; temizliği olay dinleyicisi yapıyor."""
+    a = client.post("/accessories", json={"name": "Mouse"}).json()
+    client.post(f"/stok/accessory/{a['id']}/dosyalar",
+                files={"file": ("f.pdf", io.BytesIO(PDF), "application/pdf")})
+    b = client.post("/consumables", json={"name": "Toner"}).json()
+    client.post(f"/stok/consumable/{b['id']}/dosyalar",
+                files={"file": ("g.pdf", io.BytesIO(PDF), "application/pdf")})
+
+    assert client.delete(f"/accessories/{a['id']}").status_code in (200, 204)
+    assert client.get(f"/stok/accessory/{a['id']}/dosyalar").status_code == 404
+    # Diğer türün eki etkilenmemeli
+    assert len(client.get(f"/stok/consumable/{b['id']}/dosyalar").json()) == 1
+
+
+def test_ayni_kimlik_farkli_turde_karismaz(client):
+    """accessory #1 ile consumable #1 aynı numarayı taşır; ekler ayrı durmalı."""
+    a = client.post("/accessories", json={"name": "A"}).json()
+    c = client.post("/consumables", json={"name": "C"}).json()
+    client.post(f"/stok/accessory/{a['id']}/dosyalar",
+                files={"file": ("aksesuar.pdf", io.BytesIO(PDF), "application/pdf")})
+    client.post(f"/stok/consumable/{c['id']}/dosyalar",
+                files={"file": ("sarf.pdf", io.BytesIO(PDF), "application/pdf")})
+    assert [f["dosya_adi"] for f in
+            client.get(f"/stok/accessory/{a['id']}/dosyalar").json()] == \
+        ["aksesuar.pdf"]
+    assert [f["dosya_adi"] for f in
+            client.get(f"/stok/consumable/{c['id']}/dosyalar").json()] == \
+        ["sarf.pdf"]
+
+
+def test_olmayan_stok_kaydina_yuklenemez(client):
+    r = client.post("/stok/accessory/999999/dosyalar",
+                    files={"file": ("f.pdf", io.BytesIO(PDF), "application/pdf")})
+    assert r.status_code == 404
+
+
+def test_bilinmeyen_kayit_turu_reddedilir(client):
+    r = client.get("/stok/uzay_gemisi/1/dosyalar")
+    assert r.status_code == 422
+
+
+def test_stok_dosyasi_viewer_yukleyemez(client, viewer_client):
+    a = client.post("/accessories", json={"name": "K"}).json()
+    r = viewer_client.post(f"/stok/accessory/{a['id']}/dosyalar",
+                           files={"file": ("f.pdf", io.BytesIO(PDF),
+                                           "application/pdf")})
+    assert r.status_code == 403

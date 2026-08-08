@@ -12,6 +12,7 @@ from app.models import (
     CategoryType,
     DosyaTuru,
     StatusType,
+    StokTuru,
     UserRole,
 )
 
@@ -421,6 +422,22 @@ class ActivityLogRead(ORMModel):
 # --------------------------------------------------------------------------- #
 # Cihaz dosya ekleri (görsel, imzalı zimmet formu, fatura…)
 # --------------------------------------------------------------------------- #
+class StockFileRead(ORMModel):
+    """Aksesuar/sarf/bileşen/lisans kaydına bağlı dosya."""
+
+    id: int
+    kayit_turu: StokTuru
+    kayit_id: int
+    tur: DosyaTuru
+    dosya_adi: str
+    yol: str
+    content_type: str | None = None
+    boyut: int
+    aciklama: str | None = None
+    yukleyen: str | None = None
+    created_at: dt.datetime
+
+
 class UserFileRead(ORMModel):
     """Kişiye bağlı dosya (imzalı zimmet formu, tutanak…)."""
 

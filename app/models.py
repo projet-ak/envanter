@@ -85,6 +85,15 @@ class DosyaTuru(str, enum.Enum):
     diger = "diger"
 
 
+class StokTuru(str, enum.Enum):
+    """Adet bazlı kayıt türleri — dosya eklerinde sahibi ayırt etmek için."""
+
+    accessory = "accessory"
+    consumable = "consumable"
+    component = "component"
+    license = "license"
+
+
 class ActivityAction(str, enum.Enum):
     create = "create"
     update = "update"
@@ -440,3 +449,32 @@ class UserFile(Base):
     )
 
     kisi: Mapped[User] = relationship(back_populates="dosyalar")
+
+
+class StockFile(Base):
+    """Aksesuar / sarf / bileşen / lisans kaydına bağlı dosya eki.
+
+    Dört tür için dört ayrı tablo açmak yerine sahibi `kayit_turu + kayit_id`
+    ikilisiyle tutulur: tablolar birbirinin kopyası olmaz, uçlar ve arayüz tek
+    bir yoldan çalışır. Yabancı anahtar yoktur (tek sütun dört tabloya
+    bakamaz); kayıt silinince ekleri `app/routers/stok_dosyalari.py` içindeki
+    olay dinleyicisi temizler.
+    """
+
+    __tablename__ = "stock_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kayit_turu: Mapped[StokTuru] = mapped_column(Enum(StokTuru), index=True)
+    kayit_id: Mapped[int] = mapped_column(Integer, index=True)
+    tur: Mapped[DosyaTuru] = mapped_column(
+        Enum(DosyaTuru), default=DosyaTuru.diger, index=True
+    )
+    dosya_adi: Mapped[str] = mapped_column(String(255))
+    yol: Mapped[str] = mapped_column(String(500), unique=True)
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    boyut: Mapped[int] = mapped_column(Integer, default=0)
+    aciklama: Mapped[str | None] = mapped_column(String(500))
+    yukleyen: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

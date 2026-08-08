@@ -11,7 +11,8 @@ Nereden ne alınır:
     model görseli      models.image            → o modelin cihazlarına (isteğe bağlı)
     cihaz belgesi      action_logs (Asset)     → cihaz eki (belge)
     kişi belgesi       action_logs (User)      → kişi eki (imzalı zimmet formu)
-    aksesuar görseli   accessories.image       → desteklenmiyor, raporlanır
+    aksesuar/sarf/     accessories.image ve    → stok kaydı eki
+    bileşen/lisans     action_logs (Accessory…)
 
 Snipe-IT sürümleri dosyaları farklı klasörlere koyar (`public/uploads/assets`,
 `storage/private_uploads/users`…). Bu yüzden verilen klasörün ALTINDA ad ile
@@ -93,6 +94,9 @@ def main() -> int:
                     help="dosyaları kopyala ve kaydet (varsayılan: rapor)")
     ap.add_argument("--model-gorselleri", action="store_true",
                     help="model görselini o modelin cihazlarına da ekle")
+    ap.add_argument("--kisi-pdf-zimmet", action="store_true",
+                    help="kişiye bağlı PDF'leri baştan 'imzalı zimmet formu' "
+                         "say (adları tmp… olduğu için addan anlaşılmıyor)")
     args = ap.parse_args()
 
     for yol in (args.dokum, args.klasor):
@@ -114,6 +118,17 @@ def main() -> int:
     mdl = {m["id"]: m for m in sql_tablo(dokum, o + "models")}
     kul = {k["id"]: k for k in sql_tablo(dokum, o + "users")}
     loglar = [x for x in sql_tablo(dokum, o + "action_logs") if x.get("filename")]
+    # Stok kayıtları: Snipe-IT sınıf adı -> (bizdeki tür, tablo, döküm satırları)
+    STOK = {
+        "Accessory": (models.StokTuru.accessory, models.Accessory,
+                      {s["id"]: s for s in sql_tablo(dokum, o + "accessories")}),
+        "Consumable": (models.StokTuru.consumable, models.Consumable,
+                       {s["id"]: s for s in sql_tablo(dokum, o + "consumables")}),
+        "Component": (models.StokTuru.component, models.Component,
+                      {s["id"]: s for s in sql_tablo(dokum, o + "components")}),
+        "License": (models.StokTuru.license, models.License,
+                    {s["id"]: s for s in sql_tablo(dokum, o + "licenses")}),
+    }
 
     diskte = _dosya_dizini(args.klasor)
     print(f"\n{M}Kaynak{N}")
@@ -130,16 +145,28 @@ def main() -> int:
         for k in db.scalars(select(models.User)).all():
             kisiler.setdefault(_sadelestir(k.full_name), k)
 
+        # Stok kayıtları ada göre eşleşir (Snipe-IT kimlikleri bizde saklı değil)
+        stok_kayitlari: dict[models.StokTuru, dict] = {}
+        for tur_ad, (stok_turu, tablo, _) in STOK.items():
+            harita = {}
+            for nesne in db.scalars(select(tablo)).all():
+                if nesne.name:
+                    harita.setdefault(_sadelestir(nesne.name), nesne)
+            stok_kayitlari[stok_turu] = harita
+
         # Zaten aktarılmış mı? Aynı dosya adı iki kez eklenmesin.
-        var_olan_cihaz = {(d.asset_id, d.dosya_adi)
-                          for d in db.scalars(select(models.AssetFile)).all()}
-        var_olan_kisi = {(d.user_id, d.dosya_adi)
-                         for d in db.scalars(select(models.UserFile)).all()}
+        var_olan = {("cihaz", d.asset_id, d.dosya_adi)
+                    for d in db.scalars(select(models.AssetFile)).all()}
+        var_olan |= {("kisi", d.user_id, d.dosya_adi)
+                     for d in db.scalars(select(models.UserFile)).all()}
+        var_olan |= {(d.kayit_turu.value, d.kayit_id, d.dosya_adi)
+                     for d in db.scalars(select(models.StockFile)).all()}
 
         isler: list[tuple] = []          # (sahip_tipi, sahip, kaynak_yol, ad, tür)
         eksik_dosya, eslesmeyen = [], []
 
         def ekle(sahip_tipi, sahip, dosya_adi, kaynak_etiket):
+            """sahip_tipi: "cihaz" | "kisi" | StokTuru değeri ("accessory"…)"""
             kaynak = diskte.get(dosya_adi)
             if kaynak is None:
                 eksik_dosya.append((kaynak_etiket, dosya_adi))
@@ -148,11 +175,13 @@ def main() -> int:
             if Path(ad).suffix.lower() not in IZINLI_UZANTILAR:
                 eksik_dosya.append((kaynak_etiket, f"{dosya_adi} (izinsiz tür)"))
                 return
-            anahtar = (sahip.id, ad)
-            if (anahtar in var_olan_cihaz if sahip_tipi == "cihaz"
-                    else anahtar in var_olan_kisi):
+            if (sahip_tipi, sahip.id, ad) in var_olan:
                 return                                     # zaten aktarılmış
-            isler.append((sahip_tipi, sahip, kaynak, ad, _tur_sec(ad)))
+            tur = _tur_sec(ad)
+            if (args.kisi_pdf_zimmet and sahip_tipi == "kisi"
+                    and Path(ad).suffix.lower() == ".pdf"):
+                tur = models.DosyaTuru.zimmet_formu
+            isler.append((sahip_tipi, sahip, kaynak, ad, tur))
 
         # 1) Cihaz görselleri
         for a in ast.values():
@@ -176,7 +205,19 @@ def main() -> int:
                     if hedef is not None:
                         ekle("cihaz", hedef, m["image"], a.get("asset_tag"))
 
-        # 3) Loglardaki yüklemeler: cihaz ve kişi ekleri
+        # 3) Stok kayıtlarının görselleri (accessories.image vb.)
+        for tur_ad, (stok_turu, _, satirlar) in STOK.items():
+            for kayit in satirlar.values():
+                if not kayit.get("image") or kayit.get("deleted_at"):
+                    continue
+                ad = kayit.get("name") or ""
+                hedef = stok_kayitlari[stok_turu].get(_sadelestir(ad))
+                if hedef is None:
+                    eslesmeyen.append((stok_turu.value, ad))
+                    continue
+                ekle(stok_turu.value, hedef, kayit["image"], ad)
+
+        # 4) Loglardaki yüklemeler: cihaz, kişi ve stok ekleri
         aksesuar_atlanan = 0
         for l in loglar:
             tur = (l.get("item_type") or "").split("\\")[-1].replace("\\", "")
@@ -196,8 +237,15 @@ def main() -> int:
                     eslesmeyen.append(("kişi", ad))
                     continue
                 ekle("kisi", hedef, l["filename"], ad)
-            elif tur in ("Accessory", "Component", "Consumable", "License"):
-                aksesuar_atlanan += 1
+            elif tur in STOK:
+                stok_turu, _, satirlar = STOK[tur]
+                kayit = satirlar.get(l["item_id"]) or {}
+                ad = kayit.get("name") or ""
+                hedef = stok_kayitlari[stok_turu].get(_sadelestir(ad))
+                if hedef is None:
+                    eslesmeyen.append((stok_turu.value, ad or f"#{l['item_id']}"))
+                    continue
+                ekle(stok_turu.value, hedef, l["filename"], ad)
             elif tur == "AssetModel":
                 m = mdl.get(l["item_id"])
                 if not (args.model_gorselleri and m):
@@ -213,14 +261,19 @@ def main() -> int:
 
         cihaz_isleri = [i for i in isler if i[0] == "cihaz"]
         kisi_isleri = [i for i in isler if i[0] == "kisi"]
+        stok_isleri = [i for i in isler if i[0] not in ("cihaz", "kisi")]
         print(f"\n{M}Aktarılacak{N}")
         print(f"  {Y}Cihaz eki : {len(cihaz_isleri)}{N}")
         print(f"  {Y}Kişi eki  : {len(kisi_isleri)}{N}")
+        print(f"  {Y}Stok eki  : {len(stok_isleri)}{N}"
+              f"  (aksesuar/sarf/bileşen/lisans)")
         if aksesuar_atlanan:
             print(f"  {S}Atlanan   : {aksesuar_atlanan} "
-                  f"(aksesuar/model eki — cihaz ya da kişiye bağlanamıyor){N}")
+                  f"(model eki — tek bir cihaza bağlanamıyor, "
+                  f"--model-gorselleri ile alınabilir){N}")
         for tip, sahip, kaynak, ad, tur in isler[:15]:
-            kime = sahip.asset_tag if tip == "cihaz" else sahip.full_name
+            kime = (sahip.asset_tag if tip == "cihaz"
+                    else sahip.full_name if tip == "kisi" else sahip.name)
             print(f"    {tip:<5} {str(kime)[:26]:<26} ← {ad[:40]} "
                   f"[{tur.value}]")
         if len(isler) > 15:
@@ -255,8 +308,9 @@ def main() -> int:
         kopyalanan = 0
         for tip, sahip, kaynak, ad, tur in isler:
             icerik = kaynak.read_bytes()
-            goreli = yeni_yol(sahip.id, tur, Path(ad).suffix.lower(),
-                              on_ek="" if tip == "cihaz" else "k")
+            on_ek = {"cihaz": "", "kisi": "k", "accessory": "a",
+                     "consumable": "s", "component": "b", "license": "l"}[tip]
+            goreli = yeni_yol(sahip.id, tur, Path(ad).suffix.lower(), on_ek=on_ek)
             hedef = tam_yol(goreli)
             hedef.parent.mkdir(parents=True, exist_ok=True)
             hedef.write_bytes(icerik)
@@ -266,12 +320,16 @@ def main() -> int:
                          yukleyen="snipeit-aktarim")
             if tip == "cihaz":
                 db.add(models.AssetFile(asset_id=sahip.id, **ortak))
-            else:
+            elif tip == "kisi":
                 db.add(models.UserFile(user_id=sahip.id, **ortak))
+            else:
+                db.add(models.StockFile(kayit_turu=models.StokTuru(tip),
+                                        kayit_id=sahip.id, **ortak))
             kopyalanan += 1
         db.commit()
         print(f"\n{Y}✓ {kopyalanan} dosya aktarıldı "
-              f"({len(cihaz_isleri)} cihaz eki, {len(kisi_isleri)} kişi eki).{N}")
+              f"({len(cihaz_isleri)} cihaz, {len(kisi_isleri)} kişi, "
+              f"{len(stok_isleri)} stok eki).{N}")
         return 0
     finally:
         db.close()

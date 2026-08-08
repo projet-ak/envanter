@@ -402,10 +402,29 @@ durur. Bu yüzden iki şey gerekir — **döküm** (hangi dosya kime ait) ve
 | `models.image` | `--model-gorselleri` ile o modelin cihazlarına |
 | aksesuar/bileşen ekleri | aktarılmaz, raporlanır |
 
+| aksesuar/sarf/bileşen/lisans görsel ve ekleri | stok kaydı eki |
+
 Dosya adları klasörün altında **ada göre** aranır, bu yüzden Snipe-IT sürümü
-klasörleri nereye koymuş olursa olsun bulunur. Tekrar çalıştırılabilir: aynı
-dosya ikinci kez eklenmez. Ad önekindeki `user-3-0mQ0RyRs-` gibi gürültü
-temizlenir, asıl ad korunur.
+klasörleri nereye koymuş olursa olsun bulunur (`public/uploads/...` ya da
+`storage/private_uploads/...`). Tekrar çalıştırılabilir: aynı dosya ikinci kez
+eklenmez. Ad önekindeki `user-3-0mQ0RyRs-` gibi gürültü temizlenir, asıl ad
+korunur.
+
+Snipe-IT'te dosya adları çoğu zaman `tmp20241020161408.pdf` gibidir; addan tür
+anlaşılmaz ve belgeler "Diğer" olarak gelir. Kişiye bağlı PDF'ler pratikte
+imzalı zimmet formudur:
+
+```bash
+# aktarım sırasında
+./.venv/bin/python scripts/snipeit-dosya-aktar.py dokum.sql /path --kisi-pdf-zimmet
+# aktarılmış belgeleri sonradan düzeltmek için
+./.venv/bin/python scripts/kisi-belge-turu.py            # rapor
+./.venv/bin/python scripts/kisi-belge-turu.py --uygula   # yaz
+```
+
+`kisi-belge-turu.py` yalnızca **PDF** ve türü **Diğer** olanlara dokunur;
+Excel/görsellere ve elle seçilmiş türlere karışmaz. Varsayılan olarak yalnızca
+aktarımdan gelenleri işler, `--tumu` bu sınırı kaldırır.
 
 ### Snipe-IT dışa aktarımıyla karşılaştırma
 
@@ -859,5 +878,6 @@ scripts/
   marka-kontrol.py   # Markası boş modelleri bul/doldur
   snipeit-karsilastir.py # Snipe-IT dışa aktarımı/dökümüyle karşılaştır, boşları doldur
   snipeit-dosya-aktar.py # Snipe-IT görsel ve belgelerini aktar
+  kisi-belge-turu.py # Kişi belgelerini imzalı zimmet formu olarak işaretle
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```

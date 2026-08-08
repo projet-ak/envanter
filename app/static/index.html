@@ -343,21 +343,25 @@
     // Adet bazlı türlerin yapılandırması (veri-odaklı arayüz)
     const STOCK = {
       accessories: { label: 'Aksesuarlar', endpoint: '/accessories',
+        kayitTuru: 'accessory',
         ikon: '🎧', alt: 'Klavye, mouse, kulaklık gibi adet bazlı malzemeler',
         cols: [['name','Ad'],['model_number','Model No'],['qty','Adet'],['min_qty','Min']],
         add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
         lowStock: true },
       consumables: { label: 'Sarf Malzeme', endpoint: '/consumables',
+        kayitTuru: 'consumable',
         ikon: '📦', alt: 'Toner, kablo, pil gibi tüketilen malzemeler',
         cols: [['name','Ad'],['qty','Adet'],['min_qty','Min']],
         add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
         lowStock: true },
       components: { label: 'Bileşenler', endpoint: '/components',
+        kayitTuru: 'component',
         ikon: '🔩', alt: 'RAM, disk, ekran kartı gibi cihaz parçaları',
         cols: [['name','Ad'],['serial','Seri'],['qty','Adet'],['min_qty','Min']],
         add: [['name','Ad','text'],['serial','Seri','text'],['qty','Adet','number'],['min_qty','Min','number']],
         lowStock: true },
       licenses: { label: 'Lisanslar', endpoint: '/licenses',
+        kayitTuru: 'license',
         ikon: '🔑', alt: 'Yazılım lisansları ve koltuk sayıları',
         cols: [['name','Ad'],['seats','Koltuk'],['license_key','Anahtar'],['expiration_date','Bitiş']],
         add: [['name','Ad','text'],['seats','Koltuk','number'],['license_key','Anahtar','text']],
@@ -2401,7 +2405,7 @@
           if (k === 'qty' && low) v = `${it[k]} <span class="tag low">düşük stok</span>`;
           return `<td>${v}</td>`;
         }).join('');
-        return `<tr>${cells}</tr>`;
+        return `<tr class="tikla" onclick="stokDetay('${tab}', ${it.id})">${cells}</tr>`;
       }).join('');
     }
 
@@ -2420,6 +2424,103 @@
           body: JSON.stringify(body) });
         stockInfo.textContent = '✓ Eklendi.'; loadStock(tab);
       } catch (e) { stockInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
+    }
+
+    // ---------- Stok kaydı detayı: bilgiler + dosya ekleri ----------
+    async function stokDetay(tab, id) {
+      const cfg = STOCK[tab];
+      let kayit, dosyalar;
+      try {
+        [kayit, dosyalar] = await Promise.all([
+          api(`${cfg.endpoint}/${id}`),
+          api(`/stok/${cfg.kayitTuru}/${id}/dosyalar`).catch(() => []),
+        ]);
+      } catch (e) { return alert('⚠ ' + (e.detail || 'Kayıt alınamadı')); }
+
+      const gorseller = dosyalar.filter(f => f.tur === 'gorsel');
+      const belgeler = dosyalar.filter(f => f.tur !== 'gorsel');
+      const yaz = canWrite();
+
+      modalAc(`${cfg.ikon} ${kacir(kayit.name)}`, `
+        <div class="bolum"><h4>${kacir(cfg.label)}</h4>${alanlar(kayit,
+          cfg.cols.filter(([k]) => k !== 'name'))}</div>
+        <div class="bolum">
+          <h4>Görseller ve Belgeler</h4>
+          ${gorseller.length ? `<div class="gorsel-serit">
+            ${gorseller.map(f => `<figure>
+              <img data-stok-dosya="${f.id}" alt="${kacir(f.dosya_adi)}"
+                   onclick="stokDosyaAc(${f.id})" title="Büyüt" />
+              ${yaz ? `<button class="ghost mini" title="Sil"
+                 onclick="stokDosyaSil(${f.id}, '${tab}', ${id})">🗑</button>` : ''}
+            </figure>`).join('')}</div>` : ''}
+          ${belgeler.length ? `<table><tbody>
+            ${belgeler.map(f => `<tr>
+              <td>${TUR_ADI[f.tur] || f.tur}</td>
+              <td><a href="#" onclick="stokDosyaAc(${f.id});return false">${
+                kacir(f.dosya_adi)}</a></td>
+              <td class="muted">${(f.boyut / 1024).toFixed(0)} KB</td>
+              ${yaz ? `<td><button class="ghost mini" title="Sil"
+                 onclick="stokDosyaSil(${f.id}, '${tab}', ${id})">🗑</button></td>` : ''}
+            </tr>`).join('')}</tbody></table>` : ''}
+          ${!dosyalar.length ? '<div class="muted">Yüklenmiş dosya yok</div>' : ''}
+          ${yaz ? `<div class="row" style="margin-top:10px">
+            <button class="ghost" onclick="stokDosyaSec('${tab}', ${id}, 'gorsel')">
+              📷 Ürün görseli</button>
+            <button class="ghost" onclick="stokDosyaSec('${tab}', ${id}, 'fatura')">
+              🧾 Fatura</button>
+            <button class="ghost" onclick="stokDosyaSec('${tab}', ${id}, 'diger')">
+              📎 Diğer belge</button>
+          </div>` : ''}
+        </div>`);
+      stokGorselleriYukle();
+    }
+
+    // Görsel ucu Authorization ister; <img src> başlık gönderemez
+    async function stokGorselleriYukle() {
+      for (const el of document.querySelectorAll('[data-stok-dosya]')) {
+        try {
+          const r = await fetch(url('/stok/dosyalari/' + el.dataset.stokDosya),
+                                { headers: { 'Authorization': `Bearer ${token}` } });
+          if (r.ok) el.src = URL.createObjectURL(await r.blob());
+        } catch { /* görsel yüklenemezse boş kalsın */ }
+      }
+    }
+
+    function stokDosyaSec(tab, id, tur) {
+      const girdi = document.createElement('input');
+      girdi.type = 'file';
+      if (tur === 'gorsel') girdi.accept = 'image/*';
+      girdi.onchange = () => girdi.files[0] &&
+        stokDosyaYukle(tab, id, tur, girdi.files[0]);
+      girdi.click();
+    }
+
+    async function stokDosyaYukle(tab, id, tur, dosya) {
+      const veri = new FormData();
+      veri.append('file', dosya);
+      veri.append('tur', tur);
+      try {
+        await api(`/stok/${STOCK[tab].kayitTuru}/${id}/dosyalar`,
+                  { method: 'POST', body: veri });
+        stokDetay(tab, id);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Dosya yüklenemedi')); }
+    }
+
+    async function stokDosyaAc(dosyaId) {
+      try {
+        const r = await fetch(url('/stok/dosyalari/' + dosyaId),
+                              { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Açılamadı' }));
+        pdfAc(await r.blob());
+      } catch (e) { alert('⚠ ' + (e.detail || e.message || 'Dosya açılamadı')); }
+    }
+
+    async function stokDosyaSil(dosyaId, tab, id) {
+      if (!confirm('Dosya silinsin mi?')) return;
+      try {
+        await api('/stok/dosyalari/' + dosyaId, { method: 'DELETE' });
+        stokDetay(tab, id);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
     }
 
     // ---------- Ayarlar: profil, parola, hesap yönetimi ----------
