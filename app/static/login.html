@@ -334,18 +334,29 @@
       btn.disabled = true;
       btnYazi.textContent = 'Giriş yapılıyor…';
       try {
+        // Değerler FormData'dan okunur: tarayıcı otomatik doldurmasında
+        // (autofill) alan değeri bazen ilk programatik okumada boş gelir;
+        // FormData bundan etkilenmez. getElementById yedek olarak kalır.
+        const veri = new FormData(e.target);
+        const kullanici = String(veri.get('username')
+          ?? document.getElementById('ku').value).trim();
+        const parola = String(veri.get('password')
+          ?? document.getElementById('pa').value);
+        if (!kullanici || !parola) {
+          hataGoster('Kullanıcı adı ve şifre boş olamaz.');
+          return;
+        }
         const r = await fetch((BASE || '') + '/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: document.getElementById('ku').value.trim(),
-            password: document.getElementById('pa').value,
-          }),
+          body: JSON.stringify({ username: kullanici, password: parola }),
         });
         if (!r.ok) {
+          // Durum kodu görünür: "ilk denemede olmuyor" tarzı sorunların
+          // sebebi (422/502/504…) destek ekranında hemen anlaşılsın.
           hataGoster(r.status === 401
             ? 'Kullanıcı adı veya şifre hatalı.'
-            : 'Giriş yapılamadı, lütfen tekrar deneyin.');
+            : `Giriş yapılamadı (hata ${r.status}), lütfen tekrar deneyin.`);
           return;
         }
         const d = await r.json();

@@ -46,7 +46,12 @@ def test_genel_rapor_tum_sayfalari_icerir(client, sahne):
                              "Stok", "Sistem Ürünleri"]
 
 
-def test_cihazlar_sayfasi_bicimli(client, sahne):
+def test_cihazlar_sayfasi_bicimli(client, sahne, monkeypatch, tmp_path):
+    # Logo dosyası ortamda olabilir de olmayabilir de; bu test logosuz düzeni
+    # sınar — yol bilerek var olmayan bir dosyaya çevrilir.
+    from app import rapor
+    monkeypatch.setattr(rapor, "LOGO_YOLU", tmp_path / "yok.png")
+
     ws = _kitap(client, "cihazlar")["Cihazlar"]
     # 1. satır kurum başlığı, 2. satır tablo başlığı
     assert "Cihaz Listesi" in ws["A1"].value
@@ -134,3 +139,22 @@ def test_logo_varsa_rapora_gomulur(client, sahne, monkeypatch, tmp_path):
     ws = _kitap(client, "cihazlar")["Cihazlar"]
     assert ws["C1"].value and "Cihaz Listesi" in ws["C1"].value
     assert len(ws._images) == 1, "logo çalışma kitabına gömülmemiş"
+
+
+def test_logo_dar_sayfada_atlanir_genel_rapor_bozulmaz(client, sahne,
+                                                       monkeypatch, tmp_path):
+    """Özet sayfası 2 sütun: logo C1 birleştirmesi orada geçersiz aralık
+    üretiyordu (C1:B1 → 500). Dar sayfada logo atlanmalı, kalanlarda durmalı."""
+    from PIL import Image as PILImage
+
+    from app import rapor
+
+    yol = tmp_path / "logo-rapor.png"
+    PILImage.new("RGBA", (200, 140), (0, 61, 53, 255)).save(yol)
+    monkeypatch.setattr(rapor, "LOGO_YOLU", yol)
+
+    wb = _kitap(client, "genel")            # 500 dönerse _kitap assert'ü patlar
+    assert "Genel Envanter Raporu" in wb["Özet"]["A1"].value   # dar: logosuz
+    assert len(wb["Özet"]._images) == 0
+    assert "Cihaz Listesi" in wb["Cihazlar"]["C1"].value       # geniş: logolu
+    assert len(wb["Cihazlar"]._images) == 1

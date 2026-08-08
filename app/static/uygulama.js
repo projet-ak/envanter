@@ -166,6 +166,7 @@ function sayacBaslat() {
     img.src = URL.createObjectURL(b);
     kutu.textContent = '';
     kutu.classList.add('genis');       // yatay logo dar karede ezilmesin
+    kutu.closest('.yan-bas')?.classList.add('logolu');
     kutu.appendChild(img);
   }).catch(() => {});
 })();
@@ -187,6 +188,7 @@ const MENU_ANA = [
   ['licenses', 'Lisanslar', '🔑'],
 ];
 const MENU_YONETIM = [
+  ['raporlar', 'Raporlar', '📈'],
   ['tanimlar', 'Tanımlar', '🗂️'],
   ['excel', 'Excel Aktarım', '📄'],
   ['invoice', 'Fatura Oku', '🧾', true],
@@ -220,6 +222,7 @@ function selectTab(tab) {
   else if (tab === 'personel') renderPersonelView();
   else if (tab === 'tanimlar') renderTanimlarView();
   else if (tab === 'excel') renderExcelView();
+  else if (tab === 'raporlar') renderRaporlarView();
   else if (AILE_BILGI[tab]) renderAgView(tab);
   else if (tab === 'ayarlar') renderAyarlarView();
   else renderStockView(tab);
@@ -2215,6 +2218,44 @@ async function addStock(tab) {
       body: JSON.stringify(body) });
     stockInfo.textContent = '✓ Eklendi.'; loadStock(tab);
   } catch (e) { stockInfo.textContent = '⚠ ' + (e.detail || 'Hata'); }
+}
+
+// ---------- Raporlar ----------
+function renderRaporlarView() {
+  const RAPORLAR = [
+    ['genel', '📗', 'Genel rapor',
+     'Hepsi tek kitapta: Özet + aşağıdaki tüm sayfalar', 'primary'],
+    ['cihazlar', '💻', 'Cihaz listesi',
+     'Tüm varlıklar, tam künye — marka, model, seri, lokasyon, durum, bedel'],
+    ['zimmet', '🤝', 'Zimmet raporu',
+     'Yalnızca zimmetli cihazlar + sicil, departman, unvan, zimmet tarihi'],
+    ['lokasyon', '🏗️', 'Lokasyon raporu',
+     'Şantiye başına cihaz / zimmetli / boşta sayıları'],
+    ['stok', '📦', 'Stok raporu',
+     'Aksesuar, sarf, bileşen, lisans — azalanlar "DÜŞÜK" işaretli'],
+    ['sistem', '🌐', 'Sistem ürünleri',
+     'Ağ, yangın, alarm, geçiş, kantar — teknik özellikler tek sütunda'],
+  ];
+  document.getElementById('view').innerHTML =
+    sayfaBasligi('📈', 'Raporlar',
+      'Başlıklı, süzgeçli, yazdırmaya hazır Excel dosyaları — tek tıkla iner') + `
+    <div class="kisayollar">
+      ${RAPORLAR.map(([tip, ikon, ad, alt, birincil]) => `
+        <button class="kisayol${birincil ? ' onemli' : ''}"
+                onclick="indirDosya('/reports/excel?tip=${tip}')">
+          <span class="ikon">${ikon}</span><b>${ad}</b>
+          <small>${alt}</small>
+        </button>`).join('')}
+    </div>
+    <div class="panel">
+      <h2>Dosya düzeni</h2>
+      <div class="note" style="margin-top:0">
+        Her sayfada kurum başlığı ve tarih bulunur; üst satır sabitlenmiştir,
+        sütunlarda süzgeç okları açıktır. Tarihler GG.AA.YYYY, tutarlar ₺
+        biçimindedir. Dosya adı raporun adını ve günün tarihini taşır —
+        örn. <b>"Zimmet Raporu ${new Date().toLocaleDateString('tr-TR')}.xlsx"</b>.
+      </div>
+    </div>`;
 }
 
 // ---------- Stok kaydı detayı: bilgiler + dosya ekleri ----------

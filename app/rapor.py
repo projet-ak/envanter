@@ -65,8 +65,11 @@ def _sayfa(wb: Workbook, ad: str, baslik: str, sutunlar: list[str],
     ws.sheet_properties.tabColor = KOYU
 
     son_sutun = get_column_letter(len(sutunlar))
-    logolu = LOGO_YOLU.exists()
-    ilk = "C" if logolu else "A"          # logo A1-B1 alanına oturur
+    # Logo A1-B1 alanına oturur; başlık C1'den başlar. 3 sütundan dar
+    # sayfada (örn. Özet) C1'den birleştirme geçersiz aralık üretir
+    # (C1:B1) — orada logo atlanır, başlık A1'de kalır.
+    logolu = LOGO_YOLU.exists() and len(sutunlar) >= 4
+    ilk = "C" if logolu else "A"
     ws.merge_cells(f"{ilk}1:{son_sutun}1")
     ust = ws[f"{ilk}1"]
     ust.value = (f"{settings.org_name} — {baslik} — "
