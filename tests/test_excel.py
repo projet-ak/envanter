@@ -236,3 +236,51 @@ def test_ice_aktarim_editor_ister(viewer_client):
     r = viewer_client.post("/excel/oku",
                            files={"file": ("t.xlsx", io.BytesIO(veri), CT)})
     assert r.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# Eksik marka: mevcut model kaydı yeniden aktarımda tamamlanmalı
+# --------------------------------------------------------------------------- #
+def test_markasiz_model_yeniden_aktarimda_markalanir(client):
+    """Snipe-IT'ten markasız gelen model, Excel'de marka varsa dolmalı.
+
+    Marka cihazda değil modelde durur; model adla bulunduğu için eskiden
+    mevcut kayıt olduğu gibi kullanılıyor ve marka sonsuza dek boş kalıyordu.
+    """
+    # Üretimdeki durum: model var, markası yok
+    kat = client.post("/categories", json={"name": "Dizüstü"}).json()
+    mdl = client.post("/models", json={"name": "N439",
+                                       "category_id": kat["id"]}).json()
+    assert mdl["manufacturer_id"] is None
+
+    veri = _excel_uret([{"Cihaz Tipi": "Dizüstü", "Cihaz NO": "FRM-0002",
+                         "Serial": "SN-0002", "Marka": "HP", "Model": "N439"}])
+    on = client.post("/excel/oku", files={"file": ("t.xlsx", io.BytesIO(veri), CT)})
+    r = client.post("/excel/aktar", json={"satirlar": on.json()["satirlar"]})
+    assert r.json()["atlanan"] == 0, r.json()["hatalar"]
+
+    # Yeni model açılmamalı, mevcut kayıt markalanmalı
+    modeller = [m for m in client.get("/models").json() if m["name"] == "N439"]
+    assert len(modeller) == 1
+    marka = client.get(f"/manufacturers/{modeller[0]['manufacturer_id']}").json()
+    assert marka["name"] == "HP"
+
+    # Cihaz detayında da görünmeli
+    varlik = next(a for a in client.get("/assets").json()
+                  if a["asset_tag"] == "FRM-0002")
+    assert client.get(f"/detay/asset/{varlik['id']}").json()["kunye"]["marka"] == "HP"
+
+
+def test_dolu_marka_baska_bir_aktarimla_ezilmez(client):
+    """Aynı model adı başka markada da kullanılabilir; dolu değer korunur."""
+    hp = client.post("/manufacturers", json={"name": "HP"}).json()
+    client.post("/models", json={"name": "X1", "manufacturer_id": hp["id"]})
+
+    veri = _excel_uret([{"Cihaz NO": "K-1", "Serial": "K1", "Marka": "Dell",
+                         "Model": "X1"}])
+    on = client.post("/excel/oku", files={"file": ("t.xlsx", io.BytesIO(veri), CT)})
+    client.post("/excel/aktar", json={"satirlar": on.json()["satirlar"]})
+
+    mdl = next(m for m in client.get("/models").json() if m["name"] == "X1")
+    assert client.get(
+        f"/manufacturers/{mdl['manufacturer_id']}").json()["name"] == "HP"

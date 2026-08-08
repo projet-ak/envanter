@@ -376,9 +376,14 @@
       manufacturers: { label: 'Üreticiler',   endpoint: '/manufacturers',
         cols: [['name','Ad'],['support_phone','Destek Tel'],['support_email','Destek E-posta']],
         add: [['name','Ad','text'],['support_phone','Destek Tel','text']] },
+      // Marka cihaz kaydında değil MODELDE durur: burada boş kalırsa cihaz
+      // detayında da boş görünür, bu yüzden listede ve formda yer alır.
       models:        { label: 'Modeller',     endpoint: '/models',
-        cols: [['name','Ad'],['model_number','Model No']],
-        add: [['name','Ad','text'],['model_number','Model No','text']] },
+        cols: [['name','Ad'],['model_number','Model No'],
+               ['manufacturer_id','Marka'],['category_id','Cihaz Tipi']],
+        add: [['name','Ad','text'],['model_number','Model No','text']],
+        sec: [['manufacturer_id','Marka','/manufacturers'],
+              ['category_id','Cihaz Tipi','/categories']] },
       suppliers:     { label: 'Tedarikçiler', endpoint: '/suppliers',
         cols: [['name','Ad'],['phone','Telefon'],['email','E-posta']],
         add: [['name','Ad','text'],['phone','Telefon','text'],['email','E-posta','text']] },
@@ -750,13 +755,36 @@
 
     function secTanim(k) { aktifTanim = k; renderTanimlarView(); }
 
+    // İlişki alanları (marka, cihaz tipi…) için kimlik -> ad haritaları
+    let tanimSecenek = {};
+
+    async function tanimSecenekleriYukle(cfg) {
+      tanimSecenek = {};
+      for (const [k, , uc] of cfg.sec || []) {
+        try {
+          const liste = await api(uc + '?limit=1000');
+          tanimSecenek[k] = liste;
+        } catch { tanimSecenek[k] = []; }
+      }
+    }
+
+    // İlişki sütunu kimlik değil ad göstermeli ("3" değil "HP")
+    function tanimGoster(cfg, it, k) {
+      const liste = tanimSecenek[k];
+      if (!liste) return esc(it[k]);
+      const bulunan = liste.find(x => x.id === it[k]);
+      return bulunan ? kacir(bulunan.name)
+                     : '<span class="muted">— eksik —</span>';
+    }
+
     async function loadTanim() {
       const cfg = TANIMLAR[aktifTanim];
       const items = await api(cfg.endpoint + '?limit=500');
+      await tanimSecenekleriYukle(cfg);
       const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
         (canWrite() ? '<th></th>' : '');
       const rows = items.map(it => `<tr${canWrite() ? ' class="tikla" onclick="tanimDuzenle(' + it.id + ')"' : ''}>` +
-        cfg.cols.map(([k]) => `<td>${esc(it[k])}</td>`).join('') +
+        cfg.cols.map(([k]) => `<td>${tanimGoster(cfg, it, k)}</td>`).join('') +
         (canWrite() ? '<td class="muted">✏️</td>' : '') + '</tr>').join('');
       document.getElementById('tanimIcerik').innerHTML = `
         ${canWrite() ? `<div class="panel">
@@ -765,6 +793,11 @@
             ${cfg.add.map(([k, l, t]) =>
               `<input id="t_${k}" type="${t}" placeholder="${l}"
                  class="${k === 'name' ? 'grow' : ''}" />`).join('')}
+            ${(cfg.sec || []).map(([k, l]) => `<select id="t_${k}">
+              <option value="">${l} seçilmedi</option>
+              ${(tanimSecenek[k] || []).map(o =>
+                `<option value="${o.id}">${kacir(o.name)}</option>`).join('')}
+            </select>`).join('')}
             <button class="primary" onclick="addTanim()">Ekle</button>
           </div>
           <div id="tanimInfo" class="note"></div>
@@ -780,9 +813,10 @@
       const cfg = TANIMLAR[aktifTanim];
       const kayit = await api(`${cfg.endpoint}/${id}`);
       // Düzenlemede tüm görünür sütunlar + ekleme alanları birleşir
+      const secKeys = new Set((cfg.sec || []).map(([k]) => k));
       const anahtarlar = [...new Set([
         ...cfg.add.map(([k, l, t]) => [k, l, t]).map(x => JSON.stringify(x)),
-        ...cfg.cols.filter(([k]) => k !== 'type')
+        ...cfg.cols.filter(([k]) => k !== 'type' && !secKeys.has(k))
                    .map(([k, l]) => JSON.stringify([k, l, 'text'])),
       ])].map(x => JSON.parse(x));
 
@@ -792,6 +826,14 @@
             <div class="stat-l" style="margin-bottom:3px">${l}</div>
             <input id="td_${k}" type="${t || 'text'}" style="width:100%"
               value="${kayit[k] ?? ''}" /></div>`).join('')}
+          ${(cfg.sec || []).map(([k, l]) => `<div>
+            <div class="stat-l" style="margin-bottom:3px">${l}</div>
+            <select id="td_${k}" style="width:100%">
+              <option value="">— seçilmedi —</option>
+              ${(tanimSecenek[k] || []).map(o =>
+                `<option value="${o.id}" ${o.id === kayit[k] ? 'selected' : ''}
+                 >${kacir(o.name)}</option>`).join('')}
+            </select></div>`).join('')}
         </div>
         <div class="row" style="margin-top:16px">
           <button class="primary" onclick="tanimKaydet(${id})">Kaydet</button>
@@ -806,9 +848,11 @@
     async function tanimKaydet(id) {
       const cfg = TANIMLAR[aktifTanim];
       const govde = {};
+      const secKeys = new Set((cfg.sec || []).map(([k]) => k));
       for (const el of document.querySelectorAll('[id^="td_"]')) {
         const v = el.value.trim();
-        govde[el.id.slice(3)] = v === '' ? null : v;
+        const alan = el.id.slice(3);
+        govde[alan] = v === '' ? null : (secKeys.has(alan) ? Number(v) : v);
       }
       if (!govde.name) {
         document.getElementById('tdInfo').textContent = 'Ad zorunlu.'; return;
@@ -843,6 +887,10 @@
       for (const [k, , t] of cfg.add) {
         const v = document.getElementById('t_' + k).value.trim();
         if (v !== '') body[k] = t === 'number' ? Number(v) : v;
+      }
+      for (const [k] of cfg.sec || []) {
+        const v = document.getElementById('t_' + k)?.value;
+        if (v) body[k] = Number(v);
       }
       if (!body.name) { tanimInfo.textContent = 'Ad zorunlu.'; return; }
       try {
@@ -1347,7 +1395,7 @@
           onclick="openPdf('/documents/zimmet/asset/${id}.pdf')">📄</button>` : '') +
         (yaz ? `<button class="ghost" onclick="cihazDuzenle(${id})">✏️ Düzenle</button>` : '');
 
-      modalAc(`${k.asset_tag} — ${k.name ?? ''}`, `
+      modalAc(k.name ? `${k.asset_tag} — ${k.name}` : k.asset_tag, `
         <div class="bolum"><h4>Künye</h4>${alanlar(k, [
           ['asset_tag','Cihaz NO'],['demirbas_no','Demirbaş No'],['serial','Seri No'],
           ['kategori','Cihaz Tipi'],['marka','Marka'],['model','Model'],

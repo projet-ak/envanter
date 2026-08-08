@@ -361,6 +361,28 @@ Eşleşmeyen bir kategoriyi dahil etmek için ya Tanımlar'dan yeniden
 adlandırın ya da `app/ag.py` içindeki `_KATEGORI_IPUCU`'na anahtar kelime
 ekleyin.
 
+### Marka nerede tutulur?
+
+Marka cihaz kaydında değil **modelde** durur:
+`Cihaz → Model → Üretici`. Aynı model iki kez farklı markayla açılmasın diye
+böyle; ama modelin markası boşsa cihaz detayında **Marka satırı hiç
+görünmez**. Snipe-IT'ten üreticisiz gelen modellerde tipik durumdur.
+
+```bash
+./.venv/bin/python scripts/marka-kontrol.py            # rapor
+./.venv/bin/python scripts/marka-kontrol.py --uygula   # addan çıkarıp doldur
+```
+
+Betik yalnızca adın **başında** marka geçiyorsa doldurur ("HP ProBook 450" →
+HP); "N439" gibi ipucu vermeyen adlar elle düzeltilmek üzere listelenir.
+Elle düzeltme yeri: **Tanımlar → Modeller** — listede Marka ve Cihaz Tipi
+sütunları vardır, markasız kayıtlar "— eksik —" görünür ve satıra tıklayıp
+seçebilirsiniz.
+
+Excel'i yeniden içe aktarmak da düzeltir: içe aktarım mevcut modeldeki **boş**
+marka/kategoriyi doldurur (dolu değeri ezmez — aynı model adı başka markada da
+kullanılabilir).
+
 ### Transferler
 
 **🔄 Transferler** düğmesi lokasyonu değişen cihazları gösterir — hangi
@@ -771,6 +793,7 @@ scripts/
   santiye-ayir.py    # Eski veriyi şantiyelere ayır (tekrar çalıştırılabilir)
   kurulum-kontrol.sh # Güncelleme sonrası sağlık kontrolü (hiçbir şey değiştirmez)
   ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
-  ag-kategori-kontrol.py # Hangi kategoriler ağ ürünü sayılıyor
+  ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
+  marka-kontrol.py   # Markası boş modelleri bul/doldur
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```

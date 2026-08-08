@@ -235,7 +235,16 @@ class _Onbellek:
         harita = self._yukle(model)
         anahtar = sema._sadelestir(ad)
         if anahtar in harita:
-            return harita[anahtar]
+            nesne = harita[anahtar]
+            # Eksik oluşturulmuş kaydı tamamla: model "N439" daha önce markasız
+            # açıldıysa (Snipe-IT'te üretici boştu ya da satırda marka yoktu),
+            # yeniden aktarımda marka/kategori dolsun. Yalnızca BOŞ alanlar
+            # yazılır — aynı model adı başka bir markada da kullanılabilir,
+            # dolu değerin üstüne yazmak veriyi bozar.
+            for alan, deger in ekstra.items():
+                if deger is not None and getattr(nesne, alan, None) is None:
+                    setattr(nesne, alan, deger)
+            return nesne
         nesne = model(name=ad, **ekstra)
         self.db.add(nesne)
         self.db.flush()

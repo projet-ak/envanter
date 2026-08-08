@@ -237,6 +237,15 @@ print(f"      Zimmetli cihaz : {say(models.Asset, models.Asset.assigned_type.is_
 print(f"      Lokasyon       : {say(models.Location)}")
 print(f"      Yüklenen dosya : {say(models.AssetFile)}")
 
+# Marka modelde durur: boşsa cihaz detayında "Marka" satırı görünmez
+markasiz = db.scalars(select(models.AssetModel).where(
+    models.AssetModel.manufacturer_id.is_(None))).all()
+if markasiz:
+    etkilenen = db.scalar(select(func.count(models.Asset.id)).where(
+        models.Asset.model_id.in_([m.id for m in markasiz]))) or 0
+    print(f"      Markasız model : {len(markasiz)} — {etkilenen} cihazda "
+          f"marka boş (scripts/marka-kontrol.py)")
+
 # Sistem ürünleri: ağ, yangın, alarm (kategori adından tür çıkarılır)
 try:
     from app import ag
