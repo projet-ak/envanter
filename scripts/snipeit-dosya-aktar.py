@@ -103,6 +103,14 @@ def main() -> int:
     dokum = args.dokum.read_text("utf-8", errors="replace")
     o = _onek_bul(dokum)
     ast = {a["id"]: a for a in sql_tablo(dokum, o + "assets")}
+    # Boş ya da yarım kalmış döküm sessizce "0 dosya" olarak geçmesin:
+    # mysqldump parola hatası verdiğinde dosya 0 byte kalıyor.
+    if not ast:
+        print(f"{K}Dökümde cihaz kaydı bulunamadı: {args.dokum} "
+              f"({args.dokum.stat().st_size} byte){N}")
+        print("  • Dosya boşsa mysqldump başarısız olmuştur (parola hatası?)")
+        print("  • Dosya doluysa beklenen tablo yok: `assets` ya da `<önek>_assets`")
+        return 1
     mdl = {m["id"]: m for m in sql_tablo(dokum, o + "models")}
     kul = {k["id"]: k for k in sql_tablo(dokum, o + "users")}
     loglar = [x for x in sql_tablo(dokum, o + "action_logs") if x.get("filename")]
