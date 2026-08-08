@@ -16,3 +16,6 @@ yuklemeler/
 
 # Yedekler
 yedekler/
+
+# Kurum logosu kuruluma özeldir; git pull'da çakışma çıkarmasın
+app/static/logo.*

@@ -126,12 +126,16 @@ def betik():
 def logo():
     """Kurum logosu. Dosya yoksa 204 döner — 404 gibi konsola hata düşmez.
 
-    Logoyu etkinleştirmek için `app/static/logo.png` koymak yeterlidir;
+    Logoyu etkinleştirmek için `app/static/logo.png` (ya da .jpg/.svg/.webp)
+    koymak yeterlidir;
     arayüz bu ucu yoklar, 200 gelirse emoji yerine logoyu gösterir.
     """
-    yol = STATIC_DIR / "logo.png"
-    if yol.exists():
-        return FileResponse(yol)
+    for ad, tip in (("logo.png", "image/png"), ("logo.jpg", "image/jpeg"),
+                    ("logo.jpeg", "image/jpeg"), ("logo.svg", "image/svg+xml"),
+                    ("logo.webp", "image/webp")):
+        yol = STATIC_DIR / ad
+        if yol.exists():
+            return FileResponse(yol, media_type=tip)
     return Response(status_code=204)
 
 
