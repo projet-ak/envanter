@@ -85,7 +85,25 @@ async function api(path, opt = {}) {
   const r = await fetch(url(path), opt);
   if (r.status === 401) { logout(); throw { detail: 'Oturum süresi doldu' }; }
   if (!r.ok) throw await r.json().catch(() => ({ detail: 'Hata' }));
+  // Başarılı her YAZMA isteği bayrağı kaldırır; pencere kapanınca arkadaki
+  // ekran kendiliğinden tazelenir (bkz. modalKapat) — kullanıcı sekme
+  // değiştirmeden güncel veriyi görür.
+  if ((opt.method || 'GET').toUpperCase() !== 'GET') verilerDegisti = true;
   return r.status === 204 ? null : r.json();
+}
+
+// Pencere içindeki kayıtlardan sonra arkadaki liste bayat kalmasın
+let verilerDegisti = false;
+
+function aktifVeriyiYenile() {
+  try {
+    if (activeTab === 'assets') loadAssets();
+    else if (activeTab === 'personel') loadPersonel();
+    else if (activeTab === 'tanimlar') loadTanim();
+    else if (STOCK[activeTab]) loadStock(activeTab);
+    else if (AILE_BILGI[activeTab]) renderAgView(activeTab);
+    else if (activeTab === 'dashboard') renderDashboard();
+  } catch { /* ekran henüz kurulmadıysa sessiz geç */ }
 }
 
 function logout() {
@@ -959,7 +977,9 @@ const tl = (v) => v == null ? '—' : new Intl.NumberFormat('tr-TR',
 
 // ---------- Detay penceresi (modal) ----------
 function modalAc(baslik, govdeHtml, ekButonlar = '') {
-  modalKapat();
+  // Zincirleme pencerelerde (kaydet → detayı yeniden aç) erken yenileme
+  // olmasın: bayrak son kapanışa kadar bekler.
+  modalKapat(false);
   const d = document.createElement('div');
   d.className = 'modal-arka';
   d.id = 'modalArka';
@@ -970,7 +990,14 @@ function modalAc(baslik, govdeHtml, ekButonlar = '') {
     <div class="modal-govde">${govdeHtml}</div></div>`;
   document.body.appendChild(d);
 }
-function modalKapat() { document.getElementById('modalArka')?.remove(); }
+function modalKapat(yenile = true) {
+  const acikti = document.getElementById('modalArka');
+  acikti?.remove();
+  if (yenile && acikti && verilerDegisti) {
+    verilerDegisti = false;
+    aktifVeriyiYenile();
+  }
+}
 document.addEventListener('keydown', e => { if (e.key === 'Escape') modalKapat(); });
 
 function alanlar(obj, etiketler) {
