@@ -1,30 +1,21 @@
 """Aksesuar / sarf / bileşen / lisans kayıtlarına dosya eki.
 
-Cihaz (`asset_files`) ve kişi (`user_files`) eklerinin aynısı, tek farkla:
-sahibi dört tablodan biri olabildiği için yabancı anahtar yerine
-`kayit_turu + kayit_id` ikilisi tutulur (bkz. models.StockFile). Klasör, ad
-üretimi ve güvenlik denetimleri `dosyalar.py` ile ortaktır.
-
-Kayıt silinince ekleri de gider: aşağıdaki `after_delete` dinleyicisi aynı
-oturumda dosya kayıtlarını siler. Diskteki içerik, cihaz eklerinde olduğu gibi
-yerinde kalır — yedekten geri dönmek gerekebilir diye.
+Depolama kuralları `app/depo.py`'de ortaktır; buradaki tek fark sahibin dört
+tablodan biri olabilmesi. Yabancı anahtar yerine `kayit_turu + kayit_id`
+ikilisi tutulur (bkz. models.StockFile) ve kayıt silinince ekleri aşağıdaki
+`after_delete` dinleyicisi temizler. Diskteki içerik, cihaz eklerinde olduğu
+gibi yerinde kalır — yedekten geri dönmek gerekebilir diye.
 """
 
 from __future__ import annotations
 
-import mimetypes
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
 from sqlalchemy import delete, event, select
 from sqlalchemy.orm import Session
 
-from app import models, schemas
+from app import depo, models, schemas
 from app.auth import get_current_user, require_editor
 from app.database import get_db
-from app.routers.dosyalar import (GORSEL_UZANTILAR, _guvenli_ad, _uzanti,
-                                  boyut_denetle, dogrula, tam_yol, yeni_yol)
-from urllib.parse import quote
 
 router = APIRouter(prefix="/stok", tags=["Dosyalar"])
 READ = [Depends(get_current_user)]
@@ -75,31 +66,16 @@ async def dosya_yukle(
     """Stok kaydına dosya ekler (ürün fotoğrafı, fatura, lisans belgesi…)."""
     _kayit(db, kayit_turu, kayit_id)
 
-    ad = _guvenli_ad(file.filename or "dosya")
-    uzanti = dogrula(ad, tur)
-    icerik = await file.read()
-    boyut_denetle(icerik)
-
-    goreli = yeni_yol(kayit_id, tur, uzanti, on_ek=TABLOLAR[kayit_turu][1])
-    hedef = tam_yol(goreli)
-    hedef.parent.mkdir(parents=True, exist_ok=True)
-    hedef.write_bytes(icerik)
-
+    alanlar = await depo.diske_yaz(file, tur, kayit_id,
+                                   on_ek=TABLOLAR[kayit_turu][1])
     kayit = models.StockFile(
-        kayit_turu=kayit_turu,
-        kayit_id=kayit_id,
-        tur=tur,
-        dosya_adi=ad,
-        yol=goreli,
-        content_type=file.content_type or mimetypes.guess_type(ad)[0],
-        boyut=len(icerik),
-        aciklama=aciklama,
-        yukleyen=yukleyen.username or yukleyen.full_name,
-    )
+        kayit_turu=kayit_turu, kayit_id=kayit_id, aciklama=aciklama,
+        yukleyen=yukleyen.username or yukleyen.full_name, **alanlar)
     db.add(kayit)
     db.add(models.ActivityLog(
         action=models.ActivityAction.update, item_type=kayit_turu.value,
-        item_id=kayit_id, note=f"Dosya eklendi: {ad}", actor=kayit.yukleyen,
+        item_id=kayit_id, note=f"Dosya eklendi: {kayit.dosya_adi}",
+        actor=kayit.yukleyen,
     ))
     db.commit()
     db.refresh(kayit)
@@ -111,17 +87,7 @@ def dosya_indir(dosya_id: int, db: Session = Depends(get_db)):
     kayit = db.get(models.StockFile, dosya_id)
     if kayit is None:
         raise HTTPException(404, "Dosya bulunamadı")
-    yol = tam_yol(kayit.yol)
-    if not yol.exists():
-        raise HTTPException(404, "Dosya diskte bulunamadı")
-    icerde = _uzanti(kayit.dosya_adi) in GORSEL_UZANTILAR
-    return FileResponse(
-        yol,
-        media_type=kayit.content_type or "application/octet-stream",
-        headers={"Content-Disposition":
-                 f"{'inline' if icerde else 'attachment'}; "
-                 f"filename*=UTF-8''{quote(kayit.dosya_adi)}"},
-    )
+    return depo.indir(kayit)
 
 
 @router.delete("/dosyalari/{dosya_id}", status_code=204, dependencies=WRITE)
@@ -129,7 +95,7 @@ def dosya_sil(dosya_id: int, db: Session = Depends(get_db)):
     kayit = db.get(models.StockFile, dosya_id)
     if kayit is None:
         raise HTTPException(404, "Dosya bulunamadı")
-    tam_yol(kayit.yol).unlink(missing_ok=True)
+    depo.diskten_sil(kayit)
     db.add(models.ActivityLog(
         action=models.ActivityAction.update, item_type=kayit.kayit_turu.value,
         item_id=kayit.kayit_id, note=f"Dosya silindi: {kayit.dosya_adi}",

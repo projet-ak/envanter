@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
@@ -53,6 +53,22 @@ app = FastAPI(
     servers=[{"url": _ONEK}] if _ONEK else None,
 )
 
+@app.middleware("http")
+async def arayuz_onbellegi(request: Request, call_next):
+    """Arayüz dosyaları her istekte sunucuyla doğrulansın.
+
+    `no-cache` "önbellekleme yapma" demek değildir: tarayıcı dosyayı saklar ama
+    kullanmadan önce sorar; değişmediyse 304 döner (StaticFiles Last-Modified
+    gönderiyor), değiştiyse yenisi gelir. Böylece her güncellemeden sonra
+    kullanıcılardan Ctrl+F5 istemek gerekmez.
+    """
+    response = await call_next(request)
+    yol = request.url.path
+    if yol.startswith("/ui") or yol == "/login":
+        response.headers.setdefault("Cache-Control", "no-cache")
+    return response
+
+
 app.include_router(auth.router)
 # /users/ara, lookups'ın /users/{item_id} yolundan ÖNCE kayıtlanmalı
 app.include_router(personel.router)
@@ -83,6 +99,19 @@ def root(request: Request):
 def login_sayfasi():
     """Ayrı giriş sayfası. `?redirect=/yol` ile giriş sonrası hedef verilebilir."""
     return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/logo", include_in_schema=False)
+def logo():
+    """Kurum logosu. Dosya yoksa 204 döner — 404 gibi konsola hata düşmez.
+
+    Logoyu etkinleştirmek için `app/static/logo.png` koymak yeterlidir;
+    arayüz bu ucu yoklar, 200 gelirse emoji yerine logoyu gösterir.
+    """
+    yol = STATIC_DIR / "logo.png"
+    if yol.exists():
+        return FileResponse(yol)
+    return Response(status_code=204)
 
 
 @app.get("/health", tags=["Sistem"])

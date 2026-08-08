@@ -30,12 +30,21 @@ def test_openapi_served_under_root_path(_app_db):
 
 
 def test_ui_uses_relative_base():
-    """Arayüz, API adreslerini bulunduğu yola göre türetmeli."""
-    html = (
-        __import__("pathlib").Path("app/static/index.html").read_text(encoding="utf-8")
-    )
-    # Taban yol türetimi mevcut
-    assert "const BASE = window.location.pathname.replace" in html
-    assert "const url = (path) => BASE + path;" in html
+    """Arayüz, API adreslerini bulunduğu yola göre türetmeli.
+
+    Arayüz mantığı `uygulama.js`'de (index.html yalnızca iskelet); statik
+    dosya bağlantıları da göreli olmalı ki alt klasörde (/envanter) çalışsın.
+    """
+    from pathlib import Path
+
+    js = Path("app/static/uygulama.js").read_text(encoding="utf-8")
+    assert "const BASE = window.location.pathname.replace" in js
+    assert "const url = (path) => BASE + path;" in js
     # Mutlak yol ile doğrudan fetch kalmamalı
-    assert "fetch('/" not in html, "Arayüzde mutlak yollu fetch çağrısı kalmış"
+    assert "fetch('/" not in js, "Arayüzde mutlak yollu fetch çağrısı kalmış"
+
+    html = Path("app/static/index.html").read_text(encoding="utf-8")
+    assert 'src="uygulama.js"' in html, "betik bağlantısı göreli olmalı"
+    assert 'href="stil.css"' in html, "stil bağlantısı göreli olmalı"
+    assert 'src="/' not in html and 'href="/' not in html, \
+        "index.html'de mutlak yollu bağlantı alt klasörde kırılır"

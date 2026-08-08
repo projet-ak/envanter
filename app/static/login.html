@@ -193,10 +193,15 @@
     // Böylece logoyu eklemek için kod değiştirmek gerekmez.
     (function logoDene() {
       const kutu = document.getElementById('markaLogo');
-      const img = new Image();
-      img.onload = () => { kutu.textContent = ''; kutu.appendChild(img); };
-      img.alt = 'Logo';
-      img.src = (BASE || '') + '/ui/logo.png';
+      fetch((BASE || '') + '/logo')
+        .then(r => r.status === 200 ? r.blob() : null).then(b => {
+          if (!b) return;
+          const img = new Image();
+          img.alt = 'Logo';
+          img.src = URL.createObjectURL(b);
+          kutu.textContent = '';
+          kutu.appendChild(img);
+        }).catch(() => {});
     })();
 
     const hataKutu = document.getElementById('hata');

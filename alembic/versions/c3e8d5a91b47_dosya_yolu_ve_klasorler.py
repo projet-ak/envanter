@@ -22,7 +22,7 @@ down_revision: Union[str, Sequence[str], None] = 'b1c4a7f20e91'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# Tür -> klasör (app/routers/dosyalar.py ile aynı olmalı)
+# Tür -> klasör (app/depo.py ile aynı olmalı)
 KLASORLER = {
     "gorsel": "gorseller",
     "zimmet_formu": "belgeler",

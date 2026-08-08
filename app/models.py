@@ -392,7 +392,7 @@ class AssetFile(Base):
     yalnızca künyesi ve **göreli yolu** durur. Böylece yedek boyutu şişmez ve
     büyük dosyalar doğrudan dosya sisteminden servis edilir.
 
-    Klasör düzeni türe ve aya göre ayrılır (bkz. app/routers/dosyalar.py):
+    Klasör düzeni türe ve aya göre ayrılır (bkz. app/depo.py):
     gorseller/, belgeler/, faturalar/ → YYYY/MM/
     """
 

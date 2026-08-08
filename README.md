@@ -75,10 +75,15 @@ yazı rengi olarak değil yalnızca **grafik vurgu** olarak kullanılır — akt
 menü çizgisi, istatistik kartı kenarı, çubuk grafik ucu, avatar zemini.
 Düğme ve bağlantı yazıları derin yeşildir.
 
-Bütün renkler `app/static/index.html` içindeki `:root` (açık tema) ve
+Bütün renkler `app/static/stil.css` başındaki `:root` (açık tema) ve
 `html[data-tema="koyu"]` (koyu tema) bloklarında toplanmıştır; değiştirmek
 için tek yer yeterlidir. Giriş sayfasının kendi paleti
 `app/static/login.html` başındadır.
+
+Arayüz üç dosyadır: `index.html` yalnızca iskelet, `stil.css` görünüm,
+`uygulama.js` mantık. `/ui` ve `/login` yanıtları `Cache-Control: no-cache`
+ile döner — tarayıcı her açılışta sunucuya sorar, değişmediyse 304 alır;
+güncellemeden sonra kullanıcılardan **Ctrl+F5 istemek gerekmez**.
 
 ### Logo
 
@@ -904,7 +909,11 @@ app/
   ai/search.py       # Doğal dil → yapısal filtre (Claude)
   excel/             # Excel içe/dışa aktarım (sütun şeması + aktarım)
   routers/           # API uçları
-  static/index.html  # Web arayüzü (sol menü + üst bar)
+  depo.py            # Dosya deposu: yükleme/indirme kuralları (üç ek türü ortak)
+  sistem_sablonlari.py # Aile/tür şablonları ve kategori eşleme (ag.py sorguları)
+  static/index.html  # Arayüz iskeleti
+  static/stil.css    # Arayüz görünümü (renkler, mobil kırılmalar)
+  static/uygulama.js # Arayüz mantığı
   static/login.html  # Giriş sayfası (/login)
 alembic/             # Veritabanı göçleri
 scripts/

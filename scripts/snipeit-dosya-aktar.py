@@ -40,8 +40,8 @@ from app import models  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.excel.sema import _sadelestir  # noqa: E402
 from app.ortam_uyari import uyar  # noqa: E402
-from app.routers.dosyalar import (GORSEL_UZANTILAR, IZINLI_UZANTILAR,  # noqa: E402
-                                  tam_yol, yeni_yol)
+from app.depo import (GORSEL_UZANTILAR, IZINLI_UZANTILAR,  # noqa: E402
+                      tam_yol, yeni_yol)
 
 # Döküm okuma yardımcıları karşılaştırma betiğinden gelir (tek kaynak)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
