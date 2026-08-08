@@ -53,6 +53,32 @@ kutusu, oturum sayacı, koyu/açık tema düğmesi ve kullanıcı kartı bulunur
 Tema tercihi tarayıcıda saklanır; oturum sayacı jetonun bitişini gösterir ve
 süre dolduğunda giriş sayfasına döner.
 
+### Telefon ve tablette
+
+Üç kırılma noktası vardır:
+
+| Genişlik | Ne değişir |
+|---|---|
+| ≤ 900 px | Sol menü çekmeceye döner (☰ ile açılır), arka plan kararır |
+| ≤ 700 px | Geniş tablolar **kendi içinde** yana kayar (ilk sütun sabit kalır), ikincil sütunlar gizlenir, ızgaralar tek sütuna iner, dokunma hedefleri ≥ 40 px, girdi yazısı 16 px (iOS odaklanınca sayfayı büyütmesin) |
+| ≤ 520 px | Üst bardaki sayaç ve kullanıcı adı gizlenir, pencereler alttan açılan sayfa (bottom sheet) olur |
+
+Sayfanın kendisi hiçbir genişlikte yana kaymaz; kayan yalnızca tablodur.
+Telefonda gizlenen sütunlar (`gizle-mobil`): varlıklarda demirbaş/tür/seri,
+personelde sicil/şube/e-posta, kişi kartında tip/seri.
+
+### Logo
+
+`app/static/logo.png` dosyası varsa giriş sayfasında ve sol menüde emoji
+yerine o gösterilir — kod değiştirmeye gerek yok, dosyayı koymanız yeterli.
+Dosya yoksa tarayıcı konsolunda bir 404 görürsünüz; zararsızdır, logo
+eklenince kaybolur.
+
+Giriş sayfasında kurumsal panelin altında **dalga animasyonu** vardır
+(üç katman, farklı hız); hareketi azaltmayı seçen kullanıcılarda
+(`prefers-reduced-motion`) animasyon durur. Formun altında
+**Geliştirici: Tayyar Akbulut** ibaresi yer alır.
+
 ## Kimlik doğrulama ve roller
 
 Giriş ayrı bir sayfadadır: **`/login`**. Oturumu olmayan kullanıcı arayüze

@@ -23,12 +23,33 @@
       flex:0 0 46%; padding:56px 60px; color:#eaf6f2; display:flex;
       flex-direction:column; justify-content:center; gap:28px;
       background:linear-gradient(150deg, var(--koyu) 0%, var(--koyu2) 100%);
+      position:relative; overflow:hidden;
     }
+    .yan > * { position:relative; z-index:2; }   /* dalgaların üstünde kalsın */
+
+    /* --- Dalga efekti ---
+       Üç katman, farklı hız ve saydamlıkta yatay kayar; her katman iki dalga
+       boyu genişliğinde çizilir, bir dalga boyu kayıp başa dönünce ek yeri
+       görünmez. Hareketi azaltmayı seçen kullanıcıda animasyon durur. */
+    .dalgalar { position:absolute; left:0; right:0; bottom:0; height:190px;
+                z-index:1; pointer-events:none; }
+    .dalgalar svg { position:absolute; bottom:0; left:0; width:200%; height:100%; }
+    .dalgalar .d1 { fill:rgba(255,255,255,.07); animation:kay 22s linear infinite; }
+    .dalgalar .d2 { fill:rgba(45,212,167,.13); animation:kay 15s linear infinite;
+                    animation-direction:reverse; }
+    .dalgalar .d3 { fill:rgba(255,255,255,.05); animation:kay 30s linear infinite; }
+    @keyframes kay { from { transform:translateX(0); }
+                     to   { transform:translateX(-50%); } }
+    @media (prefers-reduced-motion:reduce) {
+      .dalgalar svg { animation:none !important; }
+    }
+
     .marka { display:flex; align-items:center; gap:14px; }
     .marka .logo {
       width:52px; height:52px; border-radius:14px; display:grid; place-items:center;
-      background:rgba(255,255,255,.12); font-size:26px;
+      background:rgba(255,255,255,.12); font-size:26px; overflow:hidden;
     }
+    .marka .logo img { width:100%; height:100%; object-fit:contain; padding:6px; }
     .marka b { display:block; font-size:19px; letter-spacing:.02em; }
     .marka span { font-size:12px; opacity:.75; letter-spacing:.12em;
                   text-transform:uppercase; }
@@ -71,19 +92,45 @@
     .dipnot { margin-top:22px; text-align:center; font-size:12.5px;
               color:var(--soluk); }
     .dipnot a { color:var(--yesil); text-decoration:none; }
+    .gelistirici { margin-top:10px; text-align:center; font-size:12px;
+                   color:var(--soluk); opacity:.85; }
+    .gelistirici b { color:var(--metin); font-weight:600; }
 
     @media (max-width:900px) {
       body { display:block; }
-      .yan { flex:none; padding:32px 26px; gap:18px; }
-      .yan h1 { font-size:23px; }
+      .yan { flex:none; padding:30px 24px 56px; gap:16px; }
+      .yan h1 { font-size:22px; }
       .ozet { display:none; }
+      .dalgalar { height:110px; }
+      .alan { padding:28px 20px 40px; }
+    }
+    @media (max-width:420px) {
+      .yan { padding:24px 18px 48px; }
+      .yan h1 { font-size:19px; }
+      .kutu h2 { font-size:20px; }
+      input { font-size:16px; }        /* iOS odaklanınca sayfayı büyütmesin */
     }
   </style>
 </head>
 <body>
   <aside class="yan">
+    <div class="dalgalar" aria-hidden="true">
+      <svg viewBox="0 0 2400 200" preserveAspectRatio="none">
+        <path class="d1" d="M0,90 C200,140 400,40 600,90 C800,140 1000,40 1200,90
+              C1400,140 1600,40 1800,90 C2000,140 2200,40 2400,90 L2400,200 L0,200 Z"/>
+      </svg>
+      <svg viewBox="0 0 2400 200" preserveAspectRatio="none">
+        <path class="d2" d="M0,120 C300,60 500,160 800,120 C1100,80 1300,170 1600,120
+              C1900,70 2100,160 2400,120 L2400,200 L0,200 Z"/>
+      </svg>
+      <svg viewBox="0 0 2400 200" preserveAspectRatio="none">
+        <path class="d3" d="M0,150 C240,110 480,180 720,150 C960,120 1200,190 1440,150
+              C1680,110 1920,180 2160,150 C2280,135 2340,145 2400,150
+              L2400,200 L0,200 Z"/>
+      </svg>
+    </div>
     <div class="marka">
-      <div class="logo">📦</div>
+      <div class="logo" id="markaLogo">📦</div>
       <div>
         <b>Envanter</b>
         <span>Takip Sistemi</span>
@@ -120,6 +167,7 @@
         Sorun mu var? Sistem yöneticinizle görüşün ·
         <a id="docs" href="../docs">API dokümanı</a>
       </div>
+      <div class="gelistirici">Geliştirici: <b>Tayyar Akbulut</b></div>
     </form>
   </main>
 
@@ -138,6 +186,16 @@
       if (!ham.startsWith('/') || ham.startsWith('//')) return VARSAYILAN;
       return ham;
     }
+
+    // Kurum logosu: app/static/logo.png varsa onu kullan, yoksa emoji kalır.
+    // Böylece logoyu eklemek için kod değiştirmek gerekmez.
+    (function logoDene() {
+      const kutu = document.getElementById('markaLogo');
+      const img = new Image();
+      img.onload = () => { kutu.textContent = ''; kutu.appendChild(img); };
+      img.alt = 'Logo';
+      img.src = (BASE || '') + '/ui/logo.png';
+    })();
 
     const hataKutu = document.getElementById('hata');
     const btn = document.getElementById('btn');

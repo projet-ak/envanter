@@ -45,7 +45,9 @@
     .yan-bas { display:flex; align-items:center; gap:12px; padding:18px 20px;
                border-bottom:1px solid rgba(255,255,255,.08); }
     .yan-bas .logo { width:38px; height:38px; border-radius:10px; font-size:19px;
-                     display:grid; place-items:center; background:rgba(255,255,255,.12); }
+                     display:grid; place-items:center; background:rgba(255,255,255,.12);
+                     overflow:hidden; }
+    .yan-bas .logo img { width:100%; height:100%; object-fit:contain; padding:4px; }
     .yan-bas b { display:block; font-size:15px; line-height:1.25; }
     .yan-bas span { font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
                     color:var(--yan-soluk); }
@@ -275,11 +277,70 @@
                         border:1px solid var(--cizgi); border-radius:10px; display:block; }
     .gorsel-serit figure button { position:absolute; top:4px; right:4px; }
 
+    /* ---------------- Mobil ----------------
+       Üç kırılma noktası: 900 (tablet: menü çekmeceye), 700 (telefon yatay:
+       tablolar kayar, ızgaralar tek sütun), 520 (telefon dikey: üst bar
+       sadeleşir, pencere alttan açılan sayfa olur). */
     @media (max-width:900px) {
-      #yanmenu { position:fixed; left:-246px; z-index:80; transition:left .2s; }
+      #yanmenu { position:fixed; left:-246px; z-index:80; transition:left .2s;
+                 box-shadow:0 0 40px rgba(0,0,0,.35); }
       #yanmenu.acik { left:0; }
       #menuDug { display:inline-flex !important; }
       main#view { padding:16px 14px 50px; }
+      /* Menü açıkken arkayı karart: yanlış yere dokunmak kapatsın */
+      #yanmenu.acik::after { content:''; position:fixed; inset:0 0 0 246px;
+                             background:rgba(8,18,15,.45); }
+    }
+
+    @media (max-width:700px) {
+      /* Geniş tablolar sığmaz: panel içinde yatay kaydırılır, ilk sütun
+         sabit kalır ki hangi satırda olduğunuz kaybolmasın. */
+      /* Geniş tablo neredeyse: panelde, pencerede, her yerde kendi içinde
+         kaysın — sayfanın tamamı yana kaymasın. */
+      .panel { padding:14px; overflow-x:auto; }
+      .modal-govde .bolum { overflow-x:auto; }
+      table { min-width:520px; }
+      th:first-child, td:first-child { position:sticky; left:0;
+        background:var(--kart); }
+      tr.tikla:hover td:first-child { background:var(--cizgi2); }
+      .gizle-mobil { display:none; }
+
+      .stats { grid-template-columns:1fr 1fr; gap:10px; }
+      .stat { padding:12px 14px; }
+      .stat-v { font-size:20px; }
+      .kisayollar { grid-template-columns:1fr 1fr; }
+      .two-col { grid-template-columns:1fr; }
+      .form-grid, .alan-grid { grid-template-columns:1fr; }
+      .alan { flex-direction:column; gap:2px; }
+
+      /* Dokunma hedefleri en az 40px; girdi yazısı 16px (iOS odaklanınca
+         daha küçük yazıda sayfayı büyütüyor) */
+      button, .ghost, .primary { min-height:40px; }
+      input, select, textarea { font-size:16px; }
+      .row { gap:8px; }
+      .row > button { flex:1 1 auto; }
+    }
+
+    @media (max-width:520px) {
+      #ustbar { padding:8px 12px; gap:8px; }
+      #hizliKutu { min-width:0; flex:1; }
+      .sayac, .kul-cip .ad { display:none; }   /* yer açmak için */
+      .ust-sag { gap:6px; }
+      .sayfa-bas h1 { font-size:19px; }
+      .stats { grid-template-columns:1fr; }
+      .kisayollar { grid-template-columns:1fr; }
+
+      /* Pencere: alttan açılan sayfa (bottom sheet) */
+      .modal-arka { padding:0; align-items:flex-end; }
+      .modal { width:100%; max-height:92vh; overflow:auto;
+               border-radius:16px 16px 0 0; }
+      .modal-bas { border-radius:16px 16px 0 0; padding:13px 14px; }
+      .modal-bas h3 { font-size:15.5px; }
+      .modal-govde { padding:14px; }
+      /* Pencere tabloları az sütunlu: telefonda yana kaydırmak yerine sığsın */
+      .modal table { min-width:0; }
+      .modal td, .modal th { padding:8px 6px; }
+      .gorsel-serit img { width:120px; height:88px; }
     }
     #menuDug { display:none; }
   </style>
@@ -289,7 +350,7 @@
     <!-- Sol menü -->
     <aside id="yanmenu">
       <div class="yan-bas">
-        <div class="logo">📦</div>
+        <div class="logo" id="markaLogo">📦</div>
         <div>
           <b>Envanter</b>
           <span>Takip Sistemi</span>
@@ -469,6 +530,16 @@
       sayacZaman = setInterval(tik, 1000);
     }
 
+    // Kurum logosu: app/static/logo.png varsa emoji yerine o gösterilir.
+    (function logoDene() {
+      const kutu = document.getElementById('markaLogo');
+      if (!kutu) return;
+      const img = new Image();
+      img.alt = 'Logo';
+      img.onload = () => { kutu.textContent = ''; kutu.appendChild(img); };
+      img.src = url('/ui/logo.png');
+    })();
+
     // ---------- Menü ----------
     // [anahtar, etiket, ikon, yalnızca-yazma-yetkisi?]
     const MENU_ANA = [
@@ -569,8 +640,10 @@
             <input id="pAra" class="grow" placeholder="Ada, sicile veya departmana göre ara…"
                    oninput="loadPersonel()" />
           </div>
-          <table style="margin-top:8px"><thead><tr><th>Ad Soyad</th><th>Sicil</th>
-            <th>Departman</th><th>Şube</th><th>E-posta</th><th>Zimmet</th><th></th></tr></thead>
+          <table style="margin-top:8px"><thead><tr><th>Ad Soyad</th>
+            <th class="gizle-mobil">Sicil</th><th>Departman</th>
+            <th class="gizle-mobil">Şube</th><th class="gizle-mobil">E-posta</th>
+            <th>Zimmet</th><th></th></tr></thead>
             <tbody id="pRows"></tbody></table>
         </div>`;
       loadPersonel();
@@ -733,10 +806,10 @@
                onclick="openPdf('/documents/zimmet/user/${k.id}.pdf')">📄</button>` : '';
         return `<tr class="tikla" onclick="if(!event.target.closest('button'))kisiDetay(${k.id})">
           <td><b>${kacir(tamAd)}</b></td>
-          <td class="muted">${esc(k.employee_num)}</td>
+          <td class="muted gizle-mobil">${esc(k.employee_num)}</td>
           <td>${esc(k.department)}</td>
-          <td class="muted">${esc(k.sube)}</td>
-          <td class="muted">${esc(k.email)}</td>
+          <td class="muted gizle-mobil">${esc(k.sube)}</td>
+          <td class="muted gizle-mobil">${esc(k.email)}</td>
           <td>${adet ? `<span class="tag used">${adet} cihaz</span>`
                      : '<span class="muted">—</span>'}</td>
           <td>${zimmetle}${fis}</td></tr>`;
@@ -1740,14 +1813,17 @@
         .map(([t, n]) => `<span class="pill">${t}: <b>${n}</b></span>`).join(' ');
 
       const tablo = d.cihazlar.length ? `
-        <table><thead><tr><th>Cihaz NO</th><th>Tip</th><th>Marka/Model</th>
-          <th>Seri No</th><th>Bedel</th>${canWrite() ? '<th></th>' : ''}</tr></thead><tbody>
+        <table><thead><tr><th>Cihaz NO</th><th class="gizle-mobil">Tip</th>
+          <th>Marka/Model</th>
+          <th class="gizle-mobil">Seri No</th><th>Durum</th>
+          ${canWrite() ? '<th></th>' : ''}</tr></thead><tbody>
         ${d.cihazlar.map(c => `<tr class="tikla"
             onclick="if(!event.target.closest('button'))cihazDetay(${c.id})">
-          <td><b>${c.asset_tag}</b></td><td>${esc(c.kategori)}</td>
+          <td><b>${c.asset_tag}</b></td>
+          <td class="gizle-mobil">${esc(c.kategori)}</td>
           <td>${esc([c.marka, c.model].filter(Boolean).join(' '))}</td>
-          <td class="muted">${esc(c.serial)}</td>
-          <td class="muted">${c.purchase_cost != null ? tl(c.purchase_cost) : '—'}</td>
+          <td class="muted gizle-mobil">${esc(c.serial)}</td>
+          <td>${c.durum ? `<span class="tag">${kacir(c.durum)}</span>` : '—'}</td>
           ${canWrite() ? `<td><button class="ghost" title="İade al"
              onclick="zimmetGeriAl(${c.id}, ${id})">↩</button></td>` : ''}
           </tr>`).join('')}</tbody></table>`
@@ -1762,8 +1838,12 @@
         <div class="stats" style="margin-top:16px">
           <div class="stat"><div class="stat-v">${d.cihaz_sayisi}</div>
             <div class="stat-l">Zimmetli cihaz</div></div>
-          <div class="stat"><div class="stat-v">${tl(d.toplam_deger)}</div>
-            <div class="stat-l">Toplam bedel</div></div>
+          ${d.toplam_deger ? `<div class="stat"><div class="stat-v">${
+              tl(d.toplam_deger)}</div>
+            <div class="stat-l">Toplam bedel</div></div>`
+            : `<div class="stat"><div class="stat-v">${
+              Object.keys(d.tur_dagilimi || {}).length}</div>
+            <div class="stat-l">Cihaz çeşidi</div></div>`}
         </div>
         ${dagilim ? `<div class="row" style="margin-bottom:14px">${dagilim}</div>` : ''}
         <div class="bolum">
@@ -1983,8 +2063,10 @@
         </div>
         <div class="panel">
           <h2>Varlıklar (<span id="count">0</span><span id="toplamBilgi"></span>)</h2>
-          <table><thead><tr><th>Etiket</th><th>Demirbaş</th><th>Ad</th><th>Tür</th>
-            <th>Lokasyon</th><th>Seri</th><th>Zimmet</th><th></th></tr></thead>
+          <table><thead><tr><th>Etiket</th><th class="gizle-mobil">Demirbaş</th>
+            <th>Ad</th><th class="gizle-mobil">Tür</th>
+            <th>Lokasyon</th><th class="gizle-mobil">Seri</th>
+            <th>Zimmet</th><th></th></tr></thead>
           <tbody id="rows"></tbody></table>
           <div id="dahaFazla" class="row" style="margin-top:12px"></div>
         </div>`;
@@ -2082,8 +2164,9 @@
         const mdl = refModelKat[a.model_id];
         const tur = mdl ? refKategori[mdl.category_id] : null;
         return `<tr class="tikla" onclick="if(!event.target.closest('button'))cihazDetay(${a.id})">
-          <td><b>${a.asset_tag}</b></td><td class="muted">${esc(a.demirbas_no)}</td>
-          <td>${esc(a.name)}</td><td>${esc(tur)}</td>
+          <td><b>${a.asset_tag}</b></td>
+          <td class="muted gizle-mobil">${esc(a.demirbas_no)}</td>
+          <td>${esc(a.name)}</td><td class="gizle-mobil">${esc(tur)}</td>
           <td class="muted">${esc(refLokasyon[a.location_id])}</td>
           <td class="muted">${esc(a.serial)}</td>
           <td>${assigned}</td><td>${btn}</td></tr>`;
@@ -2863,7 +2946,8 @@
       kutu.innerHTML = `<div class="panel">
         <h2>${liste.length} ürün</h2>
         <table><thead><tr>
-          <th></th><th>Cihaz No</th><th>Marka / Model</th><th>Seri No</th>
+          <th></th><th>Cihaz No</th><th>Marka / Model</th>
+          <th class="gizle-mobil">Seri No</th>
           ${hatSutun.map(([b]) => `<th>${b}</th>`).join('')}
           ${sutunlar.map(a => `<th>${kacir(a)}</th>`).join('')}
           <th>Lokasyon</th><th>Durum</th></tr></thead><tbody>
@@ -2877,7 +2961,7 @@
           <td>${kacir([u.marka, u.model].filter(Boolean).join(' '))}
               ${u.ozellikler['Parça No'] ? `<div class="muted" style="font-size:11.5px">${
                 kacir(u.ozellikler['Parça No'])}</div>` : ''}</td>
-          <td class="muted">${esc(u.serial)}</td>
+          <td class="muted gizle-mobil">${esc(u.serial)}</td>
           ${hatSutun.map(([, k]) => `<td class="muted">${esc(u[k])}</td>`).join('')}
           ${sutunlar.map(a => `<td class="muted">${esc(u.ozellikler[a])}</td>`).join('')}
           <td>${esc(u.lokasyon)}${u.proje_kodu
