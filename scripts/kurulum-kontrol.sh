@@ -202,15 +202,15 @@ fi
 # stil.css / uygulama.js: arayüz artık üç dosya. Nginx'in hazır `.css/.js`
 # regex blokları /envanter'i ele geçirirse bu ikisi 404 döner ve sayfa çıplak
 # açılır — çözüm `location ^~ /envanter` (bkz. deploy/nginx-envanter.conf).
-for yol in "/login:Giriş sayfası" "/ui/:Arayüz" "/ui/stil.css:Arayüz stili" \
-           "/ui/uygulama.js:Arayüz betiği" "/docs:API dokümanı"; do
+for yol in "/login:Giriş sayfası" "/ui/:Arayüz" "/stil:Arayüz stili" \
+           "/betik:Arayüz betiği" "/docs:API dokümanı"; do
     y="${yol%%:*}"; ad="${yol#*:}"
     k="$(kod "${YEREL}${y}")"
     if [[ "$k" == "200" ]]; then
         ok "${y} → 200 (${ad})"
-    elif [[ "$y" == /ui/*.* ]]; then
+    elif [[ "$y" == "/stil" || "$y" == "/betik" ]]; then
         hata "${y} → ${k} (${ad})" \
-             "Nginx'te 'location /envanter' yerine 'location ^~ /envanter' kullanın"
+             "eski sürüm çalışıyor olabilir: git pull + systemctl restart envanter"
     else
         hata "${y} → ${k} (${ad})"
     fi

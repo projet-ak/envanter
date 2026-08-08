@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Envanter Takip Sistemi</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
-  <link rel="stylesheet" href="stil.css" />
+  <!-- Bağlantılar bilerek UZANTISIZ ve göreli: sayfa <kök>/ui/ altında
+       yaşadığı için ../stil → <kök>/stil çözülür. Panellerin hazır
+       `.css/.js` regex blokları uzantı görmeyince araya giremez ve istek
+       her koşulda uygulamaya düşer (bkz. app/main.py: stil/betik uçları). -->
+  <link rel="stylesheet" href="../stil" />
 </head>
 <body>
   <div id="kabuk">
@@ -56,6 +60,6 @@
       <main id="view"></main>
     </div>
   </div>
-  <script src="uygulama.js"></script>
+  <script src="../betik"></script>
 </body>
 </html>

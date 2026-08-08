@@ -64,7 +64,7 @@ async def arayuz_onbellegi(request: Request, call_next):
     """
     response = await call_next(request)
     yol = request.url.path
-    if yol.startswith("/ui") or yol == "/login":
+    if yol.startswith("/ui") or yol in ("/login", "/stil", "/betik"):
         response.headers.setdefault("Cache-Control", "no-cache")
     return response
 
@@ -99,6 +99,27 @@ def root(request: Request):
 def login_sayfasi():
     """Ayrı giriş sayfası. `?redirect=/yol` ile giriş sonrası hedef verilebilir."""
     return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/stil", include_in_schema=False)
+def stil():
+    """Arayüz stili — bilerek UZANTISIZ adres.
+
+    aaPanel gibi paneller site ayarına `location ~ .*\\.(js|css)$` türü regex
+    bloklar koyar; bunlar alt klasör vekilinden önce eşleşir ve
+    /envanter/ui/stil.css isteğini PHP kökünde arayıp 404 döndürür (sayfa
+    çıplak açılır). Uzantı olmayınca o bloklar hiç eşleşemez — istek her
+    koşulda uygulamaya ulaşır. `media_type` elle verilir; tarayıcılar yanlış
+    MIME'lı stil dosyasını reddeder.
+    """
+    return FileResponse(STATIC_DIR / "stil.css", media_type="text/css")
+
+
+@app.get("/betik", include_in_schema=False)
+def betik():
+    """Arayüz betiği — uzantısız adres (gerekçe için /stil'e bakın)."""
+    return FileResponse(STATIC_DIR / "uygulama.js",
+                        media_type="application/javascript")
 
 
 @app.get("/logo", include_in_schema=False)

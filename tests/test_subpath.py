@@ -44,7 +44,30 @@ def test_ui_uses_relative_base():
     assert "fetch('/" not in js, "Arayüzde mutlak yollu fetch çağrısı kalmış"
 
     html = Path("app/static/index.html").read_text(encoding="utf-8")
-    assert 'src="uygulama.js"' in html, "betik bağlantısı göreli olmalı"
-    assert 'href="stil.css"' in html, "stil bağlantısı göreli olmalı"
-    assert 'src="/' not in html and 'href="/' not in html, \
+    # Uzantısız + göreli bağlantı: panellerin `.css/.js` regex blokları
+    # (aaPanel) uzantı görmeyince araya giremez; ../ ile alt klasörde de
+    # doğru köke çözülür. Uzantı geri gelirse aaPanel'de sayfa çıplak açılır!
+    assert 'src="../betik"' in html, "betik bağlantısı uzantısız/göreli olmalı"
+    assert 'href="../stil"' in html, "stil bağlantısı uzantısız/göreli olmalı"
+    assert 'src="/' not in html and 'href="/' not in html.replace(
+        'href="data:', ''), \
         "index.html'de mutlak yollu bağlantı alt klasörde kırılır"
+
+
+def test_stil_ve_betik_uclari_dogru_mime_ile_doner(client):
+    """Uzantısız uçlar doğru MIME vermek zorunda.
+
+    Tarayıcılar text/css olmayan stil dosyasını sessizce reddeder — uç 200
+    dönse bile sayfa çıplak açılırdı.
+    """
+    r = client.get("/stil")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/css")
+    assert ":root" in r.text
+    assert r.headers.get("cache-control") == "no-cache"
+
+    r = client.get("/betik")
+    assert r.status_code == 200
+    assert ("javascript" in r.headers["content-type"])
+    assert "const BASE" in r.text
+    assert r.headers.get("cache-control") == "no-cache"
