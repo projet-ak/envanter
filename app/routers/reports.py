@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import datetime as dt
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import models
+from app import models, rapor
 from app.auth import get_current_user
 from app.database import get_db
 
@@ -47,11 +49,21 @@ def ozet(db: Session = Depends(get_db)):
                        ("personel", models.User), ("lokasyon", models.Location)]:
         sayilar[key] = db.scalar(select(func.count()).select_from(model)) or 0
 
+    # Veri kalitesi: markası boş model kaç cihazı etkiliyor?
+    markasiz_model_idler = db.scalars(
+        select(models.AssetModel.id)
+        .where(models.AssetModel.manufacturer_id.is_(None))).all()
+    markasiz_cihaz = db.scalar(
+        select(func.count()).select_from(models.Asset)
+        .where(models.Asset.model_id.in_(markasiz_model_idler))
+    ) or 0 if markasiz_model_idler else 0
+
     return {
         "varlik_toplam": toplam,
         "zimmetli": zimmetli,
         "bosta": toplam - zimmetli,
         "toplam_deger": float(toplam_deger),
+        "markasiz_cihaz": markasiz_cihaz,
         **sayilar,
     }
 
@@ -170,3 +182,53 @@ def lisans_kullanim(db: Session = Depends(get_db)):
         "bitis": lic.expiration_date.isoformat() if lic.expiration_date else None,
         "suresi_doldu": bool(lic.expiration_date and lic.expiration_date < bugun),
     } for lic in rows]
+
+
+@router.get("/son-islemler")
+def son_islemler(limit: int = Query(12, le=50), db: Session = Depends(get_db)):
+    """Son etkinlikler: kim, neye, ne yaptı — dashboard'un canlı akışı."""
+    etiketler = dict(db.execute(
+        select(models.Asset.id, models.Asset.asset_tag)).all())
+    kisiler = {k.id: k.full_name for k in db.scalars(select(models.User)).all()}
+    EYLEM = {"create": "eklendi", "update": "güncellendi", "delete": "silindi",
+             "checkout": "zimmetlendi", "checkin": "iade alındı",
+             "audit": "sayıldı"}
+
+    sonuc = []
+    for g in db.scalars(select(models.ActivityLog)
+                        .order_by(models.ActivityLog.created_at.desc())
+                        .limit(limit)).all():
+        if g.item_type == "asset":
+            hedef = etiketler.get(g.item_id) or f"cihaz #{g.item_id}"
+        elif g.item_type == "user":
+            hedef = kisiler.get(g.item_id) or f"kişi #{g.item_id}"
+        else:
+            hedef = f"{g.item_type} #{g.item_id}"
+        sonuc.append({
+            "hedef": hedef,
+            "hedef_tur": g.item_type,
+            "hedef_id": g.item_id,
+            "eylem": EYLEM.get(g.action.value, g.action.value),
+            "not": g.note,
+            "yapan": g.actor,
+            "tarih": g.created_at.isoformat() if g.created_at else None,
+        })
+    return sonuc
+
+
+@router.get("/excel")
+def excel_raporu(tip: str = Query("genel", description="|".join(rapor.RAPOR_ADLARI)),
+                 db: Session = Depends(get_db)):
+    """Biçimli Excel raporu üretir (başlık, süzgeç, zebra, TR biçimleri)."""
+    if tip not in rapor.RAPOR_ADLARI:
+        raise HTTPException(400, f"Bilinmeyen rapor tipi: {tip}. "
+                                 f"Geçerli: {', '.join(rapor.RAPOR_ADLARI)}")
+    icerik = rapor.olustur(db, tip)
+    ad = f"{rapor.RAPOR_ADLARI[tip]} {dt.date.today():%d.%m.%Y}.xlsx"
+    return Response(
+        icerik,
+        media_type=("application/vnd.openxmlformats-officedocument"
+                    ".spreadsheetml.sheet"),
+        headers={"Content-Disposition":
+                 f"attachment; filename*=UTF-8''{quote(ad)}"},
+    )

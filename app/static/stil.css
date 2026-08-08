@@ -345,3 +345,7 @@ tr.tikla:hover { background:var(--cizgi2); }
   .gorsel-serit img { width:120px; height:88px; }
 }
 #menuDug { display:none; }
+
+/* Tıklanabilir istatistik kartı (kontrol paneli) */
+.stat.tikla-kart { cursor:pointer; transition:border-color .15s, transform .15s; }
+.stat.tikla-kart:hover { border-color:var(--acc); transform:translateY(-1px); }

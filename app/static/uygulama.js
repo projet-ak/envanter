@@ -834,12 +834,30 @@ async function importInvoice() {
 
 // ---------- Özet / dashboard ----------
 // KPI kartı: ikon + büyük sayı + etiket, sol kenarı renk kodlu
-function statCard(label, value, ikon = '📦', renk = '', extra = '') {
-  return `<div class="stat ${renk}">
+function statCard(label, value, ikon = '📦', renk = '', extra = '', tikla = '') {
+  return `<div class="stat ${renk}${tikla ? ' tikla-kart' : ''}"
+              ${tikla ? `onclick="${tikla}" title="Aç"` : ''}>
     <div class="kutu">${ikon}</div>
     <div><div class="stat-v">${value}</div>
          <div class="stat-l">${label}</div>${extra}</div>
   </div>`;
+}
+
+// Yetkili dosya indirme: <a href> Authorization başlığı gönderemez, bu yüzden
+// içerik blob olarak çekilir; ad sunucunun Content-Disposition'ından okunur.
+async function indirDosya(path, varsayilanAd = 'rapor.xlsx') {
+  try {
+    const r = await fetch(url(path),
+                          { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!r.ok) throw await r.json().catch(() => ({ detail: 'İndirilemedi' }));
+    const cd = r.headers.get('content-disposition') || '';
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await r.blob());
+    a.download = m ? decodeURIComponent(m[1]) : varsayilanAd;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (e) { alert('⚠ ' + (e.detail || e.message || 'İndirilemedi')); }
 }
 
 // Hızlı işlem kartı
@@ -894,10 +912,13 @@ async function renderDashboard(sessiz = false) {
   const view = document.getElementById('view');
   if (!sessiz)
     view.innerHTML = '<div class="panel"><h2>Özet</h2><div class="muted">Yükleniyor…</div></div>';
-  const [ozet, dag, dusuk, garanti, personel] = await Promise.all([
-    api('/reports/ozet'), api('/reports/dagilim'), api('/reports/dusuk-stok'),
-    api('/reports/garanti?gun=90'), api('/reports/personel-zimmet'),
-  ]);
+  const [ozet, dag, dusuk, garanti, personel, islemler, sistem] =
+    await Promise.all([
+      api('/reports/ozet'), api('/reports/dagilim'), api('/reports/dusuk-stok'),
+      api('/reports/garanti?gun=90'), api('/reports/personel-zimmet'),
+      api('/reports/son-islemler').catch(() => []),
+      api('/ag/ozet').catch(() => null),
+    ]);
   const tl = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY',
     maximumFractionDigits: 0 }).format(ozet.toplam_deger || 0);
   const maxK = Math.max(1, ...dag.kategori.map(x => x.adet));
@@ -927,12 +948,43 @@ async function renderDashboard(sessiz = false) {
       <button class="ghost" onclick="renderDashboard(true)" title="Şimdi yenile">⟳</button>
     </div>
     <div class="stats">
-      ${statCard('Toplam varlık', ozet.varlik_toplam, '📦')}
-      ${statCard('Zimmetli', ozet.zimmetli, '🤝', 'sari')}
-      ${statCard('Boşta', ozet.bosta, '📥', 'mavi')}
-      ${statCard('Toplam değer', tl, '₺', 'mor')}
-      ${statCard('Personel', ozet.personel, '👥', 'mavi')}
-      ${statCard('Lisans', ozet.lisans, '🔑', 'kirmizi')}
+      ${statCard('Toplam varlık', ozet.varlik_toplam, '📦', '', '',
+                 "selectTab('assets')")}
+      ${statCard('Zimmetli', ozet.zimmetli, '🤝', 'sari', '',
+                 "selectTab('assets')")}
+      ${statCard('Boşta', ozet.bosta, '📥', 'mavi', '', "selectTab('assets')")}
+      ${ozet.toplam_deger ? statCard('Toplam değer', tl, '₺', 'mor')
+        : statCard('Sistem ürünü', sistem?.toplam ?? 0, '🌐', 'mor', '',
+                   "selectTab('ag')")}
+      ${statCard('Personel', ozet.personel, '👥', 'mavi', '',
+                 "selectTab('personel')")}
+      ${statCard('Lisans', ozet.lisans, '🔑', 'kirmizi', '',
+                 "selectTab('licenses')")}
+    </div>
+    ${ozet.markasiz_cihaz ? `<div class="panel" style="border-left:4px solid var(--warn)">
+      ⚠ <b>${ozet.markasiz_cihaz} cihazın markası boş.</b>
+      <a href="#" onclick="selectTab('tanimlar');return false">Tanımlar → Modeller</a>'den
+      seçin ya da sunucuda <code>scripts/marka-kontrol.py</code> çalıştırın.
+    </div>` : ''}
+    <div class="panel">
+      <div class="row" style="align-items:center; margin-bottom:10px">
+        <h2 style="margin:0; flex:1">Excel Raporları</h2>
+        <span class="muted" style="font-size:12.5px">başlıklı · süzgeçli · yazdırmaya hazır</span>
+      </div>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="primary" onclick="indirDosya('/reports/excel?tip=genel')">
+          📗 Genel rapor</button>
+        <button class="ghost" onclick="indirDosya('/reports/excel?tip=cihazlar')">
+          💻 Cihaz listesi</button>
+        <button class="ghost" onclick="indirDosya('/reports/excel?tip=zimmet')">
+          🤝 Zimmet raporu</button>
+        <button class="ghost" onclick="indirDosya('/reports/excel?tip=lokasyon')">
+          🏗️ Lokasyon raporu</button>
+        <button class="ghost" onclick="indirDosya('/reports/excel?tip=stok')">
+          📦 Stok raporu</button>
+        <button class="ghost" onclick="indirDosya('/reports/excel?tip=sistem')">
+          🌐 Sistem ürünleri</button>
+      </div>
     </div>
     <div class="two-col">
       <div class="panel"><h2>Kategoriye göre</h2>${barList(dag.kategori, maxK)}</div>
@@ -953,6 +1005,23 @@ async function renderDashboard(sessiz = false) {
           <td>${x.bitti ? '<span class="tag low">bitti</span>'
                          : `<span class="muted">${x.kalan_gun} gün</span>`}</td></tr>`).join('')}
         </tbody></table>` : '<div class="muted">Yaklaşan garanti bitişi yok</div>'}
+    </div>
+    <div class="panel">
+      <h2>Son işlemler</h2>
+      ${islemler.length ? `<table><thead><tr><th>Ne</th><th>İşlem</th>
+        <th class="gizle-mobil">Not</th><th>Kim</th><th>Ne zaman</th></tr></thead>
+        <tbody>${islemler.map(x => `<tr class="${x.hedef_tur === 'asset' || x.hedef_tur === 'user' ? 'tikla' : ''}"
+            onclick="${x.hedef_tur === 'asset' ? `cihazDetay(${x.hedef_id})`
+                     : x.hedef_tur === 'user' ? `kisiDetay(${x.hedef_id})` : ''}">
+          <td><b>${kacir(x.hedef)}</b></td>
+          <td>${kacir(x.eylem)}</td>
+          <td class="muted gizle-mobil">${esc(x['not'])}</td>
+          <td class="muted">${esc(x.yapan)}</td>
+          <td class="muted">${x.tarih
+            ? new Date(x.tarih).toLocaleString('tr-TR',
+                {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+            : '—'}</td></tr>`).join('')}</tbody></table>`
+        : '<div class="muted">Henüz kayıtlı işlem yok</div>'}
     </div>
     <div class="panel">
       <h2>Personel başına zimmet</h2>

@@ -283,6 +283,30 @@ bileşenler ve lisanslar**. Script birden çok kez çalıştırılabilir;
 | `--dry-run` | Yazmadan dener; her türden kaç kayıt aktarılacağını gösterir |
 | `--limit N` | Her türden en fazla N kayıt (hızlı deneme için) |
 
+## Excel raporları
+
+Kontrol panelindeki **Excel Raporları** bölümünden tek tıkla indirilir —
+başlıklı, süzgeçli, dondurulmuş üst satırlı, zebra desenli, Türkçe tarih/para
+biçimli, yazdırmaya hazır `.xlsx` dosyaları:
+
+| Rapor | İçerik |
+|---|---|
+| 📗 Genel rapor | Hepsi tek kitapta: Özet + aşağıdaki tüm sayfalar |
+| 💻 Cihaz listesi | Tüm varlıklar, tam künye (marka, model, seri, lokasyon, durum, zimmet, bedel, garanti) |
+| 🤝 Zimmet raporu | Yalnızca zimmetli cihazlar + kişi bilgileri (sicil, departman, unvan, zimmet tarihi) |
+| 🏗️ Lokasyon raporu | Şantiye başına cihaz / zimmetli / boşta sayıları |
+| 📦 Stok raporu | Aksesuar, sarf, bileşen, lisans — düşük stok "DÜŞÜK" olarak işaretli |
+| 🌐 Sistem ürünleri | Beş ailenin tamamı, teknik özellikler tek sütunda |
+
+```bash
+curl -H "Authorization: Bearer $T" -o rapor.xlsx "$API/reports/excel?tip=genel"
+# tip: genel | cihazlar | zimmet | lokasyon | stok | sistem
+```
+
+Kontrol paneli ayrıca: tıklanabilir istatistik kartları (karta basınca ilgili
+ekran açılır), **Son işlemler** akışı (kim neyi ne zaman değiştirdi) ve marka
+alanı boş cihaz varsa veri kalitesi uyarısı gösterir.
+
 ## Kuruma özel alanlar
 
 Snipe-IT'in standart alanlarına ek olarak, kendi kullanımımıza göre eklenen
