@@ -19,7 +19,9 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
+    Image as RLImage,
     KeepTogether,
     PageBreak,
     Paragraph,
@@ -30,6 +32,25 @@ from reportlab.platypus import (
 )
 
 from app.config import settings
+
+# Kurum logosu (yeşil versiyon — beyaz kâğıda göre). scripts/logo-kur.py
+# üretir; dosya yoksa form logosuz, aynı düzende basılır.
+LOGO_YOLU = Path(__file__).resolve().parent.parent / "static" / "logo-rapor.png"
+
+
+def _logo_blogu(olcek: float) -> list:
+    """Başlığın üstüne ortalanmış logo; boyut sayfa ölçeğiyle birlikte küçülür.
+
+    Yükseklik eklenince tek sayfaya sığdırma mekanizması (_sigdir) gerekirse
+    bir alt ölçeğe iner — sayfa taşması logo yüzünden oluşmaz.
+    """
+    if not LOGO_YOLU.exists():
+        return []
+    iw, ih = ImageReader(str(LOGO_YOLU)).getSize()
+    h = 12 * mm * olcek
+    img = RLImage(str(LOGO_YOLU), width=iw / ih * h, height=h)
+    img.hAlign = "CENTER"
+    return [img, Spacer(1, 2 * mm * olcek)]
 
 # --------------------------------------------------------------------------- #
 # Font kaydı — Türkçe karakterler (ğ, ş, ı, İ, ç, ö, ü) için TTF şart.
@@ -271,6 +292,7 @@ def _sayfa(asset, user, *, org: str, doc_type: str, note: str | None, st) -> lis
 
     o = st["olcek"]
     return [
+        *_logo_blogu(o),
         Paragraph(org, st["org"]),
         Spacer(1, 1.5 * mm * o),
         Paragraph(baslik, st["title"]),

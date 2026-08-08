@@ -202,3 +202,30 @@ def test_zimmet_ucu_pdf_dondurur(client):
     assert r.headers["content-type"] == "application/pdf"
     assert r.content[:4] == b"%PDF"
     assert "DEMİRBAŞ ZİMMET FORMU" in _metin(r.content)
+
+
+def test_logo_varsa_forma_girer_ve_tek_sayfa_kalir(client, monkeypatch, tmp_path):
+    """logo-rapor.png konduğunda fiş logolu üretilmeli, sayfa taşmamalı."""
+    from PIL import Image as PILImage
+
+    from app.pdf import zimmet as z
+
+    yol = tmp_path / "logo-rapor.png"
+    PILImage.new("RGBA", (600, 420), (0, 61, 53, 255)).save(yol)
+    monkeypatch.setattr(z, "LOGO_YOLU", yol)
+
+    kisi = client.post("/users", json={"first_name": "Logo",
+                                       "last_name": "Testi"}).json()
+    cihaz = client.post("/assets", json={"asset_tag": "LOGO-PDF-1",
+                                         "name": "Laptop"}).json()
+    client.post(f"/assets/{cihaz['id']}/checkout",
+                json={"assigned_type": "user", "assigned_id": kisi["id"]})
+
+    r = client.get(f"/documents/zimmet/user/{kisi['id']}.pdf")
+    assert r.status_code == 200
+    assert _sayfa_sayisi(r.content) == 1
+    assert "DEMİRBAŞ ZİMMET FORMU" in _metin(r.content)
+    # Logosuz üretimden bariz büyük olmalı (görsel gömüldü kanıtı)
+    monkeypatch.setattr(z, "LOGO_YOLU", tmp_path / "yok.png")
+    logosuz = client.get(f"/documents/zimmet/user/{kisi['id']}.pdf").content
+    assert len(r.content) > len(logosuz) + 500
