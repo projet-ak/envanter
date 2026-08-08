@@ -78,11 +78,65 @@ def _tahmin(metinler: list[str], markalar) -> tuple[str, models.Manufacturer | N
     return None
 
 
+def _incele(db, markasiz: list, adet: int, renk) -> None:
+    """Markası boş cihazların bütün alanlarını döker.
+
+    Amaç: markanın veride başka bir yerde (cihaz adı, notlar, Excel'den gelen
+    "Ek Bilgi" sütunları) durup durmadığını görmek. Duruyorsa 128 kaydı elle
+    girmek yerine oradan toplu doldurulur.
+    """
+    M, Y, S, N = renk
+    kimlikler = [m.id for m in markasiz]
+    varliklar = db.scalars(
+        select(models.Asset).where(models.Asset.model_id.in_(kimlikler))
+        .order_by(models.Asset.asset_tag).limit(adet)).all()
+
+    print(f"\n{M}Markası boş {len(varliklar)} cihazın tüm alanları{N}")
+    for a in varliklar:
+        mdl = db.get(models.AssetModel, a.model_id)
+        kat = db.get(models.Category, mdl.category_id) if mdl and mdl.category_id \
+            else None
+        print(f"\n  {Y}{a.asset_tag}{N}")
+        print(f"    Ad         : {a.name}")
+        print(f"    Model      : {mdl.name if mdl else None}"
+              f"   (model no: {mdl.model_number if mdl else None})")
+        print(f"    Cihaz Tipi : {kat.name if kat else None}")
+        print(f"    Seri / Dem.: {a.serial} / {a.demirbas_no}")
+        print(f"    Not        : {(a.notes or '')[:120]}")
+        for grup, degerler in (a.custom or {}).items():
+            if isinstance(degerler, dict):
+                for alan, deger in degerler.items():
+                    print(f"    [{grup}] {alan}: {deger}")
+
+    # Hangi ek alanlar var? Marka oradan gelebilir mi?
+    alanlar: dict[str, int] = {}
+    for a in db.scalars(select(models.Asset)
+                        .where(models.Asset.model_id.in_(kimlikler))).all():
+        for grup, degerler in (a.custom or {}).items():
+            if isinstance(degerler, dict):
+                for alan in degerler:
+                    alanlar[f"{grup} → {alan}"] = alanlar.get(
+                        f"{grup} → {alan}", 0) + 1
+    if alanlar:
+        print(f"\n{M}Bu cihazlarda dolu olan ek alanlar{N}")
+        for ad, n in sorted(alanlar.items(), key=lambda x: -x[1]):
+            print(f"    {ad:<50} {n:>4} cihazda")
+    else:
+        print(f"\n{S}Bu cihazlarda hiç ek alan yok — marka veride başka bir "
+              f"yerde durmuyor.{N}")
+        print("  Tek kaynak Excel'deki MARKA sütunu: dosyayı yeniden içe "
+              "aktarın.")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--uygula", action="store_true",
                     help="tahminleri veritabanına yaz (varsayılan: yalnızca rapor)")
+    ap.add_argument("--incele", type=int, metavar="N", default=0,
+                    help="markası boş N cihazın tüm alanlarını dök — marka "
+                         "bilgisinin veride başka bir yerde durup durmadığını "
+                         "görmek için")
     args = ap.parse_args()
 
     uyar()
@@ -112,6 +166,10 @@ def main() -> int:
 
         if not markasiz:
             print(f"\n{Y}✓ Markası boş model yok.{N}")
+            return 0
+
+        if args.incele:
+            _incele(db, markasiz, args.incele, (M, Y, S, N))
             return 0
 
         # Modeli kullanan bir cihazın adı da ipucu olabilir ("HP N439")
