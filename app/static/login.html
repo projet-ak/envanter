@@ -44,14 +44,15 @@
     .kivrim::after  { width:340px; height:340px; left:-120px; bottom:120px;
                       transform:rotate(-12deg); border-radius:30%; }
 
-    /* Alt dalga katmanları — farklı hız/yönde akar */
-    .dalgalar { position:absolute; left:0; right:0; bottom:0; height:190px;
-                z-index:1; pointer-events:none; }
+    /* Dalga katmanları — SAYFANIN TAMAMINI kaplar, farklı hız/yönde akar.
+       Her katman panel boyunca gerilir (preserveAspectRatio=none), iki dalga
+       boyu genişliğinde çizilip yarısı kadar kaydırılır; başa dönüş görünmez. */
+    .dalgalar { position:absolute; inset:0; z-index:1; pointer-events:none; }
     .dalgalar svg { position:absolute; bottom:0; left:0; width:200%; height:100%; }
-    .dalgalar .d1 { fill:rgba(255,255,255,.07); animation:kay 22s linear infinite; }
-    .dalgalar .d2 { fill:rgba(47,214,163,.13); animation:kay 15s linear infinite;
+    .dalgalar .d1 { fill:rgba(255,255,255,.05); animation:kay 26s linear infinite; }
+    .dalgalar .d2 { fill:rgba(47,214,163,.09); animation:kay 17s linear infinite;
                     animation-direction:reverse; }
-    .dalgalar .d3 { fill:rgba(255,255,255,.05); animation:kay 30s linear infinite; }
+    .dalgalar .d3 { fill:rgba(255,255,255,.04); animation:kay 34s linear infinite; }
     @keyframes kay { from { transform:translateX(0); }
                      to   { transform:translateX(-50%); } }
     @media (prefers-reduced-motion:reduce) {
@@ -158,7 +159,6 @@
       .kartlar { max-width:560px; margin:0 auto; }
       .alan { flex:none; width:auto; box-shadow:none; padding:30px 22px 16px; }
       .alan-ic { max-width:380px; margin:0 auto; }
-      .dalgalar { height:110px; }
     }
     @media (max-width:560px) {
       .kartlar { grid-template-columns:1fr; }
@@ -173,18 +173,18 @@
   <aside class="yan">
     <div class="kivrim" aria-hidden="true"></div>
     <div class="dalgalar" aria-hidden="true">
-      <svg viewBox="0 0 2400 200" preserveAspectRatio="none">
-        <path class="d1" d="M0,90 C200,140 400,40 600,90 C800,140 1000,40 1200,90
-              C1400,140 1600,40 1800,90 C2000,140 2200,40 2400,90 L2400,200 L0,200 Z"/>
+      <svg viewBox="0 0 2400 900" preserveAspectRatio="none">
+        <path class="d1" d="M0,300 C300,420 500,160 800,280 C1100,400 1300,150 1600,270
+              C1900,390 2100,160 2400,300 L2400,900 L0,900 Z"/>
       </svg>
-      <svg viewBox="0 0 2400 200" preserveAspectRatio="none">
-        <path class="d2" d="M0,120 C300,60 500,160 800,120 C1100,80 1300,170 1600,120
-              C1900,70 2100,160 2400,120 L2400,200 L0,200 Z"/>
+      <svg viewBox="0 0 2400 900" preserveAspectRatio="none">
+        <path class="d2" d="M0,560 C350,430 550,660 900,540 C1250,430 1450,680 1800,550
+              C2050,460 2200,640 2400,560 L2400,900 L0,900 Z"/>
       </svg>
-      <svg viewBox="0 0 2400 200" preserveAspectRatio="none">
-        <path class="d3" d="M0,150 C240,110 480,180 720,150 C960,120 1200,190 1440,150
-              C1680,110 1920,180 2160,150 C2280,135 2340,145 2400,150
-              L2400,200 L0,200 Z"/>
+      <svg viewBox="0 0 2400 900" preserveAspectRatio="none">
+        <path class="d3" d="M0,740 C260,660 520,810 780,730 C1040,660 1300,820 1560,740
+              C1820,660 2080,810 2340,740 C2360,735 2380,738 2400,740
+              L2400,900 L0,900 Z"/>
       </svg>
     </div>
 
