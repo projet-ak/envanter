@@ -199,10 +199,21 @@ else
     hata "/health → ${saglik}" "servis ayakta mı? journalctl -u ${SERVIS} -n 50"
 fi
 
-for yol in "/login:Giriş sayfası" "/ui/:Arayüz" "/docs:API dokümanı"; do
+# stil.css / uygulama.js: arayüz artık üç dosya. Nginx'in hazır `.css/.js`
+# regex blokları /envanter'i ele geçirirse bu ikisi 404 döner ve sayfa çıplak
+# açılır — çözüm `location ^~ /envanter` (bkz. deploy/nginx-envanter.conf).
+for yol in "/login:Giriş sayfası" "/ui/:Arayüz" "/ui/stil.css:Arayüz stili" \
+           "/ui/uygulama.js:Arayüz betiği" "/docs:API dokümanı"; do
     y="${yol%%:*}"; ad="${yol#*:}"
     k="$(kod "${YEREL}${y}")"
-    [[ "$k" == "200" ]] && ok "${y} → 200 (${ad})" || hata "${y} → ${k} (${ad})"
+    if [[ "$k" == "200" ]]; then
+        ok "${y} → 200 (${ad})"
+    elif [[ "$y" == /ui/*.* ]]; then
+        hata "${y} → ${k} (${ad})" \
+             "Nginx'te 'location /envanter' yerine 'location ^~ /envanter' kullanın"
+    else
+        hata "${y} → ${k} (${ad})"
+    fi
 done
 
 # Yeni uçlar giriş ister; 401 dönmesi "uç var ve korumalı" demektir
