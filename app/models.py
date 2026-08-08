@@ -207,6 +207,7 @@ class User(Base, TimestampMixin, ExternalMixin):
     sube: Mapped[str | None] = mapped_column(String(120))
     telefon: Mapped[str | None] = mapped_column(String(40))
     ise_giris: Mapped[dt.date | None] = mapped_column(Date)
+    isten_cikis: Mapped[dt.date | None] = mapped_column(Date)
 
     # Kimlik doğrulama (giriş yapabilen kullanıcılar için)
     password_hash: Mapped[str | None] = mapped_column(String(255))

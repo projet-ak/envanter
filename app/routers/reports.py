@@ -196,7 +196,8 @@ def son_islemler(limit: int = Query(12, le=50), db: Session = Depends(get_db)):
 
     sonuc = []
     for g in db.scalars(select(models.ActivityLog)
-                        .order_by(models.ActivityLog.created_at.desc())
+                        .order_by(models.ActivityLog.created_at.desc(),
+                                  models.ActivityLog.id.desc())
                         .limit(limit)).all():
         if g.item_type == "asset":
             hedef = etiketler.get(g.item_id) or f"cihaz #{g.item_id}"

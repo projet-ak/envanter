@@ -187,6 +187,7 @@ class UserCreate(BaseModel):
     sube: str | None = None
     telefon: str | None = None
     ise_giris: dt.date | None = None
+    isten_cikis: dt.date | None = None
     active: bool = True
 
 
@@ -205,6 +206,7 @@ class UserUpdate(BaseModel):
     sube: str | None = None
     telefon: str | None = None
     ise_giris: dt.date | None = None
+    isten_cikis: dt.date | None = None
     active: bool | None = None
 
 
@@ -222,6 +224,7 @@ class UserRead(ORMModel):
     sube: str | None = None
     telefon: str | None = None
     ise_giris: dt.date | None = None
+    isten_cikis: dt.date | None = None
     role: UserRole
     active: bool
 

@@ -87,3 +87,37 @@ def test_detay_giris_ister(anon_client):
 def test_viewer_detay_gorebilir(viewer_client):
     """Sadece-okuma kullanıcısı detayları görebilmeli."""
     assert viewer_client.get("/detay/asset/99999").status_code == 404  # 403 değil
+
+
+def test_kisi_gecmisi_ve_cihaz_kullanim_listesi(client):
+    """Zimmet al-ver döngüsü iki yönden de izlenebilmeli."""
+    a = client.post("/users", json={"first_name": "Önceki",
+                                    "last_name": "Kullanıcı"}).json()
+    b = client.post("/users", json={"first_name": "Yeni",
+                                    "last_name": "Kullanıcı"}).json()
+    cihaz = client.post("/assets", json={"asset_tag": "GEC-1"}).json()
+
+    client.post(f"/assets/{cihaz['id']}/checkout",
+                json={"assigned_type": "user", "assigned_id": a["id"]})
+    client.post(f"/assets/{cihaz['id']}/checkin", json={})
+    client.post(f"/assets/{cihaz['id']}/checkout",
+                json={"assigned_type": "user", "assigned_id": b["id"]})
+
+    # Kişi geçmişi: eski kullanıcının kaydında aldı + iade etti var
+    g = client.get(f"/detay/user/{a['id']}").json()["gecmis"]
+    assert [(x["asset_tag"], x["islem"]) for x in g] == \
+        [("GEC-1", "iade etti"), ("GEC-1", "aldı")]
+
+    # Cihaz: kimler kullandı — en yeni üstte, açık zimmet iadesiz
+    ku = client.get(f"/detay/asset/{cihaz['id']}").json()["kullanim_gecmisi"]
+    assert [x["kime"] for x in ku] == ["Yeni Kullanıcı", "Önceki Kullanıcı"]
+    assert ku[0]["iade"] is None and ku[1]["iade"] is not None
+
+
+def test_isten_cikis_tarihi_kaydedilir(client):
+    k = client.post("/users", json={"first_name": "Ayrılan",
+                                    "ise_giris": "2024-01-10",
+                                    "isten_cikis": "2026-06-30"}).json()
+    assert k["isten_cikis"] == "2026-06-30"
+    d = client.get(f"/detay/user/{k['id']}").json()["kisi"]
+    assert d["ise_giris"] == "2024-01-10" and d["isten_cikis"] == "2026-06-30"

@@ -117,7 +117,49 @@ def varlik_detay(asset_id: int, db: Session = Depends(get_db)):
             }
             for g in gecmis
         ],
+        "kullanim_gecmisi": _kullanim_gecmisi(db, asset_id),
     }
+
+
+def _kullanim_gecmisi(db: Session, asset_id: int) -> list[dict]:
+    """Cihazı kimler kullandı: checkout/checkin kayıtları eşleştirilir.
+
+    Kronolojik sırada her checkout bir satır açar, onu izleyen checkin
+    satırı kapatır; kapanmamış satır "hâlâ kullanımda" demektir.
+    """
+    loglar = db.scalars(
+        select(models.ActivityLog)
+        .where(models.ActivityLog.item_type == "asset",
+               models.ActivityLog.item_id == asset_id,
+               models.ActivityLog.action.in_(
+                   [models.ActivityAction.checkout,
+                    models.ActivityAction.checkin]))
+        # Aynı saniyede yazılan kayıtlarda sıra kaybolmasın: id eşitlik bozucu
+        .order_by(models.ActivityLog.created_at, models.ActivityLog.id)
+    ).all()
+
+    satirlar: list[dict] = []
+    acik: dict | None = None
+    for g in loglar:
+        if g.action == models.ActivityAction.checkout:
+            kisi = (db.get(models.User, g.target_id)
+                    if g.target_type == "user" and g.target_id else None)
+            lok = (db.get(models.Location, g.target_id)
+                   if g.target_type == "location" and g.target_id else None)
+            acik = {
+                "kisi_id": kisi.id if kisi else None,
+                "kime": _kisi_adi(kisi) if kisi
+                        else (f"📍 {lok.name}" if lok else "—"),
+                "alis": g.created_at.isoformat() if g.created_at else None,
+                "iade": None,
+                "not": g.note,
+            }
+            satirlar.append(acik)
+        elif acik is not None:
+            acik["iade"] = g.created_at.isoformat() if g.created_at else None
+            acik = None
+    satirlar.reverse()          # en yeni üstte
+    return satirlar
 
 
 @router.get("/user/{user_id}")
@@ -154,6 +196,11 @@ def kisi_detay(user_id: int, db: Session = Depends(get_db)):
             "sube": k.sube,
             "email": k.email,
             "telefon": k.telefon,
+            "tckn": k.tckn,
+            "ise_giris": k.ise_giris.isoformat() if k.ise_giris else None,
+            "isten_cikis": k.isten_cikis.isoformat() if k.isten_cikis else None,
+            "active": k.active,
+            "notes": k.notes,
             "lokasyon": _ad(db.get(models.Location, k.location_id))
                         if k.location_id else None,
         },
@@ -161,4 +208,40 @@ def kisi_detay(user_id: int, db: Session = Depends(get_db)):
         "tur_dagilimi": dict(sorted(tur_sayilari.items(), key=lambda x: -x[1])),
         "toplam_deger": toplam_deger,
         "cihazlar": cihazlar,
+        "gecmis": _kisi_gecmisi(db, user_id),
     }
+
+
+def _kisi_gecmisi(db: Session, user_id: int) -> list[dict]:
+    """Kişinin zimmet geçmişi: hangi cihazı ne zaman aldı / iade etti.
+
+    checkout ve checkin logları hedefinde kişiyi taşır (target_type=user);
+    eski zimmetler de burada görünür — "önceki kullanıcı ne kullanmıştı"
+    sorusunun cevabı.
+    """
+    loglar = db.scalars(
+        select(models.ActivityLog)
+        .where(models.ActivityLog.target_type == "user",
+               models.ActivityLog.target_id == user_id,
+               models.ActivityLog.action.in_(
+                   [models.ActivityAction.checkout,
+                    models.ActivityAction.checkin]))
+        .order_by(models.ActivityLog.created_at.desc(),
+                  models.ActivityLog.id.desc())
+        .limit(80)
+    ).all()
+
+    etiketler = dict(db.execute(
+        select(models.Asset.id, models.Asset.asset_tag)).all())
+    return [
+        {
+            "asset_id": g.item_id,
+            "asset_tag": etiketler.get(g.item_id) or f"cihaz #{g.item_id}",
+            "islem": ("aldı" if g.action == models.ActivityAction.checkout
+                      else "iade etti"),
+            "tarih": g.created_at.isoformat() if g.created_at else None,
+            "not": g.note,
+            "yapan": g.actor,
+        }
+        for g in loglar
+    ]

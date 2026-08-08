@@ -1215,6 +1215,22 @@ async function cihazDetay(id) {
     ${z.kisi_id ? `<button class="ghost" style="margin-top:8px"
         onclick="kisiDetay(${z.kisi_id})">👤 ${z.kisi} — tüm cihazları</button>` : ''}
     </div>
+    <div class="bolum"><h4>Kimler kullandı</h4>
+      ${(d.kullanim_gecmisi || []).length ? `<table><thead><tr>
+        <th>Kişi</th><th>Aldı</th><th>İade</th>
+        <th class="gizle-mobil">Not</th></tr></thead><tbody>
+        ${d.kullanim_gecmisi.map(u => `<tr class="${u.kisi_id ? 'tikla' : ''}"
+            onclick="${u.kisi_id ? `kisiDetay(${u.kisi_id})` : ''}">
+          <td><b>${kacir(u.kime)}</b></td>
+          <td class="muted">${u.alis
+            ? new Date(u.alis).toLocaleDateString('tr-TR') : '—'}</td>
+          <td>${u.iade
+            ? `<span class="muted">${new Date(u.iade).toLocaleDateString('tr-TR')}</span>`
+            : '<span class="tag used">hâlâ kullanımda</span>'}</td>
+          <td class="muted gizle-mobil">${esc(u['not'])}</td>
+        </tr>`).join('')}</tbody></table>`
+        : '<div class="muted">Zimmet hareketi yok</div>'}
+    </div>
     ${ozellikBolumu}
     ${dosyaBolumu}
     <div class="bolum"><h4>Geçmiş</h4>${gecmisHtml}</div>`, butonlar);
@@ -1531,10 +1547,31 @@ async function kisiDetay(id) {
   catch (e) { return alert('⚠ ' + (e.detail || 'Detay alınamadı')); }
   const k = d.kisi;
   const kisiDosyalar = await api(`/users/${id}/dosyalar`).catch(() => []);
+  const trTarih = (v, saatli = false) => v
+    ? new Date(v).toLocaleString('tr-TR', saatli
+        ? { day:'2-digit', month:'2-digit', year:'numeric',
+            hour:'2-digit', minute:'2-digit' }
+        : { day:'2-digit', month:'2-digit', year:'numeric' })
+    : null;
 
+  // --- Sekme 1: Bilgiler (işe giriş/çıkış dahil tam kimlik) ---
+  const bilgiler = `
+    <div class="bolum"><h4>Kimlik</h4>${alanlar({...k,
+        ise_giris: trTarih(k.ise_giris), isten_cikis: trTarih(k.isten_cikis),
+        durum: k.active ? 'Aktif' : 'Ayrılmış / pasif'}, [
+      ['employee_num','Sicil No'],['tckn','TCKN'],['department','Departman'],
+      ['job_title','Unvan'],['sube','Şube'],['lokasyon','Lokasyon'],
+      ['ise_giris','İşe Giriş'],['isten_cikis','İşten Çıkış'],['durum','Durum'],
+    ])}</div>
+    <div class="bolum"><h4>İletişim</h4>${alanlar(k, [
+      ['email','E-posta'],['telefon','Telefon'],
+    ])}</div>
+    ${k.notes ? `<div class="bolum"><h4>Notlar</h4>
+      <div class="note" style="margin-top:0">${kacir(k.notes)}</div></div>` : ''}`;
+
+  // --- Sekme 2: Zimmetler ---
   const dagilim = Object.entries(d.tur_dagilimi || {})
     .map(([t, n]) => `<span class="pill">${t}: <b>${n}</b></span>`).join(' ');
-
   const tablo = d.cihazlar.length ? `
     <table><thead><tr><th>Cihaz NO</th><th class="gizle-mobil">Tip</th>
       <th>Marka/Model</th>
@@ -1551,14 +1588,8 @@ async function kisiDetay(id) {
          onclick="zimmetGeriAl(${c.id}, ${id})">↩</button></td>` : ''}
       </tr>`).join('')}</tbody></table>`
     : '<div class="muted">Zimmetli cihaz yok</div>';
-
-  modalAc(`👤 ${k.ad}`, `
-    <div class="bolum"><h4>Personel</h4>${alanlar(k, [
-      ['employee_num','Sicil No'],['department','Departman'],['job_title','Unvan'],
-      ['sube','Şube'],['email','E-posta'],['telefon','Telefon'],
-      ['lokasyon','Lokasyon'],
-    ])}</div>
-    <div class="stats" style="margin-top:16px">
+  const zimmetler = `
+    <div class="stats">
       <div class="stat"><div class="stat-v">${d.cihaz_sayisi}</div>
         <div class="stat-l">Zimmetli cihaz</div></div>
       ${d.toplam_deger ? `<div class="stat"><div class="stat-v">${
@@ -1576,7 +1607,10 @@ async function kisiDetay(id) {
             encodeURIComponent(k.ad || '')}')">+ Zimmet ekle</button>` : ''}
       </div>
       ${tablo}
-    </div>
+    </div>`;
+
+  // --- Sekme 3: Belgeler ---
+  const belgeler = `
     <div class="bolum">
       <h4>Belgeler (${kisiDosyalar.length})</h4>
       ${kisiDosyalar.length ? `<table><tbody>
@@ -1585,8 +1619,7 @@ async function kisiDetay(id) {
           <td><a href="#" onclick="kisiDosyaAc(${f.id});return false">${
             kacir(f.dosya_adi)}</a></td>
           <td class="muted">${(f.boyut / 1024).toFixed(0)} KB</td>
-          <td class="muted">${f.created_at
-            ? new Date(f.created_at).toLocaleDateString('tr-TR') : '—'}</td>
+          <td class="muted">${trTarih(f.created_at) ?? '—'}</td>
           ${canWrite() ? `<td><button class="ghost mini" title="Sil"
              onclick="kisiDosyaSil(${f.id}, ${id})">🗑</button></td>` : ''}
         </tr>`).join('')}</tbody></table>`
@@ -1597,10 +1630,50 @@ async function kisiDetay(id) {
         <button class="ghost" onclick="kisiDosyaSec(${id}, 'diger')">
           📎 Diğer belge</button>
       </div>` : ''}
-    </div>`,
+    </div>`;
+
+  // --- Sekme 4: Geçmiş (eski zimmetler dahil log listesi) ---
+  const gecmis = (d.gecmis || []).length ? `
+    <div class="note" style="margin-top:0">Kişinin tüm zimmet hareketleri —
+      iade ettikleri de burada, "önceden ne kullanıyordu" sorusunun cevabı.</div>
+    <table><thead><tr><th>Tarih</th><th>İşlem</th><th>Cihaz</th>
+      <th class="gizle-mobil">Not</th><th class="gizle-mobil">Yapan</th>
+      </tr></thead><tbody>
+    ${d.gecmis.map(g => `<tr class="tikla" onclick="cihazDetay(${g.asset_id})">
+      <td class="muted">${trTarih(g.tarih, true) ?? '—'}</td>
+      <td>${g.islem === 'aldı'
+            ? '<span class="tag used">zimmet aldı</span>'
+            : '<span class="tag free">iade etti</span>'}</td>
+      <td><b>${kacir(g.asset_tag)}</b></td>
+      <td class="muted gizle-mobil">${esc(g['not'])}</td>
+      <td class="muted gizle-mobil">${esc(g.yapan)}</td>
+      </tr>`).join('')}</tbody></table>`
+    : '<div class="muted">Henüz zimmet hareketi yok</div>';
+
+  const sekmeler = [
+    ['bilgiler', '📇 Bilgiler', bilgiler],
+    ['zimmetler', `🤝 Zimmetler (${d.cihaz_sayisi})`, zimmetler],
+    ['belgeler', `📎 Belgeler (${kisiDosyalar.length})`, belgeler],
+    ['gecmis', `🕘 Geçmiş (${(d.gecmis || []).length})`, gecmis],
+  ];
+  modalAc(`👤 ${k.ad}`, `
+    <div class="row sekme-cubugu" style="margin-bottom:16px">
+      ${sekmeler.map(([ad, etiket], i) => `<button class="ghost${i === 1 ? ' sec' : ''}"
+        data-sekme="${ad}" onclick="kisiSekme('${ad}')">${etiket}</button>`).join('')}
+    </div>
+    ${sekmeler.map(([ad, , icerik], i) => `<div class="kisi-sekme"
+      id="sekme_${ad}" ${i === 1 ? '' : 'hidden'}>${icerik}</div>`).join('')}`,
     (d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
       onclick="openPdf('/documents/zimmet/user/${id}.pdf')">📄</button>` : '') +
     (canWrite() ? `<button class="ghost" onclick="kisiDuzenle(${id})">✏️ Düzenle</button>` : ''));
+}
+
+// Kişi kartında sekme değiştir (varsayılan açılış: Zimmetler)
+function kisiSekme(ad) {
+  document.querySelectorAll('.kisi-sekme').forEach(b =>
+    b.hidden = b.id !== 'sekme_' + ad);
+  document.querySelectorAll('.sekme-cubugu button').forEach(b =>
+    b.classList.toggle('sec', b.dataset.sekme === ad));
 }
 
 // ---------- Cihaz düzenleme ----------
@@ -1689,6 +1762,7 @@ async function kisiDuzenle(id) {
     ['job_title','Unvan','text'],['sube','Şube','text'],
     ['email','E-posta','text'],['telefon','Telefon','text'],
     ['tckn','TCKN','text'],['ise_giris','İşe Giriş','date'],
+    ['isten_cikis','İşten Çıkış','date'],
     ['username','Kullanıcı Adı (giriş için)','text'],
   ];
   modalAc(`✏️ ${k.first_name} ${k.last_name ?? ''} düzenle`, `
