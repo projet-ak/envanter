@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Snipe-IT dışa aktarımını mevcut veriyle karşılaştırır ve eksikleri doldurur.
+"""Snipe-IT verisini mevcut veriyle karşılaştırır ve eksikleri doldurur.
 
-Snipe-IT'in "Export" düğmesi `.xls` uzantılı ama aslında HTML tablosu olan bir
-dosya üretir; bu betik hem onu hem gerçek `.xlsx` dosyasını okur.
+Üç kaynak biçimi okunur:
+  • Snipe-IT "Export" düğmesinin ürettiği `.xls` (aslında HTML tablosu)
+  • gerçek `.xlsx`
+  • tam veritabanı dökümü `.sql` (mysqldump) — en zengini; cihazların yanı
+    sıra aksesuar/sarf/bileşen/lisans/personel sayılarını da karşılaştırır
 
 Ne yapar:
   1. Dosyadaki her satırı **Demirbaş Etiketi** ile (o tutmazsa seri no ile)
@@ -82,8 +85,129 @@ def _html_tablo(metin: str) -> list[dict]:
     return [dict(zip(basliklar, hucreler(t))) for t in satirlar[1:]]
 
 
-def oku(yol: Path) -> list[dict]:
-    """Snipe-IT dışa aktarımını okur (HTML görünümlü .xls ya da gerçek .xlsx)."""
+def _sql_satirlari(govde: str) -> list[list[str]]:
+    """`(...),(...)` değer dizisini alanlara ayırır (tırnak/kaçış duyarlı)."""
+    satirlar: list[list[str]] = []
+    alan: list[str] = []
+    alanlar: list[str] = []
+    derinlik = 0
+    tirnak = False
+    i, n = 0, len(govde)
+    while i < n:
+        c = govde[i]
+        if tirnak:
+            if c == "\\":
+                alan.append(govde[i:i + 2])
+                i += 2
+                continue
+            if c == "'":
+                tirnak = False
+            else:
+                alan.append(c)
+            i += 1
+            continue
+        if c == "'":
+            tirnak = True
+            i += 1
+            continue
+        if c == "(":
+            derinlik += 1
+            if derinlik == 1:
+                alan, alanlar = [], []
+                i += 1
+                continue
+        elif c == ")":
+            derinlik -= 1
+            if derinlik == 0:
+                alanlar.append("".join(alan).strip())
+                satirlar.append(alanlar)
+                i += 1
+                continue
+        elif c == "," and derinlik == 1:
+            alanlar.append("".join(alan).strip())
+            alan = []
+            i += 1
+            continue
+        if derinlik >= 1:
+            alan.append(c)
+        i += 1
+    return satirlar
+
+
+def sql_tablo(dokum: str, ad: str) -> list[dict]:
+    """Dökümdeki bir tablonun satırlarını sözlük olarak verir."""
+    sonuc: list[dict] = []
+    for m in re.finditer(rf"INSERT INTO `{ad}` \(([^)]*)\) VALUES\s*(.*?);\n",
+                         dokum, re.S):
+        sutunlar = re.findall(r"`(\w+)`", m.group(1))
+        for satir in _sql_satirlari(m.group(2)):
+            sonuc.append({
+                k: None if v == "NULL" else v.replace("\\'", "'").replace('\\"', '"')
+                for k, v in zip(sutunlar, satir)
+            })
+    return sonuc
+
+
+def _onek_bul(dokum: str) -> str:
+    """Snipe-IT tablo öneki: kurulum `stop_` gibi bir önek kullanmış olabilir."""
+    for onek in ("", "stop_"):
+        if sql_tablo(dokum, f"{onek}assets"):
+            return onek
+    return ""
+
+
+def _sql_oku(dokum: str) -> tuple[list[dict], dict]:
+    """Dökümü dışa aktarım satırlarıyla aynı biçime çevirir."""
+    o = _onek_bul(dokum)
+    ad = lambda t, k: t.get(k, {}).get("name") if k else None  # noqa: E731
+    sozluk = lambda tablo: {r["id"]: r for r in sql_tablo(dokum, o + tablo)}  # noqa: E731
+
+    modeller = sozluk("models")
+    ureticiler = sozluk("manufacturers")
+    kategoriler = sozluk("categories")
+    durumlar = sozluk("status_labels")
+    yerler = sozluk("locations")
+    kisiler = sozluk("users")
+
+    satirlar = []
+    for a in sql_tablo(dokum, o + "assets"):
+        if a.get("deleted_at"):
+            continue
+        mdl = modeller.get(a.get("model_id")) or {}
+        kisi = kisiler.get(a.get("assigned_to")) if a.get("assigned_to") else None
+        satirlar.append({
+            ETIKET: a.get("asset_tag") or "",
+            "Demirbaş Adı": a.get("name") or "",
+            SERI: a.get("serial") or "",
+            "Model": mdl.get("name") or "",
+            "Model No.": mdl.get("model_number") or "",
+            "Kategori": ad(kategoriler, mdl.get("category_id")) or "",
+            "Üretici": ad(ureticiler, mdl.get("manufacturer_id")) or "",
+            "Durum": ad(durumlar, a.get("status_id")) or "",
+            "Konum": ad(yerler, a.get("location_id")) or "",
+            "Notlar": a.get("notes") or "",
+            "IFS Cihaz Kodu": "",
+            "Çıkış Yapılmış Olan Kişi": " ".join(filter(None, [
+                (kisi or {}).get("first_name"), (kisi or {}).get("last_name")])),
+        })
+
+    ekler = {
+        "Personel": len([k for k in kisiler.values() if not k.get("deleted_at")]),
+        "Lokasyon": len([y for y in yerler.values() if not y.get("deleted_at")]),
+        "Kategori": len(kategoriler),
+        "Üretici": len(ureticiler),
+        "Aksesuar": len(sql_tablo(dokum, o + "accessories")),
+        "Sarf malzeme": len(sql_tablo(dokum, o + "consumables")),
+        "Bileşen": len(sql_tablo(dokum, o + "components")),
+        "Lisans": len(sql_tablo(dokum, o + "licenses")),
+    }
+    return satirlar, ekler
+
+
+def oku(yol: Path) -> tuple[list[dict], dict]:
+    """Kaynağı okur; (satırlar, döküme özel ek sayılar) döner."""
+    if yol.suffix.lower() == ".sql":
+        return _sql_oku(yol.read_text("utf-8", errors="replace"))
     ham = yol.read_bytes()
     if ham[:2] == b"PK":                       # gerçek xlsx
         from openpyxl import load_workbook
@@ -95,8 +219,8 @@ def oku(yol: Path) -> list[dict]:
             return []
         basliklar = [str(b or "").strip() for b in satirlar[0]]
         return [{b: ("" if h is None else str(h).strip())
-                 for b, h in zip(basliklar, s)} for s in satirlar[1:]]
-    return _html_tablo(ham.decode("utf-8", errors="replace"))
+                 for b, h in zip(basliklar, s)} for s in satirlar[1:]], {}
+    return _html_tablo(ham.decode("utf-8", errors="replace")), {}
 
 
 def _parti(etiket: str) -> str | None:
@@ -127,7 +251,8 @@ def _bul(db, model, ad: str | None):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("dosya", type=Path, help="Snipe-IT dışa aktarım dosyası")
+    ap.add_argument("dosya", type=Path,
+                    help="Snipe-IT dışa aktarımı (.xls/.xlsx) ya da dökümü (.sql)")
     ap.add_argument("--uygula", action="store_true",
                     help="boş alanları doldur (varsayılan: yalnızca rapor)")
     ap.add_argument("--marka-tahmini", action="store_true",
@@ -140,7 +265,8 @@ def main() -> int:
         print(f"{K}Dosya bulunamadı: {args.dosya}{N}")
         return 1
 
-    satirlar = [s for s in oku(args.dosya) if (s.get(ETIKET) or "").strip()]
+    ham_satirlar, ekler = oku(args.dosya)
+    satirlar = [s for s in ham_satirlar if (s.get(ETIKET) or "").strip()]
     if not satirlar:
         print(f"{K}Dosyada satır okunamadı (beklenen sütun: '{ETIKET}'){N}")
         return 1
@@ -175,6 +301,21 @@ def main() -> int:
             print(f"      - {a.asset_tag}")
         if len(sistemde_fazla) > 10:
             print(f"      … ve {len(sistemde_fazla) - 10} cihaz daha")
+
+        if ekler:
+            print(f"\n{M}Diğer kayıt türleri (döküm ↔ sistem){N}")
+            bizde = {
+                "Personel": models.User, "Lokasyon": models.Location,
+                "Kategori": models.Category, "Üretici": models.Manufacturer,
+                "Aksesuar": models.Accessory, "Sarf malzeme": models.Consumable,
+                "Bileşen": models.Component, "Lisans": models.License,
+            }
+            for ad, adet in ekler.items():
+                tablo_modeli = bizde.get(ad)
+                sayi = len(db.scalars(select(tablo_modeli)).all()) \
+                    if tablo_modeli is not None else 0
+                isaret = f"{Y}✓{N}" if sayi >= adet else f"{S}!{N}"
+                print(f"  {isaret} {ad:<14} döküm {adet:>4}  ·  sistem {sayi:>4}")
 
         # ---- Marka tahmini için parti haritası ---------------------------- #
         parti_markalar: dict[str, list[str]] = {}

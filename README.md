@@ -402,8 +402,14 @@ markasını kullanır. Varsayılan olarak en az **2 hemfikir kardeş** aranır �
 gerçek veri üzerinde çapraz doğrulamada 34 denemede %100 isabet; `--en-az 1`
 kapsamı büyütür ama isabet %96.6'ya iner.
 
-Dosya, Snipe-IT'in ürettiği HTML görünümlü `.xls` de olabilir, gerçek `.xlsx`
-de — ikisi de okunur.
+Dosya üç biçimde olabilir: Snipe-IT'in ürettiği HTML görünümlü `.xls`, gerçek
+`.xlsx` ya da tam veritabanı dökümü `.sql` (mysqldump). Döküm en zengini —
+cihazların yanı sıra aksesuar/sarf/bileşen/lisans/personel sayılarını da
+karşılaştırır ve kurulum bir tablo öneki (`stop_` gibi) kullanıyorsa onu
+kendiliğinden bulur.
+
+> Döküm dosyası **parola özetleri ve oturum anahtarları** içerir; işi bitince
+> sunucudan silin, git deposuna koymayın.
 
 ### Transferler
 
@@ -817,6 +823,6 @@ scripts/
   ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
   ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
   marka-kontrol.py   # Markası boş modelleri bul/doldur
-  snipeit-karsilastir.py # Snipe-IT dışa aktarımıyla karşılaştır, boşları doldur
+  snipeit-karsilastir.py # Snipe-IT dışa aktarımı/dökümüyle karşılaştır, boşları doldur
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```
