@@ -45,7 +45,8 @@
       .dalgalar svg { animation:none !important; }
     }
 
-    .marka { display:flex; align-items:center; gap:14px; }
+    .marka { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    .marka .logo[hidden] { display:none; }
     .marka .logo {
       width:52px; height:52px; border-radius:14px; display:grid; place-items:center;
       background:rgba(196,214,0,.16); font-size:26px; overflow:hidden;
@@ -67,7 +68,7 @@
 
     /* Giriş formu */
     .alan { flex:1; display:grid; place-items:center; padding:40px 24px; }
-    .kutu { width:100%; max-width:400px; }
+    .kutu { width:100%; max-width:340px; }
     .kutu h2 { margin:0 0 6px; font-size:23px; }
     .kutu .alt { margin:0 0 26px; color:var(--soluk); font-size:14px; }
     label { display:block; font-size:13px; color:var(--soluk); margin:0 0 6px;
@@ -134,6 +135,7 @@
     </div>
     <div class="marka">
       <div class="logo" id="markaLogo">📦</div>
+      <div class="logo" id="markaLogo2" hidden></div>
       <div>
         <b>Envanter</b>
         <span>Takip Sistemi</span>
@@ -193,17 +195,20 @@
     // Kurum logosu: app/static/logo.png varsa onu kullan, yoksa emoji kalır.
     // Böylece logoyu eklemek için kod değiştirmek gerekmez.
     (function logoDene() {
-      const kutu = document.getElementById('markaLogo');
-      fetch((BASE || '') + '/logo')
+      const yukle = (uc, kutuId) => fetch((BASE || '') + uc)
         .then(r => r.status === 200 ? r.blob() : null).then(b => {
           if (!b) return;
+          const kutu = document.getElementById(kutuId);
           const img = new Image();
           img.alt = 'Logo';
           img.src = URL.createObjectURL(b);
           kutu.textContent = '';
           kutu.classList.add('genis');
+          kutu.hidden = false;
           kutu.appendChild(img);
         }).catch(() => {});
+      yukle('/logo', 'markaLogo');        // Holding
+      yukle('/logo2', 'markaLogo2');      // Taahhüt (varsa)
     })();
 
     const hataKutu = document.getElementById('hata');

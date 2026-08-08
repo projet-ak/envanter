@@ -139,6 +139,18 @@ def logo():
     return Response(status_code=204)
 
 
+@app.get("/logo2", include_in_schema=False)
+def logo2():
+    """İkinci kurum logosu (Taahhüt) — giriş ekranındaki ikinci rozet.
+
+    scripts/logo-kur.py üretir; dosya yoksa 204 döner ve rozet hiç görünmez.
+    """
+    yol = STATIC_DIR / "logo2.png"
+    if yol.exists():
+        return FileResponse(yol, media_type="image/png")
+    return Response(status_code=204)
+
+
 @app.get("/health", tags=["Sistem"])
 def health():
     return {"status": "ok", "surum": __version__}

@@ -19,3 +19,5 @@ yedekler/
 
 # Kurum logosu kuruluma özeldir; git pull'da çakışma çıkarmasın
 app/static/logo.*
+# Kaynak logo dosyaları (scripts/logo-kur.py girdisi) — kuruluma özel
+app/logo/
