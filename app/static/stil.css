@@ -42,7 +42,11 @@ main#view { padding:22px 26px 60px; }
   flex:0 0 246px; display:flex; flex-direction:column; color:var(--yan-metin);
   background:linear-gradient(165deg, var(--yan) 0%, var(--yan2) 100%);
   position:sticky; top:0; height:100vh;
+  transition:margin-left .22s ease;
 }
+/* Masaüstünde hamburger ile daraltma: menü sola kayar, çalışma alanı
+   (#icerik flex:1) kalan genişliği kendiliğinden doldurur */
+#kabuk.daralt #yanmenu { margin-left:-246px; }
 .yan-bas { display:flex; align-items:center; gap:12px; padding:18px 20px;
            border-bottom:1px solid rgba(255,255,255,.08); }
 .yan-bas .logo { width:38px; height:38px; border-radius:10px; font-size:19px;
@@ -344,7 +348,8 @@ tr.tikla:hover { background:var(--cizgi2); }
   .modal td, .modal th { padding:8px 6px; }
   .gorsel-serit img { width:120px; height:88px; }
 }
-#menuDug { display:none; }
+/* Hamburger her boyutta görünür: masaüstünde daraltır, mobilde çekmece açar */
+#menuDug { display:inline-flex; }
 
 /* Tıklanabilir istatistik kartı (kontrol paneli) */
 .stat.tikla-kart { cursor:pointer; transition:border-color .15s, transform .15s; }

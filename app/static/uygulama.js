@@ -207,7 +207,19 @@ function menuKur() {
 }
 
 function menuAcKapa() {
-  document.getElementById('yanmenu').classList.toggle('acik');
+  if (window.innerWidth <= 900) {
+    // Mobil: çekmece aç/kapa (üstte süzülür)
+    document.getElementById('yanmenu').classList.toggle('acik');
+    return;
+  }
+  // Masaüstü: menüyü daralt, çalışma alanı genişlesin; tercih hatırlanır
+  const kapali = document.getElementById('kabuk').classList.toggle('daralt');
+  localStorage.setItem('menuKapali', kapali ? '1' : '');
+}
+
+// Son tercih: menü kapalı bırakıldıysa kapalı açılsın (yalnızca masaüstü)
+if (localStorage.getItem('menuKapali') && window.innerWidth > 900) {
+  document.getElementById('kabuk').classList.add('daralt');
 }
 
 function selectTab(tab) {
