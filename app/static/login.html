@@ -6,10 +6,11 @@
   <title>Giriş — Envanter Takip Sistemi</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>" />
   <style>
+    /* ERN Holding kurumsal renkleri: derin yeşil (#003D35) + limon vurgu */
     :root {
-      --koyu:#0d4d3f; --koyu2:#0a3a30; --yesil:#12a37d; --acik:#2dd4a7;
-      --zemin:#eef2f1; --kart:#ffffff; --cizgi:#dfe6e3;
-      --metin:#16241f; --soluk:#6b7d76; --hata:#dc2626;
+      --koyu:#003d35; --koyu2:#00251f; --yesil:#00705f; --acik:#c4d600;
+      --zemin:#f1f5f3; --kart:#ffffff; --cizgi:#dde5e2;
+      --metin:#12211d; --soluk:#657872; --hata:#dc2626;
     }
     * { box-sizing:border-box; }
     body {
@@ -35,7 +36,7 @@
                 z-index:1; pointer-events:none; }
     .dalgalar svg { position:absolute; bottom:0; left:0; width:200%; height:100%; }
     .dalgalar .d1 { fill:rgba(255,255,255,.07); animation:kay 22s linear infinite; }
-    .dalgalar .d2 { fill:rgba(45,212,167,.13); animation:kay 15s linear infinite;
+    .dalgalar .d2 { fill:rgba(196,214,0,.15); animation:kay 15s linear infinite;
                     animation-direction:reverse; }
     .dalgalar .d3 { fill:rgba(255,255,255,.05); animation:kay 30s linear infinite; }
     @keyframes kay { from { transform:translateX(0); }
@@ -47,7 +48,8 @@
     .marka { display:flex; align-items:center; gap:14px; }
     .marka .logo {
       width:52px; height:52px; border-radius:14px; display:grid; place-items:center;
-      background:rgba(255,255,255,.12); font-size:26px; overflow:hidden;
+      background:rgba(196,214,0,.16); font-size:26px; overflow:hidden;
+      box-shadow:0 0 0 1px rgba(196,214,0,.25);
     }
     .marka .logo img { width:100%; height:100%; object-fit:contain; padding:6px; }
     .marka b { display:block; font-size:19px; letter-spacing:.02em; }
@@ -75,13 +77,13 @@
       color:var(--metin); font-family:inherit;
     }
     input:focus { outline:none; border-color:var(--yesil);
-                  box-shadow:0 0 0 3px rgba(18,163,125,.15); }
+                  box-shadow:0 0 0 3px rgba(0,112,95,.15); }
     button {
       width:100%; padding:12px; font-size:15px; font-weight:600; cursor:pointer;
       border:none; border-radius:10px; background:var(--koyu); color:#fff;
       font-family:inherit;
     }
-    button:hover { background:var(--yesil); }
+    button:hover { background:var(--acik); color:#00332c; }
     button:disabled { opacity:.6; cursor:progress; }
     .hata {
       display:none; margin-bottom:16px; padding:11px 13px; border-radius:10px;

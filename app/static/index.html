@@ -9,20 +9,26 @@
     /* ---------------------------------------------------------------------
        Renk değişkenleri. Koyu tema <html data-tema="koyu"> ile açılır.
        --------------------------------------------------------------------- */
+    /* ERN Holding kurumsal kimliği: derin yeşil zemin (#003D35) + limon
+       yeşili vurgu. Limon, beyaz üzerinde okunmaz — bu yüzden yazı rengi
+       olarak değil yalnızca GRAFİK vurgu (aktif menü çizgisi, kart kenarı,
+       çubuk) olarak kullanılır; düğme ve bağlantı yazısı derin yeşildir. */
     :root {
-      --yan:#0d4d3f; --yan2:#0a3a30; --yan-metin:#d7ece5; --yan-soluk:#8fb5a9;
-      --yesil:#0f766e; --acc:#12a37d; --acc-acik:#2dd4a7;
-      --zemin:#f1f5f4; --kart:#ffffff; --cizgi:#e2e8e6; --cizgi2:#eef2f1;
-      --metin:#16241f; --mut:#6b7d76;
-      --ok:#059669; --warn:#d97706; --err:#dc2626; --bilgi:#2563eb;
-      --golge:0 1px 2px rgba(16,40,32,.05), 0 1px 3px rgba(16,40,32,.06);
+      --yan:#003d35; --yan2:#00251f; --yan-metin:#d9ece6; --yan-soluk:#8bb3a7;
+      --yesil:#00584c; --acc:#00705f; --acc-acik:#c4d600;
+      --lime:#c4d600; --lime-koyu:#a3b300;
+      --zemin:#f1f5f3; --kart:#ffffff; --cizgi:#e0e7e4; --cizgi2:#eef2f0;
+      --metin:#12211d; --mut:#657872;
+      --ok:#047857; --warn:#d97706; --err:#dc2626; --bilgi:#2563eb;
+      --golge:0 1px 2px rgba(0,40,32,.05), 0 1px 3px rgba(0,40,32,.06);
       --yuvarlak:12px;
     }
     html[data-tema="koyu"] {
-      --yan:#0b1a17; --yan2:#08120f; --yan-metin:#cfe6df; --yan-soluk:#7d9b92;
-      --zemin:#0f1714; --kart:#16211d; --cizgi:#25332e; --cizgi2:#1d2823;
-      --metin:#e4efeb; --mut:#93a8a1;
-      --golge:0 1px 3px rgba(0,0,0,.4);
+      --yan:#00201c; --yan2:#001512; --yan-metin:#cfe6de; --yan-soluk:#7c9d94;
+      --acc:#3fa38c; --acc-acik:#c4d600;
+      --zemin:#0a1512; --kart:#12201c; --cizgi:#20322c; --cizgi2:#182722;
+      --metin:#e3efeb; --mut:#8fa8a1;
+      --golge:0 1px 3px rgba(0,0,0,.45);
     }
 
     * { box-sizing:border-box; }
@@ -77,7 +83,7 @@
     .yan-alt .cik:hover { color:#fff; }
     .avatar { width:34px; height:34px; border-radius:50%; flex:none;
               display:grid; place-items:center; font-size:12.5px; font-weight:700;
-              background:var(--acc); color:#04211a; letter-spacing:.02em; }
+              background:var(--lime); color:#00332c; letter-spacing:.02em; }
 
     /* ---------------- Üst bar ---------------- */
     #ustbar { display:flex; align-items:center; gap:14px; padding:10px 22px;
@@ -149,7 +155,7 @@
     .stats { display:grid; gap:14px; margin-bottom:14px;
              grid-template-columns:repeat(auto-fit,minmax(205px,1fr)); }
     .stat { background:var(--kart); border:1px solid var(--cizgi);
-            border-left:4px solid var(--acc); border-radius:var(--yuvarlak);
+            border-left:4px solid var(--lime); border-radius:var(--yuvarlak);
             padding:16px 18px; display:flex; align-items:center; gap:14px;
             box-shadow:var(--golge); }
     .stat .kutu { width:42px; height:42px; border-radius:11px; flex:none;
@@ -185,7 +191,7 @@
       border:1px solid var(--cizgi); background:var(--kart); color:var(--metin);
     }
     input:focus, select:focus, textarea:focus {
-      outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(18,163,125,.13); }
+      outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(0,112,95,.14); }
     input::placeholder { color:var(--mut); }
     button { font:inherit; font-size:14px; cursor:pointer; border-radius:9px;
              padding:9px 15px; border:1px solid var(--cizgi);
@@ -235,7 +241,8 @@
                white-space:nowrap; }
     .bar-track { flex:1; height:8px; background:var(--cizgi2); border-radius:99px;
                  overflow:hidden; }
-    .bar-fill { display:block; height:100%; background:var(--acc); border-radius:99px; }
+    .bar-fill { display:block; height:100%; border-radius:99px;
+                background:linear-gradient(90deg, var(--yesil), var(--lime)); }
     .bar-num { flex:0 0 44px; text-align:right; color:var(--mut);
                font-variant-numeric:tabular-nums; }
 

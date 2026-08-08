@@ -67,6 +67,19 @@ Sayfanın kendisi hiçbir genişlikte yana kaymaz; kayan yalnızca tablodur.
 Telefonda gizlenen sütunlar (`gizle-mobil`): varlıklarda demirbaş/tür/seri,
 personelde sicil/şube/e-posta, kişi kartında tip/seri.
 
+### Kurumsal renkler
+
+Palet ERN Holding kimliğinden gelir: derin yeşil **`#003D35`** zemin ve
+**limon yeşili `#C4D600`** vurgu. Limon beyaz üzerinde okunmaz; bu yüzden
+yazı rengi olarak değil yalnızca **grafik vurgu** olarak kullanılır — aktif
+menü çizgisi, istatistik kartı kenarı, çubuk grafik ucu, avatar zemini.
+Düğme ve bağlantı yazıları derin yeşildir.
+
+Bütün renkler `app/static/index.html` içindeki `:root` (açık tema) ve
+`html[data-tema="koyu"]` (koyu tema) bloklarında toplanmıştır; değiştirmek
+için tek yer yeterlidir. Giriş sayfasının kendi paleti
+`app/static/login.html` başındadır.
+
 ### Logo
 
 `app/static/logo.png` dosyası varsa giriş sayfasında ve sol menüde emoji
