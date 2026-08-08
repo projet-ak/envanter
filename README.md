@@ -383,6 +383,28 @@ Excel'i yeniden içe aktarmak da düzeltir: içe aktarım mevcut modeldeki **bo�
 marka/kategoriyi doldurur (dolu değeri ezmez — aynı model adı başka markada da
 kullanılabilir).
 
+### Snipe-IT dışa aktarımıyla karşılaştırma
+
+Snipe-IT'in Export düğmesiyle aldığınız dosyayı mevcut veriyle karşılaştırıp
+**yalnızca boş alanları** doldurur; dolu bir değeri asla ezmez, çakışanları
+listeler. Lokasyon/durum/zimmet hiç yazılmaz (bunlar sistemde günlük değişir,
+eski dosyadan yazmak yeni değişiklikleri geri alır) — yalnızca farklıysa
+rapora düşer.
+
+```bash
+./.venv/bin/python scripts/snipeit-karsilastir.py disaaktarim.xls
+./.venv/bin/python scripts/snipeit-karsilastir.py disaaktarim.xls --uygula
+```
+
+Snipe-IT'te de boş olan markalar için `--marka-tahmini`: aynı alım
+partisindeki (etiket önekindeki, örn. `FRM-0002-34543-…`) kardeş cihazların
+markasını kullanır. Varsayılan olarak en az **2 hemfikir kardeş** aranır —
+gerçek veri üzerinde çapraz doğrulamada 34 denemede %100 isabet; `--en-az 1`
+kapsamı büyütür ama isabet %96.6'ya iner.
+
+Dosya, Snipe-IT'in ürettiği HTML görünümlü `.xls` de olabilir, gerçek `.xlsx`
+de — ikisi de okunur.
+
 ### Transferler
 
 **🔄 Transferler** düğmesi lokasyonu değişen cihazları gösterir — hangi
@@ -795,5 +817,6 @@ scripts/
   ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
   ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
   marka-kontrol.py   # Markası boş modelleri bul/doldur
+  snipeit-karsilastir.py # Snipe-IT dışa aktarımıyla karşılaştır, boşları doldur
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```
