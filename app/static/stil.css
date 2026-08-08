@@ -349,3 +349,7 @@ tr.tikla:hover { background:var(--cizgi2); }
 /* Tıklanabilir istatistik kartı (kontrol paneli) */
 .stat.tikla-kart { cursor:pointer; transition:border-color .15s, transform .15s; }
 .stat.tikla-kart:hover { border-color:var(--acc); transform:translateY(-1px); }
+
+/* Kurum logosu yüklendiğinde kutu yatay orana göre genişler (ERN logosu
+   enine bir logo; 38px karede okunmaz). Emoji durumunda kare kalır. */
+.yan-bas .logo.genis { width:118px; }

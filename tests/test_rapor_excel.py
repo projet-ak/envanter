@@ -119,3 +119,18 @@ def test_son_islemler(client, sahne):
     assert {"hedef", "eylem", "tarih"} <= set(r[0])
     eylemler = {x["eylem"] for x in r}
     assert "zimmetlendi" in eylemler or "eklendi" in eylemler
+
+
+def test_logo_varsa_rapora_gomulur(client, sahne, monkeypatch, tmp_path):
+    """logo-rapor.png konduğunda başlık sağa kayar ve görsel gömülür."""
+    from PIL import Image as PILImage
+
+    from app import rapor
+
+    yol = tmp_path / "logo-rapor.png"
+    PILImage.new("RGBA", (200, 140), (0, 61, 53, 255)).save(yol)
+    monkeypatch.setattr(rapor, "LOGO_YOLU", yol)
+
+    ws = _kitap(client, "cihazlar")["Cihazlar"]
+    assert ws["C1"].value and "Cihaz Listesi" in ws["C1"].value
+    assert len(ws._images) == 1, "logo çalışma kitabına gömülmemiş"

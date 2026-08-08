@@ -165,6 +165,7 @@ function sayacBaslat() {
     img.alt = 'Logo';
     img.src = URL.createObjectURL(b);
     kutu.textContent = '';
+    kutu.classList.add('genis');       // yatay logo dar karede ezilmesin
     kutu.appendChild(img);
   }).catch(() => {});
 })();

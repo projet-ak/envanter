@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import datetime as dt
 from io import BytesIO
+from pathlib import Path
 
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from sqlalchemy import select
@@ -37,6 +39,10 @@ _BASLIK_DOLGU = PatternFill("solid", start_color=KOYU)
 _ZEBRA_DOLGU = PatternFill("solid", start_color=ZEBRA)
 _INCE = Side(style="thin", color=CIZGI)
 _KENAR = Border(left=_INCE, right=_INCE, top=_INCE, bottom=_INCE)
+
+# Rapor başlığına gömülecek kurum logosu (yeşil versiyon, beyaz zemine göre).
+# Dosya yoksa raporlar logosuz ama aynı düzende üretilir.
+LOGO_YOLU = Path(__file__).parent / "static" / "logo-rapor.png"
 
 TARIH_BICIMI = "DD.MM.YYYY"
 PARA_BICIMI = '#,##0.00 "₺"'
@@ -59,13 +65,20 @@ def _sayfa(wb: Workbook, ad: str, baslik: str, sutunlar: list[str],
     ws.sheet_properties.tabColor = KOYU
 
     son_sutun = get_column_letter(len(sutunlar))
-    ws.merge_cells(f"A1:{son_sutun}1")
-    ust = ws["A1"]
+    logolu = LOGO_YOLU.exists()
+    ilk = "C" if logolu else "A"          # logo A1-B1 alanına oturur
+    ws.merge_cells(f"{ilk}1:{son_sutun}1")
+    ust = ws[f"{ilk}1"]
     ust.value = (f"{settings.org_name} — {baslik} — "
                  f"{dt.date.today():%d.%m.%Y}")
     ust.font = Font(bold=True, size=13, color=KOYU)
     ust.alignment = Alignment(vertical="center")
-    ws.row_dimensions[1].height = 26
+    ws.row_dimensions[1].height = 34 if logolu else 26
+    if logolu:
+        img = XLImage(str(LOGO_YOLU))
+        oran = 40 / img.height             # ~40px yükseklik, oran korunur
+        img.height, img.width = 40, int(img.width * oran)
+        ws.add_image(img, "A1")
 
     for i, etiket in enumerate(sutunlar, start=1):
         h = ws.cell(row=2, column=i, value=etiket)
