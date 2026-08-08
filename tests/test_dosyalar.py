@@ -246,3 +246,96 @@ def test_ayni_ay_icinde_cakisma_olmaz(client, cihaz):
     yollar = {_yukle(client, cihaz["id"], "ayni.png", PNG, "gorsel",
                      "image/png").json()["yol"] for _ in range(5)}
     assert len(yollar) == 5
+
+
+# --------------------------------------------------------------------------- #
+# Kişi ekleri — imzalı zimmet formu tek cihaza değil KİŞİYE aittir
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def kisi(client):
+    return client.post("/users", json={"first_name": "Tülin",
+                                       "last_name": "Akyazı"}).json()
+
+
+def test_kisiye_imzali_form_yuklenir(client, kisi):
+    r = client.post(f"/users/{kisi['id']}/dosyalar",
+                    files={"file": ("form.pdf", io.BytesIO(PDF), "application/pdf")},
+                    data={"tur": "zimmet_formu"})
+    assert r.status_code == 201, r.text
+    kayit = r.json()
+    assert kayit["user_id"] == kisi["id"]
+    assert kayit["tur"] == "zimmet_formu"
+    assert kayit["dosya_adi"] == "form.pdf"
+    # Diskte belgeler klasöründe, adı "k<kişi id>-" ile başlar
+    yollar = [str(y) for y in _diskteki_dosyalar()]
+    assert len(yollar) == 1 and "/belgeler/" in yollar[0]
+    assert f"/k{kisi['id']}-" in yollar[0]
+
+
+def test_kisi_dosyalari_listelenir_ve_indirilir(client, kisi):
+    client.post(f"/users/{kisi['id']}/dosyalar",
+                files={"file": ("zimmet.pdf", io.BytesIO(PDF), "application/pdf")},
+                data={"tur": "zimmet_formu"})
+    liste = client.get(f"/users/{kisi['id']}/dosyalar").json()
+    assert [f["dosya_adi"] for f in liste] == ["zimmet.pdf"]
+
+    r = client.get(f"/kisi-dosyalari/{liste[0]['id']}")
+    assert r.status_code == 200
+    assert r.content == PDF
+    assert "attachment" in r.headers["content-disposition"]
+
+
+def test_kisi_dosyasi_silinir(client, kisi):
+    dosya = client.post(
+        f"/users/{kisi['id']}/dosyalar",
+        files={"file": ("a.pdf", io.BytesIO(PDF), "application/pdf")}).json()
+    assert len(_diskteki_dosyalar()) == 1
+    assert client.delete(f"/kisi-dosyalari/{dosya['id']}").status_code == 204
+    assert client.get(f"/users/{kisi['id']}/dosyalar").json() == []
+    assert _diskteki_dosyalar() == []
+
+
+def test_kisi_silinince_dosyalari_da_gider(client, kisi):
+    client.post(f"/users/{kisi['id']}/dosyalar",
+                files={"file": ("a.pdf", io.BytesIO(PDF), "application/pdf")})
+    client.delete(f"/users/{kisi['id']}")
+    assert client.get(f"/users/{kisi['id']}/dosyalar").status_code == 404
+
+
+def test_olmayan_kisiye_yuklenemez(client):
+    r = client.post("/users/999999/dosyalar",
+                    files={"file": ("a.pdf", io.BytesIO(PDF), "application/pdf")})
+    assert r.status_code == 404
+
+
+def test_kisi_dosyasinda_tehlikeli_uzanti_reddedilir(client, kisi):
+    r = client.post(f"/users/{kisi['id']}/dosyalar",
+                    files={"file": ("kotu.sh", io.BytesIO(b"#!/bin/sh"),
+                                    "application/x-sh")})
+    assert r.status_code == 415
+    assert _diskteki_dosyalar() == []
+
+
+def test_kisi_dosyasi_viewer_yukleyemez(viewer_client, client, kisi):
+    r = viewer_client.post(f"/users/{kisi['id']}/dosyalar",
+                           files={"file": ("a.pdf", io.BytesIO(PDF),
+                                           "application/pdf")})
+    assert r.status_code == 403
+
+
+def test_cihaz_ve_kisi_ekleri_birbirine_karismaz(client, cihaz, kisi):
+    client.post(f"/assets/{cihaz['id']}/dosyalar",
+                files={"file": ("cihaz.pdf", io.BytesIO(PDF), "application/pdf")})
+    client.post(f"/users/{kisi['id']}/dosyalar",
+                files={"file": ("kisi.pdf", io.BytesIO(PDF), "application/pdf")})
+    assert [f["dosya_adi"] for f in
+            client.get(f"/assets/{cihaz['id']}/dosyalar").json()] == ["cihaz.pdf"]
+    assert [f["dosya_adi"] for f in
+            client.get(f"/users/{kisi['id']}/dosyalar").json()] == ["kisi.pdf"]
+    # Kimlikler ayrı dizilerden gelir: aynı numara iki tabloda da olabilir.
+    # Cihaz ucu kişi ekini, kişi ucu cihaz ekini ASLA vermemeli.
+    kisi_dosya = client.get(f"/users/{kisi['id']}/dosyalar").json()[0]
+    cihaz_dosya = client.get(f"/assets/{cihaz['id']}/dosyalar").json()[0]
+    ad = lambda r: r.headers["content-disposition"].rsplit("''", 1)[-1]
+    assert ad(client.get(f"/dosyalar/{cihaz_dosya['id']}")) == "cihaz.pdf"
+    assert ad(client.get(f"/kisi-dosyalari/{kisi_dosya['id']}")) == "kisi.pdf"

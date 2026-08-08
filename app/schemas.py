@@ -421,6 +421,21 @@ class ActivityLogRead(ORMModel):
 # --------------------------------------------------------------------------- #
 # Cihaz dosya ekleri (görsel, imzalı zimmet formu, fatura…)
 # --------------------------------------------------------------------------- #
+class UserFileRead(ORMModel):
+    """Kişiye bağlı dosya (imzalı zimmet formu, tutanak…)."""
+
+    id: int
+    user_id: int
+    tur: DosyaTuru
+    dosya_adi: str
+    yol: str
+    content_type: str | None = None
+    boyut: int
+    aciklama: str | None = None
+    yukleyen: str | None = None
+    created_at: dt.datetime
+
+
 class AssetFileRead(ORMModel):
     id: int
     asset_id: int

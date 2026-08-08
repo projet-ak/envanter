@@ -205,6 +205,9 @@ class User(Base, TimestampMixin, ExternalMixin):
 
     location: Mapped[Location | None] = relationship()
     manager: Mapped[User | None] = relationship(remote_side="User.id")
+    dosyalar: Mapped[list["UserFile"]] = relationship(
+        back_populates="kisi", cascade="all, delete-orphan"
+    )
 
     @property
     def full_name(self) -> str:
@@ -407,3 +410,33 @@ class AssetFile(Base):
     )
 
     asset: Mapped[Asset] = relationship(back_populates="dosyalar")
+
+
+class UserFile(Base):
+    """Kişiye bağlı dosya eki: imzalı zimmet formu, tutanak, kimlik fotokopisi…
+
+    Zimmet formu tek bir cihaza değil **kişiye** aittir: bir form o kişinin
+    birden çok cihazını listeler. Bu yüzden cihaz ekleri (`AssetFile`) ile aynı
+    düzende ama ayrı bir tabloda tutulur; klasör ve yol kuralları ortaktır.
+    """
+
+    __tablename__ = "user_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    tur: Mapped[DosyaTuru] = mapped_column(
+        Enum(DosyaTuru), default=DosyaTuru.zimmet_formu, index=True
+    )
+    dosya_adi: Mapped[str] = mapped_column(String(255))
+    yol: Mapped[str] = mapped_column(String(500), unique=True)
+    content_type: Mapped[str | None] = mapped_column(String(120))
+    boyut: Mapped[int] = mapped_column(Integer, default=0)
+    aciklama: Mapped[str | None] = mapped_column(String(500))
+    yukleyen: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    kisi: Mapped[User] = relationship(back_populates="dosyalar")

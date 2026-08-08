@@ -1,4 +1,10 @@
-"""Cihaz dosya ekleri: fotoğraf, imzalı zimmet formu, fatura…
+"""Dosya ekleri: cihaz fotoğrafı, imzalı zimmet formu, fatura…
+
+İki sahip türü vardır: **cihaz** (`asset_files`) ve **kişi** (`user_files`).
+Zimmet formu tek bir cihaza değil kişiye aittir — bir form o kişinin birden
+çok cihazını listeler — bu yüzden kişi ekleri ayrı tabloda durur ama aynı
+klasör/yol kurallarını kullanır.
+
 
 İçerik veritabanında değil diskte durur; veritabanında yalnızca **göreli yol**
 saklanır (`AssetFile.yol`). Klasörler türe ve tarihe göre ayrılır:
@@ -73,11 +79,38 @@ def _guvenli_ad(ad: str) -> str:
     return ad[:200] or "dosya"
 
 
-def yeni_yol(asset_id: int, tur: models.DosyaTuru, uzanti: str) -> str:
-    """Yeni dosya için göreli yol üretir: <klasör>/<yıl>/<ay>/<id>-<rastgele><uz>."""
+def yeni_yol(sahip_id: int, tur: models.DosyaTuru, uzanti: str,
+             on_ek: str = "") -> str:
+    """Yeni dosya için göreli yol üretir: <klasör>/<yıl>/<ay>/<id>-<rastgele><uz>.
+
+    `on_ek` kişi eklerinde "k" olur ("k12-…"): aynı klasörde cihaz ve kişi
+    dosyaları karışmasın, dosya adına bakınca hangisi olduğu anlaşılsın.
+    """
     bugun = dt.date.today()
     return (f"{KLASORLER.get(tur, 'belgeler')}/{bugun:%Y/%m}/"
-            f"{asset_id}-{secrets.token_hex(8)}{uzanti}")
+            f"{on_ek}{sahip_id}-{secrets.token_hex(8)}{uzanti}")
+
+
+def dogrula(ad: str, tur: models.DosyaTuru) -> str:
+    """Uzantıyı denetler, döndürdüğü değer küçük harfli uzantıdır."""
+    uzanti = _uzanti(ad)
+    if uzanti not in IZINLI_UZANTILAR:
+        raise HTTPException(
+            415, f"'{uzanti or 'uzantısız'}' dosya türü kabul edilmiyor. "
+                 f"İzinliler: {', '.join(sorted(IZINLI_UZANTILAR))}")
+    if tur == models.DosyaTuru.gorsel and uzanti not in GORSEL_UZANTILAR:
+        raise HTTPException(415, "Görsel için bir resim dosyası seçin")
+    return uzanti
+
+
+def boyut_denetle(icerik: bytes) -> None:
+    sinir = settings.max_upload_mb * 1024 * 1024
+    if len(icerik) > sinir:
+        raise HTTPException(
+            413, f"Dosya çok büyük ({len(icerik) // 1024 // 1024} MB). "
+                 f"Sınır: {settings.max_upload_mb} MB")
+    if not icerik:
+        raise HTTPException(400, "Dosya boş")
 
 
 def tam_yol(goreli: str) -> Path:
@@ -121,22 +154,9 @@ async def dosya_yukle(
         raise HTTPException(404, "Varlık bulunamadı")
 
     ad = _guvenli_ad(file.filename or "dosya")
-    uzanti = _uzanti(ad)
-    if uzanti not in IZINLI_UZANTILAR:
-        raise HTTPException(
-            415, f"'{uzanti or 'uzantısız'}' dosya türü kabul edilmiyor. "
-                 f"İzinliler: {', '.join(sorted(IZINLI_UZANTILAR))}")
-    if tur == models.DosyaTuru.gorsel and uzanti not in GORSEL_UZANTILAR:
-        raise HTTPException(415, "Cihaz görseli için bir resim dosyası seçin")
-
+    uzanti = dogrula(ad, tur)
     icerik = await file.read()
-    sinir = settings.max_upload_mb * 1024 * 1024
-    if len(icerik) > sinir:
-        raise HTTPException(
-            413, f"Dosya çok büyük ({len(icerik) // 1024 // 1024} MB). "
-                 f"Sınır: {settings.max_upload_mb} MB")
-    if not icerik:
-        raise HTTPException(400, "Dosya boş")
+    boyut_denetle(icerik)
 
     # Diskteki yol sunucu tarafından üretilir: çakışma ve yol geçişi olmaz.
     goreli = yeni_yol(asset_id, tur, uzanti)
@@ -162,6 +182,97 @@ async def dosya_yukle(
     db.commit()
     db.refresh(kayit)
     return kayit
+
+
+# --------------------------------------------------------------------------- #
+# Kişi ekleri — imzalı zimmet formu kişiye aittir, tek cihaza değil
+# --------------------------------------------------------------------------- #
+@router.get("/users/{user_id}/dosyalar",
+            response_model=list[schemas.UserFileRead], dependencies=READ)
+def kisi_dosyalari(user_id: int, db: Session = Depends(get_db)):
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(404, "Kişi bulunamadı")
+    return db.scalars(
+        select(models.UserFile)
+        .where(models.UserFile.user_id == user_id)
+        .order_by(models.UserFile.created_at.desc())
+    ).all()
+
+
+@router.post("/users/{user_id}/dosyalar", response_model=schemas.UserFileRead,
+             status_code=201, dependencies=WRITE)
+async def kisi_dosya_yukle(
+    user_id: int,
+    file: UploadFile = File(...),
+    tur: models.DosyaTuru = Form(models.DosyaTuru.zimmet_formu),
+    aciklama: str | None = Form(None),
+    db: Session = Depends(get_db),
+    yukleyen: models.User = Depends(get_current_user),
+):
+    """Kişiye dosya ekler (imzalı zimmet formu, tutanak…)."""
+    if db.get(models.User, user_id) is None:
+        raise HTTPException(404, "Kişi bulunamadı")
+
+    ad = _guvenli_ad(file.filename or "dosya")
+    uzanti = dogrula(ad, tur)
+    icerik = await file.read()
+    boyut_denetle(icerik)
+
+    goreli = yeni_yol(user_id, tur, uzanti, on_ek="k")
+    hedef = tam_yol(goreli)
+    hedef.parent.mkdir(parents=True, exist_ok=True)
+    hedef.write_bytes(icerik)
+
+    kayit = models.UserFile(
+        user_id=user_id,
+        tur=tur,
+        dosya_adi=ad,
+        yol=goreli,
+        content_type=file.content_type or mimetypes.guess_type(ad)[0],
+        boyut=len(icerik),
+        aciklama=aciklama,
+        yukleyen=yukleyen.username or yukleyen.full_name,
+    )
+    db.add(kayit)
+    db.add(models.ActivityLog(
+        action=models.ActivityAction.update, item_type="user", item_id=user_id,
+        note=f"Dosya eklendi: {ad}", actor=kayit.yukleyen,
+    ))
+    db.commit()
+    db.refresh(kayit)
+    return kayit
+
+
+@router.get("/kisi-dosyalari/{dosya_id}", dependencies=READ)
+def kisi_dosya_indir(dosya_id: int, db: Session = Depends(get_db)):
+    kayit = db.get(models.UserFile, dosya_id)
+    if kayit is None:
+        raise HTTPException(404, "Dosya bulunamadı")
+    yol = tam_yol(kayit.yol)
+    if not yol.exists():
+        raise HTTPException(404, "Dosya diskte bulunamadı")
+    icerde = _uzanti(kayit.dosya_adi) in GORSEL_UZANTILAR
+    return FileResponse(
+        yol,
+        media_type=kayit.content_type or "application/octet-stream",
+        headers={"Content-Disposition":
+                 f"{'inline' if icerde else 'attachment'}; "
+                 f"filename*=UTF-8''{quote(kayit.dosya_adi)}"},
+    )
+
+
+@router.delete("/kisi-dosyalari/{dosya_id}", status_code=204, dependencies=WRITE)
+def kisi_dosya_sil(dosya_id: int, db: Session = Depends(get_db)):
+    kayit = db.get(models.UserFile, dosya_id)
+    if kayit is None:
+        raise HTTPException(404, "Dosya bulunamadı")
+    tam_yol(kayit.yol).unlink(missing_ok=True)
+    db.add(models.ActivityLog(
+        action=models.ActivityAction.update, item_type="user",
+        item_id=kayit.user_id, note=f"Dosya silindi: {kayit.dosya_adi}",
+    ))
+    db.delete(kayit)
+    db.commit()
 
 
 @router.get("/dosyalar/{dosya_id}", dependencies=READ)

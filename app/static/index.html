@@ -1337,8 +1337,6 @@
       const dosyalar = d.dosyalar || [];
       const gorseller = dosyalar.filter(f => f.tur === 'gorsel');
       const belgeler = dosyalar.filter(f => f.tur !== 'gorsel');
-      const TUR_ADI = { gorsel: 'Görsel', zimmet_formu: 'İmzalı zimmet formu',
-                        fatura: 'Fatura', diger: 'Diğer' };
 
       // Görsel ucu Authorization başlığı ister; <img src> başlık gönderemez,
       // bu yüzden içerik blob olarak çekilip src sonradan atanır.
@@ -1649,6 +1647,10 @@
     }
 
     // ---------- Dosya yükleme (cihaz görseli / imzalı zimmet formu) ----------
+    // Dosya türü adları cihaz ve kişi ekranlarının ikisinde de kullanılır
+    const TUR_ADI = { gorsel: 'Görsel', zimmet_formu: 'İmzalı zimmet formu',
+                      fatura: 'Fatura', diger: 'Diğer' };
+
     function dosyaSec(assetId, tur) {
       const girdi = document.createElement('input');
       girdi.type = 'file';
@@ -1685,12 +1687,50 @@
       } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
     }
 
+    // Kişi ekleri: imzalı zimmet formu tek cihaza değil KİŞİYE aittir
+    function kisiDosyaSec(kisiId, tur) {
+      const girdi = document.createElement('input');
+      girdi.type = 'file';
+      if (tur === 'gorsel') girdi.accept = 'image/*';
+      girdi.onchange = () => girdi.files[0] &&
+        kisiDosyaYukle(kisiId, tur, girdi.files[0]);
+      girdi.click();
+    }
+
+    async function kisiDosyaYukle(kisiId, tur, dosya) {
+      const veri = new FormData();
+      veri.append('file', dosya);
+      veri.append('tur', tur);
+      try {
+        await api(`/users/${kisiId}/dosyalar`, { method: 'POST', body: veri });
+        kisiDetay(kisiId);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Dosya yüklenemedi')); }
+    }
+
+    async function kisiDosyaAc(dosyaId) {
+      try {
+        const r = await fetch(url('/kisi-dosyalari/' + dosyaId),
+                              { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!r.ok) throw await r.json().catch(() => ({ detail: 'Açılamadı' }));
+        pdfAc(await r.blob());
+      } catch (e) { alert('⚠ ' + (e.detail || e.message || 'Dosya açılamadı')); }
+    }
+
+    async function kisiDosyaSil(dosyaId, kisiId) {
+      if (!confirm('Dosya silinsin mi?')) return;
+      try {
+        await api('/kisi-dosyalari/' + dosyaId, { method: 'DELETE' });
+        kisiDetay(kisiId);
+      } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
+    }
+
     // ---------- Kişi detayı ----------
     async function kisiDetay(id) {
       let d;
       try { d = await api('/detay/user/' + id); }
       catch (e) { return alert('⚠ ' + (e.detail || 'Detay alınamadı')); }
       const k = d.kisi;
+      const kisiDosyalar = await api(`/users/${id}/dosyalar`).catch(() => []);
 
       const dagilim = Object.entries(d.tur_dagilimi || {})
         .map(([t, n]) => `<span class="pill">${t}: <b>${n}</b></span>`).join(' ');
@@ -1729,6 +1769,27 @@
                 encodeURIComponent(k.ad || '')}')">+ Zimmet ekle</button>` : ''}
           </div>
           ${tablo}
+        </div>
+        <div class="bolum">
+          <h4>Belgeler (${kisiDosyalar.length})</h4>
+          ${kisiDosyalar.length ? `<table><tbody>
+            ${kisiDosyalar.map(f => `<tr>
+              <td>${TUR_ADI[f.tur] || f.tur}</td>
+              <td><a href="#" onclick="kisiDosyaAc(${f.id});return false">${
+                kacir(f.dosya_adi)}</a></td>
+              <td class="muted">${(f.boyut / 1024).toFixed(0)} KB</td>
+              <td class="muted">${f.created_at
+                ? new Date(f.created_at).toLocaleDateString('tr-TR') : '—'}</td>
+              ${canWrite() ? `<td><button class="ghost mini" title="Sil"
+                 onclick="kisiDosyaSil(${f.id}, ${id})">🗑</button></td>` : ''}
+            </tr>`).join('')}</tbody></table>`
+            : '<div class="muted">Yüklenmiş belge yok</div>'}
+          ${canWrite() ? `<div class="row" style="margin-top:10px">
+            <button class="ghost" onclick="kisiDosyaSec(${id}, 'zimmet_formu')">
+              ✍️ İmzalı zimmet formu yükle</button>
+            <button class="ghost" onclick="kisiDosyaSec(${id}, 'diger')">
+              📎 Diğer belge</button>
+          </div>` : ''}
         </div>`,
         (d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
           onclick="openPdf('/documents/zimmet/user/${id}.pdf')">📄</button>` : '') +

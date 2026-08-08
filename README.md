@@ -383,6 +383,30 @@ Excel'i yeniden içe aktarmak da düzeltir: içe aktarım mevcut modeldeki **bo�
 marka/kategoriyi doldurur (dolu değeri ezmez — aynı model adı başka markada da
 kullanılabilir).
 
+### Snipe-IT görsellerini ve belgelerini aktarma
+
+Snipe-IT dosyaları veritabanında tutmaz: adları kayıtlarda, içerikleri diskte
+durur. Bu yüzden iki şey gerekir — **döküm** (hangi dosya kime ait) ve
+**Snipe-IT klasörü** (dosyaların kendisi):
+
+```bash
+./.venv/bin/python scripts/snipeit-dosya-aktar.py dokum.sql /path/snipe-it
+./.venv/bin/python scripts/snipeit-dosya-aktar.py dokum.sql /path/snipe-it --uygula
+```
+
+| Snipe-IT'te | Nereye gider |
+|---|---|
+| `assets.image` | cihaz eki (görsel) |
+| `action_logs` → Asset | cihaz eki (belge) |
+| `action_logs` → User | **kişi eki** (imzalı zimmet formu) |
+| `models.image` | `--model-gorselleri` ile o modelin cihazlarına |
+| aksesuar/bileşen ekleri | aktarılmaz, raporlanır |
+
+Dosya adları klasörün altında **ada göre** aranır, bu yüzden Snipe-IT sürümü
+klasörleri nereye koymuş olursa olsun bulunur. Tekrar çalıştırılabilir: aynı
+dosya ikinci kez eklenmez. Ad önekindeki `user-3-0mQ0RyRs-` gibi gürültü
+temizlenir, asıl ad korunur.
+
 ### Snipe-IT dışa aktarımıyla karşılaştırma
 
 Snipe-IT'in Export düğmesiyle aldığınız dosyayı mevcut veriyle karşılaştırıp
@@ -524,10 +548,12 @@ curl -X DELETE -H "Authorization: Bearer $T" \
   "$API/assets/12/ozellik?grup=Bellek&ad=Ram%20Kapasitesi%20(mB)"
 ```
 
-## Cihaz görseli ve imzalı form yükleme
+## Görsel ve belge yükleme (cihaz ve kişi)
 
-Her cihaza fotoğraf, **imzalı/taranmış zimmet formu**, fatura ve diğer belgeler
-eklenebilir. Dosyalar veritabanında değil diskte (`UPLOAD_DIR`, varsayılan
+Her **cihaza** fotoğraf, imzalı zimmet formu, fatura ve diğer belgeler
+eklenebilir. Ayrıca her **kişiye** de belge eklenebilir: imzalı zimmet formu
+tek bir cihaza değil kişiye aittir — bir form o kişinin birden çok cihazını
+listeler. Personel kartındaki **Belgeler** bölümü bunun içindir. Dosyalar veritabanında değil diskte (`UPLOAD_DIR`, varsayılan
 `yuklemeler/`) tutulur; veritabanında **yalnızca göreli yol** saklanır.
 
 Klasörler türe ve aya göre ayrılır:
@@ -544,9 +570,17 @@ yuklemeler/
 > değişince kayıtlar geçersiz olmasın diye.
 
 ```bash
+# cihaza
 curl -H "Authorization: Bearer $T" -F "file=@imzali.pdf" -F "tur=zimmet_formu" \
   "$API/assets/12/dosyalar"
+# kişiye
+curl -H "Authorization: Bearer $T" -F "file=@imzali.pdf" -F "tur=zimmet_formu" \
+  "$API/users/42/dosyalar"
 ```
+
+Kişi ekleri ayrı tabloda (`user_files`) ama aynı klasörlerde durur; dosya adı
+`k` ile başlar (`belgeler/2026/08/k42-…pdf`) — böylece diskte hangisinin kime
+ait olduğu bellidir. İndirme/silme uçları `\/kisi-dosyalari\/{id}`.
 
 | Tür | Anlamı |
 |---|---|
@@ -824,5 +858,6 @@ scripts/
   ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
   marka-kontrol.py   # Markası boş modelleri bul/doldur
   snipeit-karsilastir.py # Snipe-IT dışa aktarımı/dökümüyle karşılaştır, boşları doldur
+  snipeit-dosya-aktar.py # Snipe-IT görsel ve belgelerini aktar
 tests/               # pytest (API + içe aktarım + kimlik doğrulama)
 ```
