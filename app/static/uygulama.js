@@ -282,12 +282,14 @@ async function renderPersonelView() {
           + Personel ekle</button>` : ''}
       </div>
       <div class="row" style="margin-top:12px">
-        <input id="pAra" class="grow" placeholder="Ada, sicile veya departmana göre ara…"
+        <input id="pAra" class="grow"
+               placeholder="Ada, sicile, unvana veya lokasyona göre ara…"
                oninput="loadPersonel()" />
       </div>
       <table style="margin-top:8px"><thead><tr><th>Ad Soyad</th>
-        <th class="gizle-mobil">Sicil</th><th>Departman</th>
-        <th class="gizle-mobil">Şube</th><th class="gizle-mobil">E-posta</th>
+        <th class="gizle-mobil">Sicil</th><th>Unvan</th>
+        <th class="gizle-mobil">Lokasyon</th><th class="gizle-mobil">E-posta</th>
+        <th class="gizle-mobil">Telefon</th>
         <th>Zimmet</th><th></th></tr></thead>
         <tbody id="pRows"></tbody></table>
     </div>`;
@@ -431,12 +433,15 @@ async function zimmetGeriAl(assetId, kisiId) {
 
 async function loadPersonel() {
   const q = (document.getElementById('pAra')?.value || '').trim().toLocaleLowerCase('tr');
-  const [kisiler, zimmetler] = await Promise.all([
+  const [kisiler, zimmetler, lokasyonlar] = await Promise.all([
     api('/users?limit=500'), api('/reports/personel-zimmet'),
+    api('/locations?limit=500'),
   ]);
   const sayac = Object.fromEntries(zimmetler.map(z => [z.user_id, z.cihaz_sayisi]));
+  const lokAd = Object.fromEntries(lokasyonlar.map(l => [l.id, l.name]));
   const liste = kisiler.filter(k => !q ||
-    [k.first_name, k.last_name, k.employee_num, k.department, k.sube, k.email]
+    [k.first_name, k.last_name, k.employee_num, k.job_title,
+     lokAd[k.location_id], k.department, k.sube, k.email, k.telefon]
       .filter(Boolean).join(' ').toLocaleLowerCase('tr').includes(q));
   document.getElementById('pCount').textContent = liste.length;
   document.getElementById('pRows').innerHTML = liste.map(k => {
@@ -452,9 +457,10 @@ async function loadPersonel() {
     return `<tr class="tikla" onclick="if(!event.target.closest('button'))kisiDetay(${k.id})">
       <td><b>${kacir(tamAd)}</b></td>
       <td class="muted gizle-mobil">${esc(k.employee_num)}</td>
-      <td>${esc(k.department)}</td>
-      <td class="muted gizle-mobil">${esc(k.sube)}</td>
+      <td>${esc(k.job_title)}</td>
+      <td class="muted gizle-mobil">${esc(lokAd[k.location_id])}</td>
       <td class="muted gizle-mobil">${esc(k.email)}</td>
+      <td class="muted gizle-mobil">${esc(k.telefon)}</td>
       <td>${adet ? `<span class="tag used">${adet} cihaz</span>`
                  : '<span class="muted">—</span>'}</td>
       <td>${zimmetle}${fis}</td></tr>`;
