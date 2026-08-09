@@ -1960,6 +1960,7 @@ function _varlikAlan(a, alan) {
     return (mdl ? refKategori[mdl.category_id] : '') || '';
   }
   if (alan === 'lokasyon') return refLokasyon[a.location_id] || '';
+  if (alan === 'durum') return statusMap[a.status_id] || '';
   if (alan === 'zimmet') return a.assigned_type ? 1 : 0;
   return a[alan] ?? '';
 }
@@ -2039,6 +2040,8 @@ function varlikTabloCiz() {
       <td>${esc(a.name)}</td><td class="gizle-mobil">${esc(tur)}</td>
       <td class="muted">${esc(refLokasyon[a.location_id])}</td>
       <td class="muted gizle-mobil">${esc(a.serial)}</td>
+      <td>${statusMap[a.status_id]
+        ? `<span class="tag">${kacir(statusMap[a.status_id])}</span>` : '—'}</td>
       <td>${a.assigned_type
         ? '<span class="tag used">zimmetli</span>'
         : '<span class="tag free">boşta</span>'}</td>
@@ -2067,10 +2070,11 @@ function varlikTabloCiz() {
       ${th('tur', 'Tür', 'gizle-mobil')}
       ${th('lokasyon', 'Lokasyon')}
       ${th('serial', 'Seri', 'gizle-mobil')}
+      ${th('durum', 'Durum')}
       ${th('zimmet', 'Zimmet')}
       <th></th></tr></thead>
     <tbody>${satirlar ||
-      '<tr><td colspan="9" class="muted">Kayıt yok</td></tr>'}</tbody></table>
+      '<tr><td colspan="10" class="muted">Kayıt yok</td></tr>'}</tbody></table>
     <div class="toplu-cubuk">
       ${yaz ? `<button class="tehlike" ${varlikSecim.size ? '' : 'disabled'}
         onclick="varlikSecilenleriSil()">🗑 Seçilileri sil (${varlikSecim.size})</button>` : ''}
@@ -2134,11 +2138,11 @@ function varlikCsv() {
   const kaynak = varlikSecim.size
     ? varlikListe.filter(a => varlikSecim.has(a.id)) : _varlikSirali();
   const basliklar = ['Etiket', 'Demirbaş No', 'Ad', 'Tür', 'Lokasyon',
-                     'Seri No', 'Zimmet'];
+                     'Seri No', 'Durum', 'Zimmet'];
   const hucre = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const satirlar = kaynak.map(a => [
     a.asset_tag, a.demirbas_no, a.name, _varlikAlan(a, 'tur'),
-    refLokasyon[a.location_id], a.serial,
+    refLokasyon[a.location_id], a.serial, statusMap[a.status_id],
     a.assigned_type ? 'zimmetli' : 'boşta',
   ].map(hucre).join(';'));
   // BOM: Excel Türkçe karakterleri doğru açsın
