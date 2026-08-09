@@ -1185,12 +1185,35 @@ async function cihazDetay(id) {
       </div>` : ''}
     </div>`;
 
+  // İşlem günlüğü: cihazda yapılan HER şey — ekleme, alan değişiklikleri
+  // (eski → yeni değerle), zimmet/iade, dosya ekleri; kim yaptı, ne zaman.
+  const ISLEM_ETIKET = {
+    create:   ['eklendi',     'free'],
+    update:   ['güncellendi', ''],
+    checkout: ['zimmetlendi', 'used'],
+    checkin:  ['iade alındı', 'free'],
+    delete:   ['silindi',     'low'],
+    audit:    ['sayım',       ''],
+  };
   const gecmisHtml = (d.gecmis || []).length
-    ? `<table><thead><tr><th>İşlem</th><th>Not</th><th>Tarih</th></tr></thead><tbody>` +
-      d.gecmis.slice(0, 10).map(g => `<tr><td>${g.islem}</td>
-        <td class="muted">${g['not'] ?? '—'}</td>
-        <td class="muted">${g.tarih ? new Date(g.tarih).toLocaleString('tr-TR') : '—'}</td>
-        </tr>`).join('') + '</tbody></table>'
+    ? `<table><thead><tr><th>Tarih</th><th>İşlem</th><th>Detay</th>
+        <th class="gizle-mobil">Yapan</th></tr></thead><tbody>` +
+      d.gecmis.map(g => {
+        const [etiket, renk] = ISLEM_ETIKET[g.islem] || [g.islem, ''];
+        const satirlar = [
+          ...(g['not'] ? [kacir(g['not'])] : []),
+          ...(g.degisim_metinleri || []).map(kacir),
+        ];
+        return `<tr>
+          <td class="muted" style="white-space:nowrap">${
+            g.tarih ? new Date(g.tarih).toLocaleString('tr-TR',
+              { day:'2-digit', month:'2-digit', year:'numeric',
+                hour:'2-digit', minute:'2-digit' }) : '—'}</td>
+          <td>${renk ? `<span class="tag ${renk}">${etiket}</span>` : etiket}</td>
+          <td class="muted">${satirlar.length ? satirlar.join('<br/>') : '—'}</td>
+          <td class="muted gizle-mobil">${esc(g.yapan)}</td>
+        </tr>`;
+      }).join('') + '</tbody></table>'
     : '<div class="muted">Kayıt yok</div>';
 
   const butonlar =
@@ -1245,7 +1268,9 @@ async function cihazDetay(id) {
     </div>
     ${ozellikBolumu}
     ${dosyaBolumu}
-    <div class="bolum"><h4>Geçmiş</h4>${gecmisHtml}</div>`, butonlar);
+    <div class="bolum"><h4>🕘 İşlem Geçmişi (${(d.gecmis || []).length})</h4>
+      <div style="max-height:340px;overflow-y:auto">${gecmisHtml}</div>
+    </div>`, butonlar);
 
   gorselleriYukle();
 }

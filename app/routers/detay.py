@@ -18,6 +18,62 @@ def _ad(nesne) -> str | None:
     return nesne.name if nesne is not None else None
 
 
+# İşlem geçmişindeki alan adları arayüzde Türkçe görünsün
+ALAN_ADLARI = {
+    "asset_tag": "Cihaz No", "name": "Ad", "serial": "Seri No",
+    "demirbas_no": "Demirbaş No", "muhasebe_kodu": "IFS Kodu",
+    "barkod": "Barkod", "ip_address": "IP", "hostname": "Hostname",
+    "mac_address": "MAC", "imei": "IMEI", "telefon_no": "Telefon",
+    "sim_no": "SIM", "operator": "Operatör", "fatura_no": "Fatura No",
+    "purchase_date": "Alım Tarihi", "warranty_end": "Garanti Bitiş",
+    "purchase_cost": "Bedel", "notes": "Açıklama", "custom": "Özellikler",
+    "model_id": "Model", "location_id": "Lokasyon", "status_id": "Durum",
+    "supplier_id": "Tedarikçi", "company_id": "Şirket",
+    "assigned_user_id": "Zimmetli Kişi", "assigned_location_id": "Zimmet Yeri",
+}
+
+# id alanları geçmişte sayı değil adla görünsün
+_AD_TABLOLARI = {
+    "model_id": models.AssetModel, "location_id": models.Location,
+    "status_id": models.StatusLabel, "supplier_id": models.Supplier,
+    "company_id": models.Company,
+    "assigned_location_id": models.Location,
+}
+
+
+def _deger_metni(db: Session, alan: str, deger) -> str:
+    """Geçmişteki ham değeri okunur hale getirir (id -> ad)."""
+    if deger in (None, "", "None"):
+        return "—"
+    tablo = _AD_TABLOLARI.get(alan)
+    if tablo is not None:
+        try:
+            nesne = db.get(tablo, int(deger))
+        except (TypeError, ValueError):
+            return str(deger)
+        return _ad(nesne) or str(deger)
+    if alan == "assigned_user_id":
+        try:
+            return _kisi_adi(db.get(models.User, int(deger))) or str(deger)
+        except (TypeError, ValueError):
+            return str(deger)
+    metin = str(deger)
+    return metin if len(metin) <= 60 else metin[:57] + "…"
+
+
+def _degisim_metinleri(db: Session, changes: dict | None) -> list[str]:
+    """{"location_id": {"eski": 3, "yeni": 7}} -> ["Lokasyon: Depo → U070"]."""
+    satirlar = []
+    for alan, degisim in (changes or {}).items():
+        if not isinstance(degisim, dict):
+            continue
+        etiket = ALAN_ADLARI.get(alan, alan)
+        eski = _deger_metni(db, alan, degisim.get("eski"))
+        yeni = _deger_metni(db, alan, degisim.get("yeni"))
+        satirlar.append(f"{etiket}: {eski} → {yeni}")
+    return satirlar
+
+
 def _kisi_adi(k: models.User | None) -> str | None:
     if k is None:
         return None
@@ -61,8 +117,9 @@ def varlik_detay(asset_id: int, db: Session = Depends(get_db)):
         select(models.ActivityLog)
         .where(models.ActivityLog.item_type == "asset",
                models.ActivityLog.item_id == asset_id)
-        .order_by(models.ActivityLog.created_at.desc())
-        .limit(30)
+        .order_by(models.ActivityLog.created_at.desc(),
+                  models.ActivityLog.id.desc())
+        .limit(100)
     ).all()
 
     return {
@@ -113,6 +170,9 @@ def varlik_detay(asset_id: int, db: Session = Depends(get_db)):
                 "islem": g.action.value,
                 "not": g.note,
                 "degisiklikler": g.changes,
+                # Arayüz için okunur satırlar: "Lokasyon: Depo → U070"
+                "degisim_metinleri": _degisim_metinleri(db, g.changes),
+                "yapan": g.actor,
                 "tarih": g.created_at.isoformat() if g.created_at else None,
             }
             for g in gecmis

@@ -228,14 +228,24 @@ def asset_sayisi(
     return {"toplam": db.scalar(stmt) or 0}
 
 
-@router.post("", response_model=schemas.AssetRead, status_code=201, dependencies=WRITE)
-def create_asset(payload: schemas.AssetCreate, db: Session = Depends(get_db)):
+def _aktor_adi(kullanici: models.User) -> str | None:
+    return kullanici.username or _tam_ad(kullanici)
+
+
+def _tam_ad(kullanici: models.User) -> str | None:
+    return " ".join(filter(None, [kullanici.first_name, kullanici.last_name])) or None
+
+
+@router.post("", response_model=schemas.AssetRead, status_code=201)
+def create_asset(payload: schemas.AssetCreate, db: Session = Depends(get_db),
+                 aktor: models.User = Depends(require_editor)):
     if db.scalar(select(models.Asset).where(models.Asset.asset_tag == payload.asset_tag)):
         raise HTTPException(409, f"'{payload.asset_tag}' etiketi zaten kullanımda")
     asset = models.Asset(**payload.model_dump())
     db.add(asset)
     db.flush()
-    _log(db, action=models.ActivityAction.create, asset_id=asset.id)
+    _log(db, action=models.ActivityAction.create, asset_id=asset.id,
+         actor=_aktor_adi(aktor))
     db.commit()
     db.refresh(asset)
     return asset
@@ -251,7 +261,8 @@ def get_asset(asset_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{asset_id}", response_model=schemas.AssetRead, dependencies=WRITE)
 def update_asset(
-    asset_id: int, payload: schemas.AssetUpdate, db: Session = Depends(get_db)
+    asset_id: int, payload: schemas.AssetUpdate, db: Session = Depends(get_db),
+    aktor: models.User = Depends(require_editor),
 ):
     asset = db.get(models.Asset, asset_id)
     if asset is None:
@@ -263,7 +274,8 @@ def update_asset(
             changes[key] = {"eski": str(old), "yeni": str(value)}
         setattr(asset, key, value)
     if changes:
-        _log(db, action=models.ActivityAction.update, asset_id=asset.id, changes=changes)
+        _log(db, action=models.ActivityAction.update, asset_id=asset.id,
+             changes=changes, actor=_aktor_adi(aktor))
     db.commit()
     db.refresh(asset)
     return asset
@@ -279,9 +291,10 @@ def delete_asset(asset_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
-@router.post("/{asset_id}/checkout", response_model=schemas.AssetRead, dependencies=WRITE)
+@router.post("/{asset_id}/checkout", response_model=schemas.AssetRead)
 def checkout_asset(
-    asset_id: int, payload: schemas.CheckoutRequest, db: Session = Depends(get_db)
+    asset_id: int, payload: schemas.CheckoutRequest, db: Session = Depends(get_db),
+    aktor: models.User = Depends(require_editor),
 ):
     asset = db.get(models.Asset, asset_id)
     if asset is None:
@@ -317,16 +330,17 @@ def checkout_asset(
         target_type=payload.assigned_type.value,
         target_id=payload.assigned_id,
         note=payload.note,
-        actor=payload.actor,
+        actor=payload.actor or _aktor_adi(aktor),
     )
     db.commit()
     db.refresh(asset)
     return asset
 
 
-@router.post("/{asset_id}/checkin", response_model=schemas.AssetRead, dependencies=WRITE)
+@router.post("/{asset_id}/checkin", response_model=schemas.AssetRead)
 def checkin_asset(
-    asset_id: int, payload: schemas.CheckinRequest, db: Session = Depends(get_db)
+    asset_id: int, payload: schemas.CheckinRequest, db: Session = Depends(get_db),
+    aktor: models.User = Depends(require_editor),
 ):
     asset = db.get(models.Asset, asset_id)
     if asset is None:
@@ -353,7 +367,7 @@ def checkin_asset(
         target_type=prev_type,
         target_id=prev_id,
         note=payload.note,
-        actor=payload.actor,
+        actor=payload.actor or _aktor_adi(aktor),
     )
     db.commit()
     db.refresh(asset)

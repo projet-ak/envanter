@@ -121,3 +121,34 @@ def test_isten_cikis_tarihi_kaydedilir(client):
     assert k["isten_cikis"] == "2026-06-30"
     d = client.get(f"/detay/user/{k['id']}").json()["kisi"]
     assert d["ise_giris"] == "2024-01-10" and d["isten_cikis"] == "2026-06-30"
+
+
+def test_islem_gecmisi_okunur_ve_yapanli(client):
+    """History log: alan değişiklikleri Türkçe etiket ve adlarla, yapan dolu."""
+    lok1 = client.post("/locations", json={"name": "Depo"}).json()
+    lok2 = client.post("/locations", json={"name": "ŞANTİYE U070"}).json()
+    a = client.post("/assets", json={"asset_tag": "LOG-1", "name": "Log Cihazı",
+                                     "location_id": lok1["id"]}).json()
+    client.put(f"/assets/{a['id']}",
+               json={"location_id": lok2["id"], "name": "Yeni Ad"})
+
+    g = client.get(f"/detay/asset/{a['id']}").json()["gecmis"]
+    assert [x["islem"] for x in g] == ["update", "create"]   # en yeni üstte
+    assert all(x["yapan"] for x in g), "yapan boş kalmamalı"
+
+    metinler = g[0]["degisim_metinleri"]
+    assert "Lokasyon: Depo → ŞANTİYE U070" in metinler       # id değil ad
+    assert "Ad: Log Cihazı → Yeni Ad" in metinler
+
+
+def test_islem_gecmisi_zimmet_ve_iade_kayitlari(client):
+    k = client.post("/users", json={"first_name": "Log",
+                                    "last_name": "Kişisi"}).json()
+    a = client.post("/assets", json={"asset_tag": "LOG-2"}).json()
+    client.post(f"/assets/{a['id']}/checkout",
+                json={"assigned_type": "user", "assigned_id": k["id"]})
+    client.post(f"/assets/{a['id']}/checkin", json={})
+
+    g = client.get(f"/detay/asset/{a['id']}").json()["gecmis"]
+    assert [x["islem"] for x in g] == ["checkin", "checkout", "create"]
+    assert all(x["yapan"] for x in g)
