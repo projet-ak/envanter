@@ -441,6 +441,34 @@ class StockFileRead(ORMModel):
     created_at: dt.datetime
 
 
+class StokGiris(BaseModel):
+    """Stok girişi: alım yapıldı, adet artar."""
+
+    adet: int = Field(1, ge=1, le=100000)
+    aciklama: str | None = None
+
+
+class StokZimmet(BaseModel):
+    """Stoktan kişiye verme: adet düşer, kim/ne zaman kaydedilir."""
+
+    user_id: int
+    adet: int = Field(1, ge=1, le=100000)
+    aciklama: str | None = None
+
+
+class StockMoveRead(ORMModel):
+    """Stok hareketi — kişi adı sorguda doldurulur (tabloda id durur)."""
+
+    id: int
+    islem: str
+    adet: int
+    user_id: int | None = None
+    kisi: str | None = None
+    aciklama: str | None = None
+    yapan: str | None = None
+    created_at: dt.datetime
+
+
 class UserFileRead(ORMModel):
     """Kişiye bağlı dosya (imzalı zimmet formu, tutanak…)."""
 

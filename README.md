@@ -900,6 +900,10 @@ POST /invoices/aktar   # onaylanan kalemleri envantere ekle
 | `GET` | `/io/assets.csv` | Varlıkları CSV olarak indir |
 | `POST` | `/io/assets/import` | CSV'den varlık içe aktar (etikete göre ekle/güncelle) |
 | `*` | `/accessories`, `/consumables`, `/components`, `/licenses` | Aksesuar / sarf / bileşen / lisans CRUD |
+| `GET` | `/stok/{tur}/{id}/hareketler` | Stok hareketleri: kim, ne zaman, kaç adet |
+| `POST` | `/stok/{tur}/{id}/giris` | Stok girişi: adet artar, tarihçeye yazılır |
+| `POST` | `/stok/{tur}/{id}/zimmet` | Stoktan kişiye verme: adet düşer, kişi kaydedilir |
+| `DELETE` | `/stok/hareketleri/{id}` | Hareketi geri al (adet ters yönde düzeltilir) |
 | `*` | `/categories`, `/manufacturers`, `/suppliers`, `/companies`, `/locations`, `/status-labels`, `/models`, `/users`, `/custom-fields` | Referans tabloları CRUD |
 
 Tam liste ve deneme için `/docs`.

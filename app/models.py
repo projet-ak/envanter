@@ -479,3 +479,37 @@ class StockFile(Base):
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class HareketTuru(str, enum.Enum):
+    """Stok hareketinin yönü."""
+
+    giris = "giris"      # alım / stok girişi: adet artar
+    zimmet = "zimmet"    # kişiye verildi: adet düşer
+
+
+class StockMove(Base):
+    """Adet bazlı kayıtların stok hareketi: giriş (+) ve kişiye zimmet (−).
+
+    Klavye/fare gibi hep aynı kalemler alınıp dağıtıldığı için `qty` tek
+    başına yetmez: kim, ne zaman, kaç adet aldı bilgisi burada tutulur.
+    Sahip, dosya eklerindeki gibi `kayit_turu + kayit_id` ikilisidir
+    (yabancı anahtar yok); kayıt silinince hareketleri
+    `app/routers/stok_hareket.py` içindeki olay dinleyicisi temizler.
+    Bir hareketi silmek işlemi geri alır: adet, yönün tersine düzeltilir.
+    """
+
+    __tablename__ = "stock_moves"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kayit_turu: Mapped[StokTuru] = mapped_column(Enum(StokTuru), index=True)
+    kayit_id: Mapped[int] = mapped_column(Integer, index=True)
+    islem: Mapped[HareketTuru] = mapped_column(Enum(HareketTuru), index=True)
+    adet: Mapped[int] = mapped_column(Integer, default=1)
+    # Yalnızca zimmet hareketinde dolu: malzemeyi alan kişi
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    aciklama: Mapped[str | None] = mapped_column(String(500))
+    yapan: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

@@ -10,19 +10,19 @@ const canWrite = () => me && (me.role === 'admin' || me.role === 'editor');
 // Adet bazlı türlerin yapılandırması (veri-odaklı arayüz)
 const STOCK = {
   accessories: { label: 'Aksesuarlar', endpoint: '/accessories',
-    kayitTuru: 'accessory',
+    kayitTuru: 'accessory', hareket: true,
     ikon: '🎧', alt: 'Klavye, mouse, kulaklık gibi adet bazlı malzemeler',
     cols: [['name','Ad'],['model_number','Model No'],['qty','Adet'],['min_qty','Min']],
     add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
     lowStock: true },
   consumables: { label: 'Sarf Malzeme', endpoint: '/consumables',
-    kayitTuru: 'consumable',
+    kayitTuru: 'consumable', hareket: true,
     ikon: '📦', alt: 'Toner, kablo, pil gibi tüketilen malzemeler',
     cols: [['name','Ad'],['qty','Adet'],['min_qty','Min']],
     add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
     lowStock: true },
   components: { label: 'Bileşenler', endpoint: '/components',
-    kayitTuru: 'component',
+    kayitTuru: 'component', hareket: true,
     ikon: '🔩', alt: 'RAM, disk, ekran kartı gibi cihaz parçaları',
     cols: [['name','Ad'],['serial','Seri'],['qty','Adet'],['min_qty','Min']],
     add: [['name','Ad','text'],['serial','Seri','text'],['qty','Adet','number'],['min_qty','Min','number']],
@@ -1059,6 +1059,12 @@ const esc = (v) => v == null || v === ''
   ? '<span class="muted">—</span>' : kacir(v);
 const tl = (v) => v == null ? '—' : new Intl.NumberFormat('tr-TR',
   { style:'currency', currency:'TRY', maximumFractionDigits:0 }).format(v);
+const trTarih = (v, saatli = false) => v
+  ? new Date(v).toLocaleString('tr-TR', saatli
+      ? { day:'2-digit', month:'2-digit', year:'numeric',
+          hour:'2-digit', minute:'2-digit' }
+      : { day:'2-digit', month:'2-digit', year:'numeric' })
+  : null;
 
 // ---------- Detay penceresi (modal) ----------
 function modalAc(baslik, govdeHtml, ekButonlar = '') {
@@ -1547,12 +1553,6 @@ async function kisiDetay(id) {
   catch (e) { return alert('⚠ ' + (e.detail || 'Detay alınamadı')); }
   const k = d.kisi;
   const kisiDosyalar = await api(`/users/${id}/dosyalar`).catch(() => []);
-  const trTarih = (v, saatli = false) => v
-    ? new Date(v).toLocaleString('tr-TR', saatli
-        ? { day:'2-digit', month:'2-digit', year:'numeric',
-            hour:'2-digit', minute:'2-digit' }
-        : { day:'2-digit', month:'2-digit', year:'numeric' })
-    : null;
 
   // --- Sekme 1: Bilgiler (işe giriş/çıkış dahil tam kimlik) ---
   const bilgiler = `
@@ -2263,9 +2263,12 @@ async function addAsset() {
 let zimmetCihaz = null;      // {id, etiket}
 let zimmetSonra = null;      // işlem bitince çağrılacak tazeleme
 let kisiAraZaman = null;
+// Doluysa seçilen kişi cihaza değil buraya gider (stok zimmeti bunu kullanır)
+let zimmetIsleyici = null;
 
 async function checkoutPrompt(id, etiketKodlu = '', sonra = null) {
   const etiket = decodeURIComponent(etiketKodlu);
+  zimmetIsleyici = null;
   zimmetCihaz = { id, etiket };
   zimmetSonra = sonra || (() => loadAssets());
   modalAc(`Zimmetle${etiket ? ' — ' + kacir(etiket) : ''}`, `
@@ -2338,6 +2341,11 @@ async function zimmetLokasyona() {
 }
 
 async function zimmetVerGenel(tur, hedefId) {
+  if (zimmetIsleyici) {
+    try { await zimmetIsleyici(tur, hedefId); }
+    catch (e) { alert('⚠ ' + (e.detail || 'Zimmet verilemedi')); }
+    return;
+  }
   if (!zimmetCihaz) return;
   try {
     await api(`/assets/${zimmetCihaz.id}/checkout`, {
@@ -2506,7 +2514,19 @@ async function loadStock(tab) {
       if (k === 'qty' && low) v = `${it[k]} <span class="tag low">düşük stok</span>`;
       return `<td>${v}</td>`;
     }).join('');
-    return `<tr class="tikla" onclick="stokDetay('${tab}', ${it.id})">${cells}</tr>`;
+    // Hızlı işlem küpleri: stok girişi (+) ve kişiye zimmet — hep aynı
+    // klavye/fare setleri için satırdan çıkmadan işlem yapılır.
+    const ad = encodeURIComponent(it.name || '');
+    const kupler = canWrite() ? `<td class="islem-hucre"><div class="kup-kume">
+      <button class="islem-kup gor" title="Detay ve hareket geçmişi"
+        onclick="event.stopPropagation();stokDetay('${tab}',${it.id})">👁</button>
+      ${cfg.hareket ? `
+      <button class="islem-kup duzen" title="Stok girişi (+)"
+        onclick="event.stopPropagation();stokGirisPrompt('${tab}',${it.id},'${ad}')">➕</button>
+      <button class="islem-kup zimmet" title="Kişiye zimmetle"
+        onclick="event.stopPropagation();stokZimmetPrompt('${tab}',${it.id},'${ad}')">🤝</button>` : ''}
+      </div></td>` : '';
+    return `<tr class="tikla" onclick="stokDetay('${tab}', ${it.id})">${cells}${kupler}</tr>`;
   }).join('');
 }
 
@@ -2568,21 +2588,56 @@ function renderRaporlarView() {
 // ---------- Stok kaydı detayı: bilgiler + dosya ekleri ----------
 async function stokDetay(tab, id) {
   const cfg = STOCK[tab];
-  let kayit, dosyalar;
+  let kayit, dosyalar, hareketler;
   try {
-    [kayit, dosyalar] = await Promise.all([
+    [kayit, dosyalar, hareketler] = await Promise.all([
       api(`${cfg.endpoint}/${id}`),
       api(`/stok/${cfg.kayitTuru}/${id}/dosyalar`).catch(() => []),
+      cfg.hareket
+        ? api(`/stok/${cfg.kayitTuru}/${id}/hareketler`).catch(() => [])
+        : Promise.resolve(null),
     ]);
   } catch (e) { return alert('⚠ ' + (e.detail || 'Kayıt alınamadı')); }
 
   const gorseller = dosyalar.filter(f => f.tur === 'gorsel');
   const belgeler = dosyalar.filter(f => f.tur !== 'gorsel');
   const yaz = canWrite();
+  const ad = encodeURIComponent(kayit.name || '');
+
+  // Kim, ne zaman, kaç adet aldı — yeniden eskiye
+  const hareketBolumu = hareketler === null ? '' : `
+    <div class="bolum">
+      <h4>Stok Hareketleri (${hareketler.length})</h4>
+      ${yaz ? `<div class="row" style="margin-bottom:10px">
+        <button class="ghost" onclick="stokGirisPrompt('${tab}', ${id}, '${ad}')">
+          ➕ Stok girişi</button>
+        <button class="primary" onclick="stokZimmetPrompt('${tab}', ${id}, '${ad}')">
+          🤝 Kişiye zimmetle</button>
+      </div>` : ''}
+      ${hareketler.length ? `<table><thead><tr>
+        <th>Tarih</th><th>İşlem</th><th>Kişi</th><th>Adet</th>
+        <th class="gizle-mobil">Not</th><th class="gizle-mobil">Yapan</th>
+        ${yaz ? '<th></th>' : ''}
+        </tr></thead><tbody>
+        ${hareketler.map(h => `<tr>
+          <td class="muted">${trTarih(h.created_at, true) ?? '—'}</td>
+          <td>${h.islem === 'zimmet'
+                ? '<span class="tag used">zimmet</span>'
+                : '<span class="tag free">giriş</span>'}</td>
+          <td>${h.kisi ? '👤 ' + kacir(h.kisi) : '—'}</td>
+          <td><b>${h.islem === 'zimmet' ? '−' : '+'}${h.adet}</b></td>
+          <td class="muted gizle-mobil">${esc(h.aciklama)}</td>
+          <td class="muted gizle-mobil">${esc(h.yapan)}</td>
+          ${yaz ? `<td><button class="ghost mini" title="Hareketi geri al"
+             onclick="stokHareketSil(${h.id}, '${tab}', ${id})">↩</button></td>` : ''}
+          </tr>`).join('')}</tbody></table>`
+        : '<div class="muted">Henüz hareket yok — stok girişi ya da zimmetle başlar</div>'}
+    </div>`;
 
   modalAc(`${cfg.ikon} ${kacir(kayit.name)}`, `
     <div class="bolum"><h4>${kacir(cfg.label)}</h4>${alanlar(kayit,
       cfg.cols.filter(([k]) => k !== 'name'))}</div>
+    ${hareketBolumu}
     <div class="bolum">
       <h4>Görseller ve Belgeler</h4>
       ${gorseller.length ? `<div class="gorsel-serit">
@@ -2660,6 +2715,74 @@ async function stokDosyaSil(dosyaId, tab, id) {
     await api('/stok/dosyalari/' + dosyaId, { method: 'DELETE' });
     stokDetay(tab, id);
   } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
+}
+
+// ---------- Stok hareketleri: giriş (+) ve kişiye zimmet ----------
+// Hep aynı klavye/fare setleri alınıp dağıtılıyor: iki tıkla stok artar,
+// kişi aranıp seçilince adet düşer ve kim/ne zaman aldığı kayda geçer.
+function stokGirisPrompt(tab, id, adKodlu = '') {
+  const ad = decodeURIComponent(adKodlu);
+  modalAc(`➕ Stok girişi${ad ? ' — ' + kacir(ad) : ''}`, `
+    <div class="row">
+      <input id="sgAdet" type="number" min="1" value="1" style="width:110px" />
+      <input id="sgNot" class="grow" placeholder="Not (fatura no, tedarikçi… isteğe bağlı)" />
+      <button class="primary" onclick="stokGirisKaydet('${tab}', ${id})">Ekle</button>
+    </div>
+    <div class="note">Alım yapıldığında adedi buradan arttırın; her giriş
+      tarihiyle hareket listesine yazılır.</div>`);
+  setTimeout(() => document.getElementById('sgAdet')?.select(), 60);
+}
+
+async function stokGirisKaydet(tab, id) {
+  const adet = Number(document.getElementById('sgAdet')?.value || 0);
+  if (!Number.isInteger(adet) || adet < 1) return alert('⚠ Geçerli bir adet girin.');
+  const aciklama = document.getElementById('sgNot')?.value.trim() || null;
+  try {
+    await api(`/stok/${STOCK[tab].kayitTuru}/${id}/giris`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ adet, aciklama }) });
+    stokDetay(tab, id);
+  } catch (e) { alert('⚠ ' + (e.detail || 'Kaydedilemedi')); }
+}
+
+// Kişi seçiciyi cihaz zimmetlemeyle paylaşır: zimmetIsleyici doluysa seçilen
+// kişi cihaza değil stok kaydına bağlanır (bkz. zimmetVerGenel).
+function stokZimmetPrompt(tab, id, adKodlu = '') {
+  const ad = decodeURIComponent(adKodlu);
+  zimmetIsleyici = async (tur, hedefId) => {
+    if (tur !== 'user') { alert('⚠ Stok zimmeti kişiye yapılır.'); return; }
+    const adet = Number(document.getElementById('szAdet')?.value || 1);
+    if (!Number.isInteger(adet) || adet < 1) { alert('⚠ Geçerli bir adet girin.'); return; }
+    const aciklama = document.getElementById('szNot')?.value.trim() || null;
+    await api(`/stok/${STOCK[tab].kayitTuru}/${id}/zimmet`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: hedefId, adet, aciklama }) });
+    stokDetay(tab, id);
+  };
+  modalAc(`🤝 Zimmetle${ad ? ' — ' + kacir(ad) : ''}`, `
+    <div class="row" style="margin-bottom:10px">
+      <label class="muted">Adet <input id="szAdet" type="number" min="1"
+        value="1" style="width:90px;margin-left:6px" /></label>
+      <input id="szNot" class="grow" placeholder="Not (isteğe bağlı)" />
+    </div>
+    <div class="row">
+      <input id="zkAra" class="grow" autocomplete="off"
+             placeholder="Personel ara: ad soyad, sicil no, departman…"
+             oninput="kisiAraGecikmeli()" />
+      ${canWrite() ? `<button class="ghost" onclick="zimmetYeniPersonel()">
+         + Yeni personel</button>` : ''}
+    </div>
+    <div id="zkSonuc" class="note">Yükleniyor…</div>`);
+  setTimeout(() => document.getElementById('zkAra')?.focus(), 60);
+  kisiAra();
+}
+
+async function stokHareketSil(hareketId, tab, id) {
+  if (!confirm('Hareket geri alınsın mı? Adet, işlemin tersine düzeltilir.')) return;
+  try {
+    await api('/stok/hareketleri/' + hareketId, { method: 'DELETE' });
+    stokDetay(tab, id);
+  } catch (e) { alert('⚠ ' + (e.detail || 'Geri alınamadı')); }
 }
 
 // ---------- Ayarlar: profil, parola, hesap yönetimi ----------
