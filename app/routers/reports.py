@@ -219,12 +219,24 @@ def son_islemler(limit: int = Query(12, le=50), db: Session = Depends(get_db)):
 
 @router.get("/excel")
 def excel_raporu(tip: str = Query("genel", description="|".join(rapor.RAPOR_ADLARI)),
+                 ids: str | None = Query(None,
+                     description="Virgüllü cihaz kimlikleri — listedeki seçim"),
                  db: Session = Depends(get_db)):
-    """Biçimli Excel raporu üretir (başlık, süzgeç, zebra, TR biçimleri)."""
+    """Biçimli Excel raporu üretir (başlık, süzgeç, zebra, TR biçimleri).
+
+    `ids` verilirse cihaz tabanlı sayfalar (Cihazlar/Zimmetler) yalnızca o
+    kayıtları içerir — listeden "seçilenleri dışa aktar" bunun için.
+    """
     if tip not in rapor.RAPOR_ADLARI:
         raise HTTPException(400, f"Bilinmeyen rapor tipi: {tip}. "
                                  f"Geçerli: {', '.join(rapor.RAPOR_ADLARI)}")
-    icerik = rapor.olustur(db, tip)
+    kimlikler = None
+    if ids:
+        try:
+            kimlikler = {int(x) for x in ids.split(",") if x.strip()}
+        except ValueError:
+            raise HTTPException(400, "ids virgülle ayrılmış sayı olmalı")
+    icerik = rapor.olustur(db, tip, kimlikler=kimlikler)
     ad = f"{rapor.RAPOR_ADLARI[tip]} {dt.date.today():%d.%m.%Y}.xlsx"
     return Response(
         icerik,

@@ -131,9 +131,12 @@ def _haritalar(db: Session) -> dict:
     }
 
 
-def _cihaz_satirlari(db: Session, h: dict, *, sadece_zimmetli: bool) -> list[list]:
+def _cihaz_satirlari(db: Session, h: dict, *, sadece_zimmetli: bool,
+                     kimlikler: set[int] | None = None) -> list[list]:
     satirlar = []
     for a in db.scalars(select(models.Asset).order_by(models.Asset.asset_tag)).all():
+        if kimlikler is not None and a.id not in kimlikler:
+            continue
         kisi = h["kisi"].get(a.assigned_user_id) if a.assigned_user_id else None
         if sadece_zimmetli and kisi is None:
             continue
@@ -160,21 +163,23 @@ def _cihaz_satirlari(db: Session, h: dict, *, sadece_zimmetli: bool) -> list[lis
     return satirlar
 
 
-def _cihazlar_sayfasi(wb: Workbook, db: Session, h: dict) -> None:
+def _cihazlar_sayfasi(wb: Workbook, db: Session, h: dict,
+                      kimlikler: set[int] | None = None) -> None:
     _sayfa(wb, "Cihazlar", RAPOR_ADLARI["cihazlar"],
            ["Cihaz No", "Demirbaş No", "Ad", "Tür", "Marka", "Model", "Seri No",
             "Lokasyon", "Proje", "Durum", "Zimmetli Kişi", "IP",
             "Alım Tarihi", "Alım Bedeli", "Garanti Bitiş"],
-           _cihaz_satirlari(db, h, sadece_zimmetli=False),
+           _cihaz_satirlari(db, h, sadece_zimmetli=False, kimlikler=kimlikler),
            para_sutunlar={14}, tarih_sutunlar={13, 15})
 
 
-def _zimmet_sayfasi(wb: Workbook, db: Session, h: dict) -> None:
+def _zimmet_sayfasi(wb: Workbook, db: Session, h: dict,
+                    kimlikler: set[int] | None = None) -> None:
     _sayfa(wb, "Zimmetler", RAPOR_ADLARI["zimmet"],
            ["Cihaz No", "Demirbaş No", "Ad", "Tür", "Marka", "Model", "Seri No",
             "Lokasyon", "Proje", "Durum", "Zimmetli Kişi", "Sicil No",
             "Departman", "Unvan", "Zimmet Tarihi"],
-           _cihaz_satirlari(db, h, sadece_zimmetli=True),
+           _cihaz_satirlari(db, h, sadece_zimmetli=True, kimlikler=kimlikler),
            tarih_sutunlar={15})
 
 
@@ -263,8 +268,12 @@ def _ozet_sayfasi(wb: Workbook, db: Session, h: dict) -> None:
     _sayfa(wb, "Özet", RAPOR_ADLARI["genel"], ["Gösterge", "Değer"], satirlar)
 
 
-def olustur(db: Session, tip: str) -> bytes:
-    """Raporu üretir ve xlsx baytlarını döner. Bilinmeyen tip -> KeyError."""
+def olustur(db: Session, tip: str,
+            kimlikler: set[int] | None = None) -> bytes:
+    """Raporu üretir ve xlsx baytlarını döner. Bilinmeyen tip -> KeyError.
+
+    `kimlikler` yalnızca cihaz tabanlı sayfaları daraltır (listeden seçim).
+    """
     RAPOR_ADLARI[tip]                       # bilinmeyen tipte erken patla
     wb = Workbook()
     wb.remove(wb.active)                    # boş varsayılan sayfa kalmasın
@@ -273,9 +282,9 @@ def olustur(db: Session, tip: str) -> bytes:
     if tip in ("genel",):
         _ozet_sayfasi(wb, db, h)
     if tip in ("genel", "cihazlar"):
-        _cihazlar_sayfasi(wb, db, h)
+        _cihazlar_sayfasi(wb, db, h, kimlikler)
     if tip in ("genel", "zimmet"):
-        _zimmet_sayfasi(wb, db, h)
+        _zimmet_sayfasi(wb, db, h, kimlikler)
     if tip in ("genel", "lokasyon"):
         _lokasyon_sayfasi(wb, db, h)
     if tip in ("genel", "stok"):

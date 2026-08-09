@@ -158,3 +158,19 @@ def test_logo_dar_sayfada_atlanir_genel_rapor_bozulmaz(client, sahne,
     assert len(wb["Özet"]._images) == 0
     assert "Cihaz Listesi" in wb["Cihazlar"]["C1"].value       # geniş: logolu
     assert len(wb["Cihazlar"]._images) == 1
+
+
+def test_secili_kimliklerle_rapor_daraltilir(client, sahne):
+    """Listeden seçim: ids verilince yalnızca o cihazlar rapora girer."""
+    hepsi = client.get("/assets").json()
+    secilen = next(a for a in hepsi if a["asset_tag"] == "RPR-1")
+    ws = _kitap(client, f"cihazlar")["Cihazlar"] if False else None
+    r = client.get("/reports/excel",
+                   params={"tip": "cihazlar", "ids": str(secilen["id"])})
+    assert r.status_code == 200
+    ws = load_workbook(BytesIO(r.content))["Cihazlar"]
+    etiketler = [x[0] for x in ws.iter_rows(min_row=3, values_only=True)]
+    assert etiketler == ["RPR-1"]
+
+    assert client.get("/reports/excel",
+                      params={"tip": "cihazlar", "ids": "a,b"}).status_code == 400

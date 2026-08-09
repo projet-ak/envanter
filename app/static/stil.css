@@ -376,3 +376,45 @@ tr.tikla:hover { background:var(--cizgi2); }
 .kisayol small { display:block; font-weight:400; font-size:11.5px;
                  color:var(--mut); margin-top:4px; line-height:1.4; }
 .kisayol.onemli { border-color:var(--acc); }
+
+/* --------- Liste işlem küpleri (görüntüle / düzenle / zimmet / etiket) --- */
+.islemler { white-space:nowrap; }
+.islem-kup { width:30px; height:30px; border-radius:8px; border:none;
+             display:inline-grid; place-items:center; cursor:pointer;
+             font-size:13px; padding:0; margin:0 2px; color:#fff;
+             vertical-align:middle; }
+.islem-kup:hover { filter:brightness(1.15); color:#fff; }
+.islem-kup.gor    { background:var(--ok); }
+.islem-kup.duzen  { background:var(--yesil); }
+.islem-kup.zimmet { background:var(--warn); }
+.islem-kup.notr   { background:var(--zemin); color:var(--metin);
+                    border:1px solid var(--cizgi); }
+.islem-kup.notr:hover { color:var(--metin); border-color:var(--acc); }
+
+/* Sıralanabilir başlık ve seçili satır */
+th.sirala { cursor:pointer; user-select:none; white-space:nowrap; }
+th.sirala:hover { color:var(--acc); }
+th.sirala .yon { font-size:9.5px; opacity:.55; }
+td.dar, th.dar { width:30px; padding-right:2px; }
+tr.secili td { background:rgba(0,112,95,.07); }
+
+/* Toplu işlem çubuğu + sayfalama */
+.toplu-cubuk { display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+               margin-top:12px; }
+.sayfalama { display:flex; gap:3px; align-items:center; }
+.sayfalama button { min-width:32px; padding:6px 8px; }
+.sayfalama .sec-sayfa { background:var(--yesil); border-color:var(--yesil);
+                        color:#fff; }
+.sayfalama button:disabled { opacity:.4; cursor:default; }
+
+/* Açılır dışa aktarım menüsü */
+.acilir { position:relative; }
+.acilir-menu { position:absolute; bottom:112%; left:0; min-width:190px;
+               background:var(--kart); border:1px solid var(--cizgi);
+               border-radius:10px; box-shadow:0 10px 30px rgba(0,30,24,.18);
+               padding:6px; display:none; z-index:40; }
+.acilir.acik .acilir-menu { display:block; }
+.acilir-menu button { width:100%; border:none; background:none; cursor:pointer;
+                      text-align:left; padding:9px 11px; border-radius:7px;
+                      font:inherit; font-size:13.5px; color:var(--metin); }
+.acilir-menu button:hover { background:var(--cizgi2); color:var(--metin); }

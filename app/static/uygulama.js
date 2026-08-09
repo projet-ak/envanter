@@ -1860,11 +1860,7 @@ function renderAssetsView() {
     </div>
     <div class="panel">
       <h2>Varlıklar (<span id="count">0</span><span id="toplamBilgi"></span>)</h2>
-      <table><thead><tr><th>Etiket</th><th class="gizle-mobil">Demirbaş</th>
-        <th>Ad</th><th class="gizle-mobil">Tür</th>
-        <th>Lokasyon</th><th class="gizle-mobil">Seri</th>
-        <th>Zimmet</th><th></th></tr></thead>
-      <tbody id="rows"></tbody></table>
+      <div id="varlikTablo"></div>
       <div id="dahaFazla" class="row" style="margin-top:12px"></div>
     </div>`;
   filtreSecenekleriDoldur();
@@ -1943,31 +1939,216 @@ function filtreSorgusu() {
   return p;
 }
 
+// Varlık listesi durumu: seçim, sıralama, sayfalama (istemci tarafı —
+// liste zaten yüklü, sunucuya tekrar gitmeye gerek yok)
+let varlikListe = [];
+const varlikSecim = new Set();
+let varlikSirala = { alan: null, yon: 1 };
+let varlikSayfa = 1;
+let varlikLimit = 20;
+
 function renderAssets(assets) {
-  document.getElementById('count').textContent = assets.length;
-  document.getElementById('rows').innerHTML = assets.map(a => {
-    const assigned = a.assigned_type
-      ? `<span class="tag used">zimmetli</span>` : `<span class="tag free">boşta</span>`;
-    let btn = '';
-    if (canWrite()) btn = a.assigned_type
-      ? `<button class="ghost" onclick="checkin(${a.id})">İade al</button>`
-      : `<button class="ghost" onclick="checkoutPrompt(${a.id}, '${
-          encodeURIComponent(a.asset_tag)}')">Zimmetle</button>`;
-    if (a.assigned_type === 'user')
-      btn += ` <button class="ghost" title="Zimmet fişi (PDF)"
-                 onclick="openPdf('/documents/zimmet/asset/${a.id}.pdf')">📄</button>`;
-    btn += ` <button class="ghost" title="Etiket bas (QR + barkod)"
-               onclick="openPdf('/documents/etiket/asset/${a.id}.pdf')">🏷️</button>`;
+  varlikListe = assets;
+  varlikSecim.clear();
+  varlikSayfa = 1;
+  varlikTabloCiz();
+}
+
+function _varlikAlan(a, alan) {
+  if (alan === 'tur') {
+    const mdl = refModelKat[a.model_id];
+    return (mdl ? refKategori[mdl.category_id] : '') || '';
+  }
+  if (alan === 'lokasyon') return refLokasyon[a.location_id] || '';
+  if (alan === 'zimmet') return a.assigned_type ? 1 : 0;
+  return a[alan] ?? '';
+}
+
+function varlikSiralaDegis(alan) {
+  if (varlikSirala.alan === alan) varlikSirala.yon *= -1;
+  else varlikSirala = { alan, yon: 1 };
+  varlikTabloCiz();
+}
+
+function varlikSayfaGit(n) { varlikSayfa = n; varlikTabloCiz(); }
+function varlikLimitDegis(n) { varlikLimit = +n; varlikSayfa = 1; varlikTabloCiz(); }
+
+function varlikSec(id, secili) {
+  secili ? varlikSecim.add(id) : varlikSecim.delete(id);
+  varlikTabloCiz();
+}
+function varlikTumunuSec(secili) {
+  const bas = (varlikSayfa - 1) * varlikLimit;
+  _varlikSirali().slice(bas, bas + varlikLimit)
+    .forEach(a => secili ? varlikSecim.add(a.id) : varlikSecim.delete(a.id));
+  varlikTabloCiz();
+}
+
+function _varlikSirali() {
+  if (!varlikSirala.alan) return varlikListe;
+  const { alan, yon } = varlikSirala;
+  return [...varlikListe].sort((a, b) => {
+    const x = _varlikAlan(a, alan), y = _varlikAlan(b, alan);
+    if (typeof x === 'number' || typeof y === 'number')
+      return ((x || 0) - (y || 0)) * yon;
+    return String(x).localeCompare(String(y), 'tr') * yon;
+  });
+}
+
+function varlikTabloCiz() {
+  const kutu = document.getElementById('varlikTablo');
+  if (!kutu) return;
+  document.getElementById('count').textContent = varlikListe.length;
+
+  const sirali = _varlikSirali();
+  const toplamSayfa = Math.max(1, Math.ceil(sirali.length / varlikLimit));
+  varlikSayfa = Math.min(varlikSayfa, toplamSayfa);
+  const bas = (varlikSayfa - 1) * varlikLimit;
+  const sayfa = sirali.slice(bas, bas + varlikLimit);
+  const hepsiSecili = sayfa.length > 0 && sayfa.every(a => varlikSecim.has(a.id));
+  const yaz = canWrite();
+
+  const th = (alan, etiket, sinif = '') => `<th class="sirala ${sinif}"
+      onclick="varlikSiralaDegis('${alan}')">${etiket}
+      <span class="yon">${varlikSirala.alan === alan
+        ? (varlikSirala.yon === 1 ? '▲' : '▼') : '↕'}</span></th>`;
+
+  const satirlar = sayfa.map(a => {
     const mdl = refModelKat[a.model_id];
     const tur = mdl ? refKategori[mdl.category_id] : null;
-    return `<tr class="tikla" onclick="if(!event.target.closest('button'))cihazDetay(${a.id})">
+    const kupler = [
+      `<button class="islem-kup gor" title="Görüntüle"
+         onclick="cihazDetay(${a.id})">👁</button>`,
+      yaz ? `<button class="islem-kup duzen" title="Düzenle"
+         onclick="cihazDuzenle(${a.id})">✏️</button>` : '',
+      yaz ? (a.assigned_type
+        ? `<button class="islem-kup zimmet" title="İade al"
+             onclick="checkin(${a.id})">↩</button>`
+        : `<button class="islem-kup zimmet" title="Zimmetle"
+             onclick="checkoutPrompt(${a.id}, '${
+               encodeURIComponent(a.asset_tag)}')">🤝</button>`) : '',
+      `<button class="islem-kup notr" title="Etiket bas (QR + barkod)"
+         onclick="openPdf('/documents/etiket/asset/${a.id}.pdf')">🏷️</button>`,
+    ].join('');
+    return `<tr class="tikla${varlikSecim.has(a.id) ? ' secili' : ''}"
+        onclick="if(!event.target.closest('button,input'))cihazDetay(${a.id})">
+      <td class="dar"><input type="checkbox" ${varlikSecim.has(a.id) ? 'checked' : ''}
+          onchange="varlikSec(${a.id}, this.checked)" /></td>
       <td><b>${a.asset_tag}</b></td>
       <td class="muted gizle-mobil">${esc(a.demirbas_no)}</td>
       <td>${esc(a.name)}</td><td class="gizle-mobil">${esc(tur)}</td>
       <td class="muted">${esc(refLokasyon[a.location_id])}</td>
-      <td class="muted">${esc(a.serial)}</td>
-      <td>${assigned}</td><td>${btn}</td></tr>`;
+      <td class="muted gizle-mobil">${esc(a.serial)}</td>
+      <td>${a.assigned_type
+        ? '<span class="tag used">zimmetli</span>'
+        : '<span class="tag free">boşta</span>'}</td>
+      <td class="islemler">${kupler}</td></tr>`;
   }).join('');
+
+  // Sayfa numaraları: en fazla 7 kutu, uçlar hep görünür
+  const nolar = [];
+  for (let n = 1; n <= toplamSayfa; n++) {
+    if (toplamSayfa > 7 && n !== 1 && n !== toplamSayfa
+        && Math.abs(n - varlikSayfa) > 2) {
+      if (nolar[nolar.length - 1] !== '…') nolar.push('…');
+      continue;
+    }
+    nolar.push(n);
+  }
+
+  kutu.innerHTML = `
+    <table><thead><tr>
+      <th class="dar"><input type="checkbox" ${hepsiSecili ? 'checked' : ''}
+          onchange="varlikTumunuSec(this.checked)"
+          title="Sayfadakileri seç" /></th>
+      ${th('asset_tag', 'Etiket')}
+      ${th('demirbas_no', 'Demirbaş', 'gizle-mobil')}
+      ${th('name', 'Ad')}
+      ${th('tur', 'Tür', 'gizle-mobil')}
+      ${th('lokasyon', 'Lokasyon')}
+      ${th('serial', 'Seri', 'gizle-mobil')}
+      ${th('zimmet', 'Zimmet')}
+      <th></th></tr></thead>
+    <tbody>${satirlar ||
+      '<tr><td colspan="9" class="muted">Kayıt yok</td></tr>'}</tbody></table>
+    <div class="toplu-cubuk">
+      ${yaz ? `<button class="tehlike" ${varlikSecim.size ? '' : 'disabled'}
+        onclick="varlikSecilenleriSil()">🗑 Seçilileri sil (${varlikSecim.size})</button>` : ''}
+      <div class="acilir" id="disaAktarKutu">
+        <button class="ghost" onclick="document.getElementById('disaAktarKutu')
+            .classList.toggle('acik')">⬇ Dışa aktar ▾</button>
+        <div class="acilir-menu">
+          <button onclick="varlikExcel()">📗 Excel${varlikSecim.size
+            ? ` (${varlikSecim.size} seçili)` : ' (tümü)'}</button>
+          <button onclick="varlikCsv()">📄 CSV${varlikSecim.size
+            ? ` (${varlikSecim.size} seçili)` : ' (görünen liste)'}</button>
+        </div>
+      </div>
+      <span class="grow"></span>
+      <span class="muted" style="font-size:12.5px">
+        Kayıt: ${sirali.length ? bas + 1 : 0}–${Math.min(bas + varlikLimit,
+          sirali.length)} / ${sirali.length}</span>
+      <select onchange="varlikLimitDegis(this.value)" title="Sayfa boyu">
+        ${[20, 50, 100, 200].map(n => `<option value="${n}"
+          ${n === varlikLimit ? 'selected' : ''}>${n}</option>`).join('')}
+      </select>
+      <div class="sayfalama">
+        <button class="ghost" ${varlikSayfa === 1 ? 'disabled' : ''}
+          onclick="varlikSayfaGit(1)">«</button>
+        <button class="ghost" ${varlikSayfa === 1 ? 'disabled' : ''}
+          onclick="varlikSayfaGit(${varlikSayfa - 1})">‹</button>
+        ${nolar.map(n => n === '…' ? '<span class="muted">…</span>'
+          : `<button class="ghost${n === varlikSayfa ? ' sec-sayfa' : ''}"
+               onclick="varlikSayfaGit(${n})">${n}</button>`).join('')}
+        <button class="ghost" ${varlikSayfa === toplamSayfa ? 'disabled' : ''}
+          onclick="varlikSayfaGit(${varlikSayfa + 1})">›</button>
+        <button class="ghost" ${varlikSayfa === toplamSayfa ? 'disabled' : ''}
+          onclick="varlikSayfaGit(${toplamSayfa})">»</button>
+      </div>
+    </div>`;
+}
+
+async function varlikSecilenleriSil() {
+  const adet = varlikSecim.size;
+  if (!adet) return;
+  if (!confirm(`${adet} cihaz kalıcı olarak silinecek. Emin misiniz?\n` +
+               'Bu işlem geri alınamaz; zimmet geçmişi kayıtlarda kalır.')) return;
+  let hata = 0;
+  for (const id of varlikSecim) {
+    try { await api('/assets/' + id, { method: 'DELETE' }); }
+    catch { hata += 1; }
+  }
+  varlikSecim.clear();
+  await loadAssets();
+  if (hata) alert(`⚠ ${hata} cihaz silinemedi (yetki ya da bağlı kayıt).`);
+}
+
+function varlikExcel() {
+  document.getElementById('disaAktarKutu')?.classList.remove('acik');
+  const ids = [...varlikSecim].join(',');
+  indirDosya('/reports/excel?tip=cihazlar' + (ids ? '&ids=' + ids : ''));
+}
+
+function varlikCsv() {
+  document.getElementById('disaAktarKutu')?.classList.remove('acik');
+  const kaynak = varlikSecim.size
+    ? varlikListe.filter(a => varlikSecim.has(a.id)) : _varlikSirali();
+  const basliklar = ['Etiket', 'Demirbaş No', 'Ad', 'Tür', 'Lokasyon',
+                     'Seri No', 'Zimmet'];
+  const hucre = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const satirlar = kaynak.map(a => [
+    a.asset_tag, a.demirbas_no, a.name, _varlikAlan(a, 'tur'),
+    refLokasyon[a.location_id], a.serial,
+    a.assigned_type ? 'zimmetli' : 'boşta',
+  ].map(hucre).join(';'));
+  // BOM: Excel Türkçe karakterleri doğru açsın
+  const blob = new Blob(['\ufeff' + [basliklar.map(hucre).join(';'),
+    ...satirlar].join('\n')], { type: 'text/csv;charset=utf-8' });
+  const b = document.createElement('a');
+  b.href = URL.createObjectURL(blob);
+  b.download = `varliklar-${new Date().toLocaleDateString('tr-TR')}.csv`;
+  document.body.appendChild(b); b.click(); b.remove();
+  setTimeout(() => URL.revokeObjectURL(b.href), 4000);
 }
 
 let gosterilenSayi = 200;
