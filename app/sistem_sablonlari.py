@@ -770,7 +770,8 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
 
     # "Kablosuz Link" access_point değildir: ptp önce gelir
     (("noktadan noktaya", "point to point", "ptp", "ptmp", "kablosuz link",
-      "radyo link", "airfiber", "airmax", "nanostation"), "ptp"),
+      "radyo link", "airfiber", "airmax", "nanostation",
+      "ligowave", "ligodlb"), "ptp"),
     (("access point", "accesspoint", "erisim noktasi", "wifi", "wi-fi",
       "kablosuz"), "access_point"),
     (("firewall", "guvenlik duvari", "utm", "guvenlik geciti"), "firewall"),

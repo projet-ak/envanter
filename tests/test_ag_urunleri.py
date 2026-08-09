@@ -511,6 +511,8 @@ def test_ptp_urunu_karsi_ucuyla_kaydedilir(client):
     ("UTM Cihazı", "firewall"),
     ("Noktadan Noktaya Link", "ptp"),
     ("NanoStation", "ptp"),
+    ("LigoWave LigoDLB 5-15", "ptp"),
+    ("LigoDLB PRO 5-20n", "ptp"),
     ("Router", "router"),
     ("Modem", "router"),
 ])

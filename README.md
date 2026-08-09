@@ -429,6 +429,19 @@ Eşleşmeyen bir kategoriyi dahil etmek için ya Tanımlar'dan yeniden
 adlandırın ya da `app/ag.py` içindeki `_KATEGORI_IPUCU`'na anahtar kelime
 ekleyin.
 
+Tersine durum da olur: model **adı** türünü söyler ama **yanlış kategoriye**
+bağlanmıştır (örn. LigoWave linkleri "Projeksiyon" kategorisinde). Bunları
+toplu bulup doğru kategoriye taşımak için:
+
+```bash
+./.venv/bin/python scripts/kategori-duzelt.py            # rapor
+./.venv/bin/python scripts/kategori-duzelt.py --uygula   # taşı
+```
+
+Betik model adına (gerekirse marka + ad ve cihaz adlarına) bakar; hedef
+kategori yoksa türün resmi adıyla açar. Cihaz kayıtlarına dokunmaz —
+yalnızca modelin kategorisi değişir, zimmet/dosya/etiket aynen kalır.
+
 ### Marka nerede tutulur?
 
 Marka cihaz kaydında değil **modelde** durur:
@@ -947,6 +960,7 @@ scripts/
   kurulum-kontrol.sh # Güncelleme sonrası sağlık kontrolü (hiçbir şey değiştirmez)
   ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
   ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
+  kategori-duzelt.py # Yanlış kategorideki modelleri bul/doğrusuna taşı
   marka-kontrol.py   # Markası boş modelleri bul/doldur
   snipeit-karsilastir.py # Snipe-IT dışa aktarımı/dökümüyle karşılaştır, boşları doldur
   snipeit-dosya-aktar.py # Snipe-IT görsel ve belgelerini aktar
