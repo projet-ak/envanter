@@ -1684,13 +1684,20 @@ function secenekler(liste, secili) {
                ${x.name}</option>`).join('');
 }
 
+// Model -> kategori eşlemesi: düzenleme formundaki Kategori kutusu modelin
+// kategorisini gösterir/değiştirir (kategori cihazda değil modelde durur).
+let duzenleModelKat = {};
+
 async function cihazDuzenle(id) {
-  const [a, modeller, lokasyonlar, durumlar, tedarikciler, sirketler] =
+  const [a, modeller, lokasyonlar, durumlar, tedarikciler, sirketler,
+         kategoriler] =
     await Promise.all([
       api('/assets/' + id), api('/models?limit=1000'), api('/locations?limit=500'),
       api('/status-labels?limit=200'), api('/suppliers?limit=500'),
-      api('/companies?limit=500'),
+      api('/companies?limit=500'), api('/categories?limit=500'),
     ]);
+  duzenleModelKat = Object.fromEntries(
+    modeller.map(m => [m.id, m.category_id ?? null]));
 
   const metinAlanlar = [
     ['asset_tag','Cihaz NO','text'],['name','Ad','text'],['serial','Seri No','text'],
@@ -1710,12 +1717,22 @@ async function cihazDuzenle(id) {
     ['company_id','Şirket', sirketler],
   ];
 
+  // Kategori kutusu s_ önekini almaz: cihaza değil, seçili modele kaydedilir
+  const iliskiHtml = iliskiAlanlar.map(([k, l, liste]) => `<div>
+    <div class="stat-l" style="margin-bottom:3px">${l}</div>
+    <select id="s_${k}" style="width:100%"
+      ${k === 'model_id' ? 'onchange="modelKatEsitle()"' : ''}>
+      ${secenekler(liste, a[k])}</select>
+    </div>`);
+  iliskiHtml.splice(1, 0, `<div>
+    <div class="stat-l" style="margin-bottom:3px">Kategori (cihaz tipi — modele işler)</div>
+    <select id="mk_kategori" style="width:100%" ${a.model_id ? '' : 'disabled'}>
+      ${secenekler(kategoriler, duzenleModelKat[a.model_id] ?? null)}</select>
+    </div>`);
+
   modalAc(`✏️ ${a.asset_tag} düzenle`, `
     <div class="bolum"><h4>İlişkiler</h4><div class="alan-grid">
-      ${iliskiAlanlar.map(([k, l, liste]) => `<div>
-        <div class="stat-l" style="margin-bottom:3px">${l}</div>
-        <select id="s_${k}" style="width:100%">${secenekler(liste, a[k])}</select>
-        </div>`).join('')}
+      ${iliskiHtml.join('')}
     </div></div>
     <div class="bolum"><h4>Bilgiler</h4><div class="alan-grid">
       ${metinAlanlar.map(([k, l, t]) => `<div>
@@ -1730,6 +1747,14 @@ async function cihazDuzenle(id) {
     <div id="duzInfo" class="note"></div>`);
 }
 
+// Model değişince Kategori kutusu yeni modelin kategorisini gösterir
+function modelKatEsitle() {
+  const mid = Number(document.getElementById('s_model_id').value || 0);
+  const sec = document.getElementById('mk_kategori');
+  sec.disabled = !mid;
+  sec.value = mid ? (duzenleModelKat[mid] ?? '') : '';
+}
+
 async function cihazKaydet(id) {
   const govde = {};
   for (const el of document.querySelectorAll('[id^="e_"]')) {
@@ -1741,6 +1766,17 @@ async function cihazKaydet(id) {
     govde[el.id.slice(2)] = el.value ? Number(el.value) : null;
   }
   try {
+    // Kategori değiştiyse önce modele yazılır (o modelin tüm cihazlarına işler)
+    const katEl = document.getElementById('mk_kategori');
+    if (govde.model_id && katEl && !katEl.disabled) {
+      const yeniKat = katEl.value ? Number(katEl.value) : null;
+      if (yeniKat !== (duzenleModelKat[govde.model_id] ?? null)) {
+        await api('/models/' + govde.model_id, { method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category_id: yeniKat }) });
+        duzenleModelKat[govde.model_id] = yeniKat;
+      }
+    }
     await api('/assets/' + id, { method: 'PUT',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
     cihazDetay(id);
