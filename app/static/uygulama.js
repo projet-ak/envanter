@@ -1922,11 +1922,13 @@ function renderAssetsView() {
                placeholder="Etiket / seri / demirbaş / kişi / şantiye ara…"
                oninput="gecikmeliAra()" />
         <button class="ghost" onclick="filtreTemizle()">Temizle</button>
+        <button class="ghost" id="arsivDug" onclick="varlikArsivDegis()"
+                title="Tedavülden kalkan cihazlar">🗃 Arşiv</button>
       </div>
       <div id="filtreBilgi" class="note"></div>
     </div>
     <div class="panel">
-      <h2>Varlıklar (<span id="count">0</span><span id="toplamBilgi"></span>)</h2>
+      <h2 id="varlikBaslik">Varlıklar (<span id="count">0</span><span id="toplamBilgi"></span>)</h2>
       <div id="varlikTablo"></div>
       <div id="dahaFazla" class="row" style="margin-top:12px"></div>
     </div>`;
@@ -2003,7 +2005,24 @@ function filtreSorgusu() {
   ekle('fDurum', 'status_id');
   ekle('fZimmet', 'assigned');
   ekle('fAra', 'q');
+  if (varlikArsiv) p.set('arsiv', 'true');
   return p;
+}
+
+// Arşiv görünümü: tedavülden kalkan cihazlar ayrı listede yaşar
+let varlikArsiv = false;
+
+function varlikArsivDegis() {
+  varlikArsiv = !varlikArsiv;
+  const dug = document.getElementById('arsivDug');
+  if (dug) {
+    dug.classList.toggle('sec-sayfa', varlikArsiv);
+    dug.textContent = varlikArsiv ? '↩ Listeye dön' : '🗃 Arşiv';
+  }
+  const baslik = document.getElementById('varlikBaslik');
+  if (baslik) baslik.firstChild.textContent = varlikArsiv
+    ? '🗃 Arşiv (' : 'Varlıklar (';
+  loadAssets();
 }
 
 // Varlık listesi durumu: seçim, sıralama, sayfalama (istemci tarafı —
@@ -2089,12 +2108,19 @@ function varlikTabloCiz() {
          onclick="cihazDetay(${a.id})">👁</button>`,
       yaz ? `<button class="islem-kup duzen" title="Düzenle"
          onclick="cihazDuzenle(${a.id})">✏️</button>` : '',
-      yaz ? (a.assigned_type
+      yaz && !varlikArsiv ? (a.assigned_type
         ? `<button class="islem-kup zimmet" title="İade al"
              onclick="checkin(${a.id})">↩</button>`
         : `<button class="islem-kup zimmet" title="Zimmetle"
              onclick="checkoutPrompt(${a.id}, '${
                encodeURIComponent(a.asset_tag)}')">🤝</button>`) : '',
+      // Tedavülden kalkan cihaz: boştaysa arşive, arşivdeyse tedavüle
+      yaz ? (varlikArsiv
+        ? `<button class="islem-kup notr" title="Arşivden çıkar (tedavüle dön)"
+             onclick="varlikArsivle(${a.id}, false)">♻️</button>`
+        : (!a.assigned_type ? `<button class="islem-kup notr"
+             title="Arşive kaldır (tedavülden çıkar)"
+             onclick="varlikArsivle(${a.id}, true)">🗃</button>` : '')) : '',
       `<button class="islem-kup notr" title="Etiket bas (QR + barkod)"
          onclick="openPdf('/documents/etiket/asset/${a.id}.pdf')">🏷️</button>`,
     ].join('');
@@ -2145,6 +2171,10 @@ function varlikTabloCiz() {
     <div class="toplu-cubuk">
       ${yaz ? `<button class="tehlike" ${varlikSecim.size ? '' : 'disabled'}
         onclick="varlikSecilenleriSil()">🗑 Seçilileri sil (${varlikSecim.size})</button>` : ''}
+      ${yaz ? `<button class="ghost" ${varlikSecim.size ? '' : 'disabled'}
+        onclick="varlikSecilenleriArsivle()">${varlikArsiv
+          ? `♻️ Seçilileri tedavüle döndür (${varlikSecim.size})`
+          : `🗃 Seçilileri arşivle (${varlikSecim.size})`}</button>` : ''}
       <div class="acilir" id="disaAktarKutu">
         <button class="ghost" onclick="document.getElementById('disaAktarKutu')
             .classList.toggle('acik')">⬇ Dışa aktar ▾</button>
@@ -2183,15 +2213,49 @@ async function varlikSecilenleriSil() {
   const adet = varlikSecim.size;
   if (!adet) return;
   if (!confirm(`${adet} cihaz kalıcı olarak silinecek. Emin misiniz?\n` +
-               'Bu işlem geri alınamaz; zimmet geçmişi kayıtlarda kalır.')) return;
-  let hata = 0;
+               'Zimmetli cihazlar silinmez (önce iade alın); ' +
+               'tedavülden kalkanlar için Arşivle kullanın.')) return;
+  let hata = 0, sonHata = '';
   for (const id of varlikSecim) {
     try { await api('/assets/' + id, { method: 'DELETE' }); }
-    catch { hata += 1; }
+    catch (e) { hata += 1; sonHata = e.detail || ''; }
   }
   varlikSecim.clear();
   await loadAssets();
-  if (hata) alert(`⚠ ${hata} cihaz silinemedi (yetki ya da bağlı kayıt).`);
+  if (hata) alert(`⚠ ${hata} cihaz silinemedi.` +
+                  (sonHata ? `\nSon hata: ${sonHata}` : ''));
+}
+
+// Tek cihazı arşive kaldır / arşivden çıkar (satır küpü)
+async function varlikArsivle(id, arsive) {
+  if (arsive && !confirm('Cihaz arşive kaldırılacak: listeden düşer ama ' +
+      'geçmişi ve dosyaları silinmez. Devam edilsin mi?')) return;
+  try {
+    await api(`/assets/${id}/${arsive ? 'arsivle' : 'arsivden-cikar'}`,
+              { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: '{}' });
+    loadAssets();
+  } catch (e) { alert('⚠ ' + (e.detail || 'İşlem yapılamadı')); }
+}
+
+async function varlikSecilenleriArsivle() {
+  const adet = varlikSecim.size;
+  if (!adet) return;
+  const uc = varlikArsiv ? 'arsivden-cikar' : 'arsivle';
+  if (!varlikArsiv && !confirm(`${adet} cihaz arşive kaldırılacak (silinmez, ` +
+      'listeden düşer). Zimmetli olanlar atlanır. Devam edilsin mi?')) return;
+  let hata = 0, sonHata = '';
+  for (const id of varlikSecim) {
+    try {
+      await api(`/assets/${id}/${uc}`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: '{}' });
+    } catch (e) { hata += 1; sonHata = e.detail || ''; }
+  }
+  varlikSecim.clear();
+  await loadAssets();
+  if (hata) alert(`⚠ ${hata} cihaz için işlem yapılamadı.` +
+                  (sonHata ? `\nSon hata: ${sonHata}` : ''));
 }
 
 function varlikExcel() {

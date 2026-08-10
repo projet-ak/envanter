@@ -17,6 +17,22 @@ READ = [Depends(get_current_user)]
 WRITE = [Depends(require_editor)]
 
 
+def _arsiv_suzgeci(stmt, arsiv: bool):
+    """Tedavülden kalkan (arşiv durumundaki) cihazları listeden ayırır.
+
+    Varsayılan liste arşivdekileri GÖSTERMEZ; `arsiv=true` yalnız onları
+    getirir. Durumu hiç olmayan cihazlar normal listede kalır.
+    """
+    from sqlalchemy import or_
+
+    arsiv_durumlari = select(models.StatusLabel.id).where(
+        models.StatusLabel.type == models.StatusType.archived)
+    if arsiv:
+        return stmt.where(models.Asset.status_id.in_(arsiv_durumlari))
+    return stmt.where(or_(models.Asset.status_id.is_(None),
+                          models.Asset.status_id.not_in(arsiv_durumlari)))
+
+
 def _log(
     db: Session,
     *,
@@ -54,11 +70,13 @@ def list_assets(
     user_id: int | None = Query(None, description="Zimmetli olduğu personel"),
     proje_kodu: str | None = Query(None, description="Lokasyonun proje kodu (örn. U023)"),
     assigned: bool | None = Query(None, description="true=zimmetli, false=boşta"),
+    arsiv: bool = Query(False, description="true=yalnız arşivdekiler; "
+                        "varsayılan liste arşivi göstermez"),
     q: str | None = Query(
         None, description="Etiket/seri/ad/demirbaş/IP veya zimmetli personel adı"),
     db: Session = Depends(get_db),
 ):
-    stmt = select(models.Asset)
+    stmt = _arsiv_suzgeci(select(models.Asset), arsiv)
     if status_id is not None:
         stmt = stmt.where(models.Asset.status_id == status_id)
     if location_id is not None:
@@ -194,13 +212,14 @@ def asset_sayisi(
     user_id: int | None = None,
     proje_kodu: str | None = None,
     assigned: bool | None = None,
+    arsiv: bool = False,
     q: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Filtrelere uyan toplam kayıt sayısı (sayfalamadan bağımsız)."""
     from sqlalchemy import func
 
-    stmt = select(func.count(models.Asset.id))
+    stmt = _arsiv_suzgeci(select(func.count(models.Asset.id)), arsiv)
     if status_id is not None:
         stmt = stmt.where(models.Asset.status_id == status_id)
     if location_id is not None:
@@ -300,14 +319,82 @@ def update_asset(
     return asset
 
 
-@router.delete("/{asset_id}", status_code=204, dependencies=WRITE)
-def delete_asset(asset_id: int, db: Session = Depends(get_db)):
+@router.delete("/{asset_id}", status_code=204)
+def delete_asset(asset_id: int, db: Session = Depends(get_db),
+                 aktor: models.User = Depends(require_editor)):
     asset = db.get(models.Asset, asset_id)
     if asset is None:
         raise HTTPException(404, "Varlık bulunamadı")
-    _log(db, action=models.ActivityAction.delete, asset_id=asset.id)
+    # Zimmetli cihaz yanlışlıkla silinmesin: bağlantısı kopmadan kayıt gitmez
+    if asset.assigned_type is not None:
+        raise HTTPException(
+            409, f"{asset.asset_tag} zimmetli — önce iade alın. Tedavülden "
+                 "kalkan cihaz için silmek yerine arşivlemeyi düşünün.")
+    _log(db, action=models.ActivityAction.delete, asset_id=asset.id,
+         actor=_aktor_adi(aktor))
     db.delete(asset)
     db.commit()
+
+
+def _arsiv_etiketi(db: Session) -> models.StatusLabel:
+    durum = db.scalar(select(models.StatusLabel).where(
+        models.StatusLabel.type == models.StatusType.archived))
+    if durum is None:
+        durum = models.StatusLabel(name="Arşiv",
+                                   type=models.StatusType.archived)
+        db.add(durum)
+        db.flush()
+    return durum
+
+
+@router.post("/{asset_id}/arsivle", response_model=schemas.AssetRead)
+def arsivle(asset_id: int, db: Session = Depends(get_db),
+            aktor: models.User = Depends(require_editor)):
+    """Tedavülden kalkan cihazı arşive kaldırır.
+
+    Kayıt silinmez: geçmişi, dosyaları ve künyesi durur; yalnızca durumu
+    "Arşiv" olur ve varsayılan listeden düşer (arsiv=true ile görünür).
+    """
+    asset = db.get(models.Asset, asset_id)
+    if asset is None:
+        raise HTTPException(404, "Varlık bulunamadı")
+    if asset.assigned_type is not None:
+        raise HTTPException(409, f"{asset.asset_tag} zimmetli — önce iade alın")
+    durum = _arsiv_etiketi(db)
+    if asset.status_id == durum.id:
+        raise HTTPException(409, "Cihaz zaten arşivde")
+    eski = asset.status_id
+    asset.status_id = durum.id
+    _log(db, action=models.ActivityAction.update, asset_id=asset.id,
+         note="Tedavülden kaldırıldı — arşive taşındı",
+         changes={"status_id": {"eski": str(eski), "yeni": str(durum.id)}},
+         actor=_aktor_adi(aktor))
+    db.commit()
+    db.refresh(asset)
+    return asset
+
+
+@router.post("/{asset_id}/arsivden-cikar", response_model=schemas.AssetRead)
+def arsivden_cikar(asset_id: int, db: Session = Depends(get_db),
+                   aktor: models.User = Depends(require_editor)):
+    """Arşivdeki cihazı tedavüle döndürür (durum: kullanıma hazır)."""
+    asset = db.get(models.Asset, asset_id)
+    if asset is None:
+        raise HTTPException(404, "Varlık bulunamadı")
+    arsiv = _arsiv_etiketi(db)
+    if asset.status_id != arsiv.id:
+        raise HTTPException(409, "Cihaz arşivde değil")
+    hazir = db.scalar(select(models.StatusLabel).where(
+        models.StatusLabel.type == models.StatusType.deployable))
+    eski = asset.status_id
+    asset.status_id = hazir.id if hazir else None
+    _log(db, action=models.ActivityAction.update, asset_id=asset.id,
+         note="Arşivden çıkarıldı — tedavüle döndü",
+         changes={"status_id": {"eski": str(eski), "yeni": str(asset.status_id)}},
+         actor=_aktor_adi(aktor))
+    db.commit()
+    db.refresh(asset)
+    return asset
 
 
 @router.post("/{asset_id}/checkout", response_model=schemas.AssetRead)
