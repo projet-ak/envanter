@@ -442,6 +442,24 @@ Betik model adına (gerekirse marka + ad ve cihaz adlarına) bakar; hedef
 kategori yoksa türün resmi adıyla açar. Cihaz kayıtlarına dokunmaz —
 yalnızca modelin kategorisi değişir, zimmet/dosya/etiket aynen kalır.
 
+### Mükerrer kayıtlar
+
+Üç engel birden çalışır: içe aktarım serisiz satırları etiketle eşleştirir
+(yeniden aktarım "B001-2, B001-3" çoğaltmaz), arayüz aynı adla ikinci
+lokasyon/kategori/üretici/tedarikçi/şirket açtırmaz (Türkçe harf ve
+büyük/küçük farkları da aynı sayılır) ve aynı seri numarasıyla ikinci cihaz
+kaydedilmez. Birikmiş mükerrerler için:
+
+```bash
+./.venv/bin/python scripts/mukerrer-temizle.py             # rapor
+./.venv/bin/python scripts/mukerrer-temizle.py --uygula    # lokasyonları birleştir
+```
+
+Lokasyon birleştirmede cihaz/zimmet/personel bağlantıları kalan kayda
+taşınır, veri kaybolmaz. Cihaz mükerrerleri (aynı seri ya da B001/B001-2
+grupları) yalnızca raporlanır — hangisinin kalacağına bakıp Varlıklar
+ekranında onay kutularıyla seçip "Seçilileri sil" ile temizlersiniz.
+
 ### Marka nerede tutulur?
 
 Marka cihaz kaydında değil **modelde** durur:
@@ -965,6 +983,7 @@ scripts/
   ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
   ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
   kategori-duzelt.py # Yanlış kategorideki modelleri bul/doğrusuna taşı
+  mukerrer-temizle.py # Mükerrer lokasyonları birleştir, mükerrer cihazları raporla
   marka-kontrol.py   # Markası boş modelleri bul/doldur
   snipeit-karsilastir.py # Snipe-IT dışa aktarımı/dökümüyle karşılaştır, boşları doldur
   snipeit-dosya-aktar.py # Snipe-IT görsel ve belgelerini aktar

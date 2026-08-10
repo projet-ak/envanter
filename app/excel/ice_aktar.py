@@ -390,8 +390,25 @@ def aktar(db: Session, satirlar: list[dict], *, varsayilan_durum_id: int | None 
                 varlik = db.scalar(
                     select(models.Asset).where(models.Asset.serial == s["serial"])
                 )
+            # Seri numarası boş satırlar etiketle eşleştirilir — yoksa her
+            # yeniden aktarım aynı cihazı "-2, -3" ekleriyle çoğaltıyordu
+            # (B001, B001-2, B001-3…). Dosya İÇİNDE tekrar eden etiketler ayrı
+            # cihazlardır: etiket bu koşuda kullanıldıysa sıradaki sonek adayı
+            # denenir — böylece ikinci satır önceki aktarımın B001-2'siyle
+            # eşleşir, B001-3 açılmaz.
+            etiket = (s.get("asset_tag") or "").strip()
+            if guncelle and varlik is None and etiket:
+                aday, n = etiket, 1
+                while aday in kullanilan_etiketler:
+                    n += 1
+                    aday = f"{etiket}-{n}"
+                varlik = db.scalar(
+                    select(models.Asset).where(models.Asset.asset_tag == aday)
+                )
 
             yeni_mi = varlik is None
+            if varlik is not None and varlik.asset_tag:
+                kullanilan_etiketler.add(varlik.asset_tag)
             if yeni_mi:
                 varlik = models.Asset(
                     asset_tag=_benzersiz_etiket(

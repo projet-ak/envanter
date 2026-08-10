@@ -10,12 +10,31 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_editor
 from app.database import get_db
+from app.excel.sema import _sadelestir
 
 
-def make_crud_router(*, model, create_schema, update_schema, read_schema, prefix, tag):
+def make_crud_router(*, model, create_schema, update_schema, read_schema,
+                     prefix, tag, essiz_ad: bool = False):
+    """`essiz_ad=True` verilen tablolarda aynı ada ikinci kayıt açılamaz.
+
+    Karşılaştırma _sadelestir ile yapılır: "ŞANTİYE U026", "Şantiye U026" ve
+    "santiye u026" aynı sayılır. Mükerrer lokasyon/kategori kayıtlarının ana
+    kaynağı buydu — içe aktarım Python tarafında eşleştirse de elle eklenen
+    ikinci yazım listeyi bölüyordu.
+    """
     router = APIRouter(prefix=prefix, tags=[tag])
     read = [Depends(get_current_user)]   # okuma: giriş şart
     write = [Depends(require_editor)]    # yazma: en az 'editor'
+
+    def _ayni_adli(db: Session, ad, haric_id=None):
+        if not (essiz_ad and ad and hasattr(model, "name")):
+            return None
+        anahtar = _sadelestir(ad)
+        for kimlik, mevcut_ad in db.execute(select(model.id, model.name)).all():
+            if kimlik != haric_id and mevcut_ad \
+                    and _sadelestir(mevcut_ad) == anahtar:
+                return mevcut_ad
+        return None
 
     @router.get("", response_model=list[read_schema], dependencies=read)
     def list_items(
@@ -32,7 +51,13 @@ def make_crud_router(*, model, create_schema, update_schema, read_schema, prefix
 
     @router.post("", response_model=read_schema, status_code=201, dependencies=write)
     def create_item(payload: create_schema, db: Session = Depends(get_db)):  # type: ignore[valid-type]
-        obj = model(**payload.model_dump(exclude_unset=True))
+        veri = payload.model_dump(exclude_unset=True)
+        ayni = _ayni_adli(db, veri.get("name"))
+        if ayni:
+            raise HTTPException(
+                409, f"Aynı adla kayıt zaten var: {ayni}. "
+                     "Mükerrer kayıt açmak yerine mevcut kaydı kullanın.")
+        obj = model(**veri)
         db.add(obj)
         db.commit()
         db.refresh(obj)
@@ -50,7 +75,12 @@ def make_crud_router(*, model, create_schema, update_schema, read_schema, prefix
         obj = db.get(model, item_id)
         if obj is None:
             raise HTTPException(404, f"{tag} bulunamadı")
-        for key, value in payload.model_dump(exclude_unset=True).items():
+        veri = payload.model_dump(exclude_unset=True)
+        ayni = _ayni_adli(db, veri.get("name"), haric_id=item_id)
+        if ayni:
+            raise HTTPException(
+                409, f"Aynı adla başka kayıt var: {ayni}.")
+        for key, value in veri.items():
             setattr(obj, key, value)
         db.commit()
         db.refresh(obj)

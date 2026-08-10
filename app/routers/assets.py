@@ -236,11 +236,27 @@ def _tam_ad(kullanici: models.User) -> str | None:
     return " ".join(filter(None, [kullanici.first_name, kullanici.last_name])) or None
 
 
+def _seri_mukerrer(db: Session, seri: str | None,
+                   haric_id: int | None = None) -> None:
+    """Dolu seri numarası başka cihazda varsa 409 — mükerrer kaydın ana kaynağı."""
+    if not (seri or "").strip():
+        return
+    stmt = select(models.Asset).where(models.Asset.serial == seri)
+    if haric_id is not None:
+        stmt = stmt.where(models.Asset.id != haric_id)
+    ayni = db.scalar(stmt)
+    if ayni:
+        raise HTTPException(
+            409, f"Bu seri numarası zaten {ayni.asset_tag} cihazında kayıtlı — "
+                 "mükerrer kayıt açmak yerine o kaydı güncelleyin.")
+
+
 @router.post("", response_model=schemas.AssetRead, status_code=201)
 def create_asset(payload: schemas.AssetCreate, db: Session = Depends(get_db),
                  aktor: models.User = Depends(require_editor)):
     if db.scalar(select(models.Asset).where(models.Asset.asset_tag == payload.asset_tag)):
         raise HTTPException(409, f"'{payload.asset_tag}' etiketi zaten kullanımda")
+    _seri_mukerrer(db, payload.serial)
     asset = models.Asset(**payload.model_dump())
     db.add(asset)
     db.flush()
@@ -267,8 +283,11 @@ def update_asset(
     asset = db.get(models.Asset, asset_id)
     if asset is None:
         raise HTTPException(404, "Varlık bulunamadı")
+    veri = payload.model_dump(exclude_unset=True)
+    if "serial" in veri:
+        _seri_mukerrer(db, veri["serial"], haric_id=asset_id)
     changes: dict = {}
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    for key, value in veri.items():
         old = getattr(asset, key)
         if old != value:
             changes[key] = {"eski": str(old), "yeni": str(value)}

@@ -9,6 +9,7 @@ companies = make_crud_router(
     update_schema=schemas.CompanyUpdate,
     read_schema=schemas.CompanyRead,
     prefix="/companies",
+    essiz_ad=True,
     tag="Şirketler",
 )
 
@@ -18,6 +19,7 @@ locations = make_crud_router(
     update_schema=schemas.LocationUpdate,
     read_schema=schemas.LocationRead,
     prefix="/locations",
+    essiz_ad=True,
     tag="Lokasyonlar",
 )
 
@@ -27,6 +29,7 @@ manufacturers = make_crud_router(
     update_schema=schemas.ManufacturerUpdate,
     read_schema=schemas.ManufacturerRead,
     prefix="/manufacturers",
+    essiz_ad=True,
     tag="Üreticiler",
 )
 
@@ -36,6 +39,7 @@ suppliers = make_crud_router(
     update_schema=schemas.SupplierUpdate,
     read_schema=schemas.SupplierRead,
     prefix="/suppliers",
+    essiz_ad=True,
     tag="Tedarikçiler",
 )
 
@@ -45,6 +49,7 @@ categories = make_crud_router(
     update_schema=schemas.CategoryUpdate,
     read_schema=schemas.CategoryRead,
     prefix="/categories",
+    essiz_ad=True,
     tag="Kategoriler",
 )
 
