@@ -124,6 +124,8 @@ class Location(Base, TimestampMixin, ExternalMixin):
     country: Mapped[str | None] = mapped_column(String(120))
     # Şantiye/proje bazlı takip için (örn. U023, U026)
     proje_kodu: Mapped[str | None] = mapped_column(String(60), index=True)
+    # Arayüzde lokasyonu ayırt eden renk (#RRGGBB); boşsa renksiz görünür
+    renk: Mapped[str | None] = mapped_column(String(7))
 
     parent: Mapped[Location | None] = relationship(remote_side="Location.id")
 

@@ -152,3 +152,38 @@ def test_islem_gecmisi_zimmet_ve_iade_kayitlari(client):
     g = client.get(f"/detay/asset/{a['id']}").json()["gecmis"]
     assert [x["islem"] for x in g] == ["checkin", "checkout", "create"]
     assert all(x["yapan"] for x in g)
+
+
+def test_lokasyon_detayi_cihaz_ve_kisileri_verir(client):
+    lok = client.post("/locations", json={"name": "ŞANTİYE U099",
+                                          "proje_kodu": "U099",
+                                          "renk": "#15803d"}).json()
+    assert lok["renk"] == "#15803d"
+    k = client.post("/users", json={"first_name": "Saha", "last_name": "Şefi",
+                                    "job_title": "Şef",
+                                    "location_id": lok["id"]}).json()
+    a1 = client.post("/assets", json={"asset_tag": "LD-1", "name": "Dizüstü",
+                                      "location_id": lok["id"]}).json()
+    client.post("/assets", json={"asset_tag": "LD-2", "location_id": lok["id"]})
+    client.post(f"/assets/{a1['id']}/checkout",
+                json={"assigned_type": "user", "assigned_id": k["id"]})
+
+    d = client.get(f"/detay/location/{lok['id']}").json()
+    assert d["lokasyon"]["renk"] == "#15803d"
+    assert d["cihaz_sayisi"] == 2 and d["zimmetli_sayisi"] == 1
+    assert [x["ad"] for x in d["kisiler"]] == ["Saha Şefi"]
+    c = next(x for x in d["cihazlar"] if x["asset_tag"] == "LD-1")
+    assert c["zimmetli"] == "Saha Şefi"
+
+    sayilar = client.get("/detay/lokasyon-sayilari").json()
+    s = next(x for x in sayilar if x["location_id"] == lok["id"])
+    assert (s["cihaz"], s["zimmetli"], s["kisi"]) == (2, 1, 1)
+
+
+def test_lokasyon_rengi_dogrulanir(client):
+    r = client.post("/locations", json={"name": "Renk Testi",
+                                        "renk": "kırmızı"})
+    assert r.status_code == 422        # yalnız #RRGGBB kabul
+    lok = client.post("/locations", json={"name": "Renk Testi"}).json()
+    r = client.put(f"/locations/{lok['id']}", json={"renk": "#b91c1c"})
+    assert r.status_code == 200 and r.json()["renk"] == "#b91c1c"

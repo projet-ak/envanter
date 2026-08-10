@@ -222,6 +222,83 @@ def _kullanim_gecmisi(db: Session, asset_id: int) -> list[dict]:
     return satirlar
 
 
+@router.get("/lokasyon-sayilari")
+def lokasyon_sayilari(db: Session = Depends(get_db)):
+    """Lokasyon başına bağlı cihaz / zimmetli cihaz / personel sayıları.
+
+    Tanımlar → Lokasyonlar listesi bu sayıları sütun olarak gösterir;
+    tek istekte hepsi gelir (satır başına sorgu atılmaz).
+    """
+    from sqlalchemy import func
+
+    cihaz = dict(db.execute(
+        select(models.Asset.location_id, func.count())
+        .where(models.Asset.location_id.is_not(None))
+        .group_by(models.Asset.location_id)).all())
+    zimmetli = dict(db.execute(
+        select(models.Asset.location_id, func.count())
+        .where(models.Asset.location_id.is_not(None),
+               models.Asset.assigned_type.is_not(None))
+        .group_by(models.Asset.location_id)).all())
+    kisi = dict(db.execute(
+        select(models.User.location_id, func.count())
+        .where(models.User.location_id.is_not(None))
+        .group_by(models.User.location_id)).all())
+
+    return [
+        {"location_id": lok_id,
+         "cihaz": cihaz.get(lok_id, 0),
+         "zimmetli": zimmetli.get(lok_id, 0),
+         "kisi": kisi.get(lok_id, 0)}
+        for lok_id in {*cihaz, *zimmetli, *kisi}
+    ]
+
+
+@router.get("/location/{location_id}")
+def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
+    """Lokasyonun künyesi + bağlı cihazlar ve personel.
+
+    Cihazlar özet künyeyle döner; arayüz her satırdan düzenleme/detay
+    penceresine geçer ("lokasyona tıkla → cihazları güncelle" akışı).
+    """
+    lok = db.get(models.Location, location_id)
+    if lok is None:
+        raise HTTPException(404, "Lokasyon bulunamadı")
+
+    varliklar = db.scalars(
+        select(models.Asset)
+        .where(models.Asset.location_id == location_id)
+        .order_by(models.Asset.asset_tag)).all()
+    kisiler = db.scalars(
+        select(models.User)
+        .where(models.User.location_id == location_id)
+        .order_by(models.User.first_name)).all()
+
+    cihazlar = []
+    for a in varliklar:
+        ozet = _varlik_ozeti(db, a)
+        ozet["zimmetli"] = _kisi_adi(
+            db.get(models.User, a.assigned_user_id)) \
+            if a.assigned_user_id else None
+        cihazlar.append(ozet)
+
+    return {
+        "lokasyon": {
+            "id": lok.id, "name": lok.name, "proje_kodu": lok.proje_kodu,
+            "city": lok.city, "address": lok.address, "renk": lok.renk,
+        },
+        "cihaz_sayisi": len(cihazlar),
+        "zimmetli_sayisi": sum(1 for c in varliklar
+                               if c.assigned_type is not None),
+        "cihazlar": cihazlar,
+        "kisiler": [
+            {"id": k.id, "ad": _kisi_adi(k), "unvan": k.job_title,
+             "sicil": k.employee_num, "telefon": k.telefon}
+            for k in kisiler
+        ],
+    }
+
+
 @router.get("/user/{user_id}")
 def kisi_detay(user_id: int, db: Session = Depends(get_db)):
     """Kişinin bilgileri ve zimmetindeki tüm cihazlar (özellikleriyle)."""

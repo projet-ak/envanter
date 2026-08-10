@@ -44,6 +44,7 @@ class LocationCreate(BaseModel):
     address: str | None = None
     city: str | None = None
     country: str | None = None
+    renk: str | None = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
 
 
 class LocationUpdate(BaseModel):
@@ -53,6 +54,7 @@ class LocationUpdate(BaseModel):
     address: str | None = None
     city: str | None = None
     country: str | None = None
+    renk: str | None = Field(None, pattern=r"^#[0-9a-fA-F]{6}$")
 
 
 class LocationRead(ORMModel):
@@ -63,6 +65,7 @@ class LocationRead(ORMModel):
     address: str | None = None
     city: str | None = None
     country: str | None = None
+    renk: str | None = None
 
 
 class ManufacturerCreate(BaseModel):

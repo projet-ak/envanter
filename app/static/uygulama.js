@@ -507,13 +507,44 @@ function tanimGoster(cfg, it, k) {
 
 async function loadTanim() {
   const cfg = TANIMLAR[aktifTanim];
-  const items = await api(cfg.endpoint + '?limit=500');
+  const lokMu = aktifTanim === 'locations';
+  const [items, lokSayilar] = await Promise.all([
+    api(cfg.endpoint + '?limit=500'),
+    lokMu ? api('/detay/lokasyon-sayilari').catch(() => []) : Promise.resolve(null),
+  ]);
   await tanimSecenekleriYukle(cfg);
+  const sayiMap = lokSayilar
+    ? Object.fromEntries(lokSayilar.map(x => [x.location_id, x])) : null;
+
   const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
+    (lokMu ? '<th>Cihaz</th><th>Kişi</th>' : '') +
     (canWrite() ? '<th></th>' : '');
-  const rows = items.map(it => `<tr${canWrite() ? ' class="tikla" onclick="tanimDuzenle(' + it.id + ')"' : ''}>` +
-    cfg.cols.map(([k]) => `<td>${tanimGoster(cfg, it, k)}</td>`).join('') +
-    (canWrite() ? '<td class="muted">✏️</td>' : '') + '</tr>').join('');
+  const rows = items.map(it => {
+    const hucreler = cfg.cols.map(([k]) => {
+      let v = tanimGoster(cfg, it, k);
+      // Lokasyon adının önünde rengi görünsün
+      if (lokMu && k === 'name') v = `${renkNokta(it.renk)}<b>${v}</b>`;
+      return `<td>${v}</td>`;
+    }).join('');
+    let ekstra = '';
+    if (sayiMap) {
+      const s = sayiMap[it.id] || { cihaz: 0, zimmetli: 0, kisi: 0 };
+      ekstra = `<td>${s.cihaz
+          ? `<span class="tag">${s.cihaz} cihaz</span>` +
+            (s.zimmetli ? ` <span class="tag used">${s.zimmetli} zimmetli</span>` : '')
+          : '<span class="muted">—</span>'}</td>
+        <td>${s.kisi ? `<span class="tag free">${s.kisi} kişi</span>`
+                     : '<span class="muted">—</span>'}</td>`;
+    }
+    // Lokasyon satırı detayı açar (cihazlar oradan güncellenir);
+    // kalem simgesi yine düzenlemeye gider.
+    const tikla = lokMu ? `class="tikla" onclick="lokasyonDetay(${it.id})"`
+      : (canWrite() ? `class="tikla" onclick="tanimDuzenle(${it.id})"` : '');
+    const kalem = canWrite()
+      ? `<td class="muted" onclick="event.stopPropagation();tanimDuzenle(${it.id})">✏️</td>`
+      : '';
+    return `<tr ${tikla}>${hucreler}${ekstra}${kalem}</tr>`;
+  }).join('');
   document.getElementById('tanimIcerik').innerHTML = `
     ${canWrite() ? `<div class="panel">
       <h2>${cfg.label} — ekle</h2>
@@ -526,6 +557,8 @@ async function loadTanim() {
           ${(tanimSecenek[k] || []).map(o =>
             `<option value="${o.id}">${kacir(o.name)}</option>`).join('')}
         </select>`).join('')}
+        ${lokMu ? `<select id="t_renk" title="Lokasyon rengi">
+          ${renkSecenekleri('')}</select>` : ''}
         <button class="primary" onclick="addTanim()">Ekle</button>
       </div>
       <div id="tanimInfo" class="note"></div>
@@ -562,6 +595,10 @@ async function tanimDuzenle(id) {
             `<option value="${o.id}" ${o.id === kayit[k] ? 'selected' : ''}
              >${kacir(o.name)}</option>`).join('')}
         </select></div>`).join('')}
+      ${aktifTanim === 'locations' ? `<div>
+        <div class="stat-l" style="margin-bottom:3px">Renk</div>
+        <select id="td_renk" style="width:100%">
+          ${renkSecenekleri(kayit.renk)}</select></div>` : ''}
     </div>
     <div class="row" style="margin-top:16px">
       <button class="primary" onclick="tanimKaydet(${id})">Kaydet</button>
@@ -609,6 +646,55 @@ async function tanimSil(id) {
   }
 }
 
+// ---------- Lokasyon detayı: bağlı cihazlar + personel ----------
+// Tanımlar'daki lokasyon satırına tıklayınca açılır; cihazlar buradan
+// görüntülenir ve ✏️ ile doğrudan güncellenir.
+async function lokasyonDetay(id) {
+  let d;
+  try { d = await api('/detay/location/' + id); }
+  catch (e) { return alert('⚠ ' + (e.detail || 'Detay alınamadı')); }
+  const lok = d.lokasyon;
+  const yaz = canWrite();
+
+  const kisiler = d.kisiler.length ? `<div class="row" style="flex-wrap:wrap">
+      ${d.kisiler.map(k => `<button class="ghost" onclick="kisiDetay(${k.id})">
+        👤 ${kacir(k.ad)}${k.unvan ? ` <span class="muted">· ${kacir(k.unvan)}</span>` : ''}
+      </button>`).join('')}</div>`
+    : '<div class="muted">Bu lokasyona bağlı personel yok</div>';
+
+  const cihazlar = d.cihazlar.length ? `<table><thead><tr>
+      <th>Etiket</th><th>Ad</th><th class="gizle-mobil">Tip</th>
+      <th>Durum</th><th class="gizle-mobil">Zimmetli</th><th></th>
+      </tr></thead><tbody>
+      ${d.cihazlar.map(c => `<tr class="tikla"
+          onclick="if(!event.target.closest('button'))cihazDetay(${c.id})">
+        <td><b>${kacir(c.asset_tag)}</b></td>
+        <td>${esc(c.name)}</td>
+        <td class="muted gizle-mobil">${esc(c.kategori)}</td>
+        <td>${c.durum ? `<span class="tag">${kacir(c.durum)}</span>` : '—'}</td>
+        <td class="muted gizle-mobil">${esc(c.zimmetli)}</td>
+        <td><div class="kup-kume">
+          <button class="islem-kup gor" title="Görüntüle"
+            onclick="cihazDetay(${c.id})">👁</button>
+          ${yaz ? `<button class="islem-kup duzen" title="Güncelle"
+            onclick="cihazDuzenle(${c.id})">✏️</button>` : ''}
+        </div></td></tr>`).join('')}</tbody></table>`
+    : '<div class="muted">Bu lokasyonda kayıtlı cihaz yok</div>';
+
+  modalAc(`${renkNokta(lok.renk)}📍 ${kacir(lok.name)}`, `
+    <div class="bolum"><h4>Künye</h4>${alanlar({
+      proje_kodu: lok.proje_kodu, sehir: lok.city, adres: lok.address,
+      cihaz: `${d.cihaz_sayisi} (${d.zimmetli_sayisi} zimmetli)`,
+      personel: d.kisiler.length,
+    }, [['proje_kodu','Proje Kodu'],['sehir','Şehir'],['adres','Adres'],
+        ['cihaz','Cihaz'],['personel','Personel']])}</div>
+    <div class="bolum"><h4>Bağlı Personel (${d.kisiler.length})</h4>
+      ${kisiler}</div>
+    <div class="bolum"><h4>Cihazlar (${d.cihaz_sayisi})</h4>
+      <div style="max-height:380px;overflow-y:auto">${cihazlar}</div></div>`,
+    yaz ? `<button class="ghost" onclick="tanimDuzenle(${id})">✏️ Düzenle</button>` : '');
+}
+
 async function addTanim() {
   const cfg = TANIMLAR[aktifTanim];
   const body = {};
@@ -620,6 +706,8 @@ async function addTanim() {
     const v = document.getElementById('t_' + k)?.value;
     if (v) body[k] = Number(v);
   }
+  const renkEl = document.getElementById('t_renk');
+  if (renkEl?.value) body.renk = renkEl.value;
   if (!body.name) { tanimInfo.textContent = 'Ad zorunlu.'; return; }
   try {
     await api(cfg.endpoint, { method: 'POST',
@@ -1071,6 +1159,18 @@ const trTarih = (v, saatli = false) => v
           hour:'2-digit', minute:'2-digit' }
       : { day:'2-digit', month:'2-digit', year:'numeric' })
   : null;
+
+// Lokasyon renkleri: listelerde adın önünde nokta olarak görünür
+const LOKASYON_RENKLERI = [
+  ['', 'Renksiz'], ['#0e7490', 'Turkuaz'], ['#1d4ed8', 'Mavi'],
+  ['#15803d', 'Yeşil'], ['#a16207', 'Hardal'], ['#c2410c', 'Turuncu'],
+  ['#b91c1c', 'Kırmızı'], ['#7e22ce', 'Mor'], ['#334155', 'Füme'],
+];
+const renkNokta = (r) => r
+  ? `<span class="renk-nokta" style="background:${kacir(r)}"></span>` : '';
+const renkSecenekleri = (secili) => LOKASYON_RENKLERI.map(([deger, ad]) =>
+  `<option value="${deger}" ${deger === (secili || '') ? 'selected' : ''}
+   >${deger ? '● ' : ''}${ad}</option>`).join('');
 
 // ---------- Detay penceresi (modal) ----------
 function modalAc(baslik, govdeHtml, ekButonlar = '') {
@@ -1938,6 +2038,7 @@ function renderAssetsView() {
 
 // Filtre açılır listelerini referans tablolardan doldur
 let refKategori = {}, refLokasyon = {}, refMarka = {}, refModelKat = {};
+let refLokasyonRenk = {};
 async function filtreSecenekleriDoldur() {
   const [kat, lok, mar, dur] = await Promise.all([
     api('/categories?limit=500'), api('/locations?limit=500'),
@@ -1945,6 +2046,7 @@ async function filtreSecenekleriDoldur() {
   ]);
   refKategori = Object.fromEntries(kat.map(x => [x.id, x.name]));
   refLokasyon = Object.fromEntries(lok.map(x => [x.id, x.name]));
+  refLokasyonRenk = Object.fromEntries(lok.map(x => [x.id, x.renk]));
   refMarka = Object.fromEntries(mar.map(x => [x.id, x.name]));
   const doldur = (id, liste, bos) => {
     const el = document.getElementById(id);
@@ -2131,7 +2233,8 @@ function varlikTabloCiz() {
       <td><b>${a.asset_tag}</b></td>
       <td class="muted gizle-mobil">${esc(a.demirbas_no)}</td>
       <td>${esc(a.name)}</td><td class="gizle-mobil">${esc(tur)}</td>
-      <td class="muted">${esc(refLokasyon[a.location_id])}</td>
+      <td class="muted">${renkNokta(refLokasyonRenk[a.location_id])}${
+        esc(refLokasyon[a.location_id])}</td>
       <td class="muted gizle-mobil">${esc(a.serial)}</td>
       <td>${statusMap[a.status_id]
         ? `<span class="tag">${kacir(statusMap[a.status_id])}</span>` : '—'}</td>
