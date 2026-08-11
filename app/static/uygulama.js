@@ -3336,11 +3336,12 @@ async function stokDetay(tab, id) {
   const yaz = canWrite();
   const ad = encodeURIComponent(kayit.name || '');
 
-  // Kimde ne var: kişi başına adet + lokasyon; altta proje/lokasyon toplamı
-  const dagilimBolumu = dagilim && dagilim.kisiler.length ? `
+  // Kimde ne var: kişi başına adet + lokasyon; altta proje/lokasyon toplamı.
+  // Boşken de görünür — kullanıcı bölümün varlığını keşfetsin.
+  const dagilimBolumu = dagilim === null ? '' : `
     <div class="bolum">
-      <h4>Kimde Ne Var (${dagilim.kisiler.length} kişi)</h4>
-      <table><thead><tr><th>Kişi</th><th>Adet</th>
+      <h4>Zimmetli Kişiler (${dagilim.kisiler.length})</h4>
+      ${dagilim.kisiler.length ? `<table><thead><tr><th>Kişi</th><th>Adet</th>
         <th class="gizle-mobil">Lokasyon</th></tr></thead><tbody>
         ${dagilim.kisiler.map(k => `<tr class="tikla"
             onclick="kisiDetay(${k.user_id})">
@@ -3348,7 +3349,9 @@ async function stokDetay(tab, id) {
           <td><span class="tag used">${k.adet} adet</span></td>
           <td class="muted gizle-mobil">${esc(k.lokasyon)}${
             k.proje_kodu ? ` (${kacir(k.proje_kodu)})` : ''}</td>
-        </tr>`).join('')}</tbody></table>
+        </tr>`).join('')}</tbody></table>`
+        : `<div class="muted">Henüz kimseye zimmetlenmemiş —
+           🤝 Kişiye zimmetle ile başlayın</div>`}
       ${dagilim.lokasyonlar.length > 1 ? `
         <div class="stat-l" style="margin:10px 0 4px">Proje / lokasyon dağılımı</div>
         <div class="row" style="flex-wrap:wrap">
@@ -3356,7 +3359,7 @@ async function stokDetay(tab, id) {
             ${kacir(l.lokasyon)}${l.proje_kodu ? ` (${kacir(l.proje_kodu)})` : ''}
             — ${l.adet} adet · ${l.kisi} kişi</span>`).join(' ')}
         </div>` : ''}
-    </div>` : '';
+    </div>`;
 
   // Kim, ne zaman, kaç adet aldı — yeniden eskiye
   const hareketBolumu = hareketler === null ? '' : `
