@@ -523,6 +523,12 @@ function tanimSiralaDegis(alan) {
   tanimTabloCiz();
 }
 
+// Ad karşılaştırması için sadeleştirme (sunucudaki _sadelestir'in JS eşi):
+// "ŞANTİYE U026", "Şantiye U026" ve "santiye u026" aynı sayılır.
+const sadeAd = (s) => (s || '').toLocaleLowerCase('tr')
+  .replace(/[çğıöşü]/g, c => ({ 'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u' }[c] || c))
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+
 // Lokasyonları ağaç sırasına dizer: kökler, ardından altları (girintili).
 // Ziyaret kümesi olası döngülere (A↔B) karşı sonsuz özyinelemeyi keser.
 function _lokHiyerarsi(items) {
@@ -621,7 +627,15 @@ function tanimTabloCiz() {
     items = _lokHiyerarsi(items);
   }
 
+  // Mükerrer tespiti: sadeleştirilmiş adı birden çok kayıtta geçenler
+  const adSayisi = {};
+  if (lokMu) tanimListe.forEach(x => {
+    const k = sadeAd(x.name);
+    adSayisi[k] = (adSayisi[k] || 0) + 1;
+  });
+
   const rows = items.map(it => {
+    const mukerrer = lokMu && adSayisi[sadeAd(it.name)] > 1;
     const hucreler = cfg.cols.map(([k]) => {
       let v = tanimGoster(cfg, it, k);
       // Lokasyon adının önünde rengi görünsün; alt projeler girintili
@@ -629,7 +643,8 @@ function tanimTabloCiz() {
         const girinti = it._seviye
           ? `<span class="muted" style="padding-left:${it._seviye * 18}px">└</span> `
           : '';
-        v = `${girinti}${renkNokta(it.renk)}<b>${v}</b>`;
+        v = `${girinti}${renkNokta(it.renk)}<b>${v}</b>` +
+          (mukerrer ? ' <span class="tag low">mükerrer</span>' : '');
       }
       return `<td>${v}</td>`;
     }).join('');
@@ -644,11 +659,16 @@ function tanimTabloCiz() {
                      : '<span class="muted">—</span>'}</td>`;
     }
     // Lokasyon satırı detayı açar (cihazlar oradan güncellenir);
-    // kalem simgesi yine düzenlemeye gider.
+    // kalem simgesi yine düzenlemeye gider, 🔀 mükerrerleri birleştirir.
     const tikla = lokMu ? `class="tikla" onclick="lokasyonDetay(${it.id})"`
       : (canWrite() ? `class="tikla" onclick="tanimDuzenle(${it.id})"` : '');
     const kalem = canWrite()
-      ? `<td class="muted" onclick="event.stopPropagation();tanimDuzenle(${it.id})">✏️</td>`
+      ? `<td class="muted" onclick="event.stopPropagation()"
+           style="white-space:nowrap">
+          ${mukerrer ? `<button class="islem-kup notr"
+             title="Mükerrerle birleştir"
+             onclick="lokBirlestirDialog(${it.id})">🔀</button> ` : ''}
+          <span class="tikla" onclick="tanimDuzenle(${it.id})">✏️</span></td>`
       : '';
     return `<tr ${tikla}>${hucreler}${ekstra}${kalem}</tr>`;
   }).join('');
@@ -732,6 +752,50 @@ async function tanimSil(id) {
   } catch (e) {
     document.getElementById('tdInfo').innerHTML =
       `<span style="color:var(--err)">⚠ ${e.detail || 'Silinemedi'}</span>`;
+  }
+}
+
+// ---------- Mükerrer lokasyon birleştirme ----------
+// Kaynak (tıklanan) kayıt silinir; cihaz, personel, alt lokasyon ve geçmiş
+// bağlantıları seçilen hedefe taşınır. Öncelik aynı adlı gruptadır.
+function lokBirlestirDialog(id) {
+  const kayit = tanimListe.find(x => x.id === id);
+  if (!kayit) return;
+  const grup = tanimListe.filter(x =>
+    x.id !== id && sadeAd(x.name) === sadeAd(kayit.name));
+  const digerleri = grup.length ? grup
+    : tanimListe.filter(x => x.id !== id);
+  modalAc(`🔀 Birleştir — ${kacir(kayit.name)}`, `
+    <div class="note" style="margin-top:0">Bu kayıt <b>silinir</b>; cihaz,
+      personel, alt lokasyon ve geçmiş bağlantıları seçtiğiniz kayda taşınır.
+      Buradaki dolu alanlar (proje kodu, renk…) hedefte boşsa kopyalanır —
+      veri kaybolmaz.</div>
+    <div class="stat-l" style="margin-bottom:4px">Kalacak kayıt</div>
+    <select id="lbHedef" style="width:100%">
+      ${digerleri.map(x => `<option value="${x.id}">${kacir(x.name)}${
+        x.proje_kodu ? ' (' + kacir(x.proje_kodu) + ')' : ''} — ${
+        (tanimSayilar?.[x.id]?.cihaz) || 0} cihaz</option>`).join('')}
+    </select>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" onclick="lokBirlestirYap(${id})">🔀 Birleştir</button>
+      <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+    </div>
+    <div id="lbInfo" class="note"></div>`);
+}
+
+async function lokBirlestirYap(id) {
+  const hedef = Number(document.getElementById('lbHedef')?.value || 0);
+  if (!hedef) return;
+  try {
+    const r = await api('/detay/lokasyon-birlestir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kaynak_id: id, hedef_id: hedef }) });
+    modalKapat(false);
+    loadTanim();
+    filtreSecenekleriDoldur();     // filtre listeleri ve renk haritası tazelensin
+  } catch (e) {
+    document.getElementById('lbInfo').innerHTML =
+      `<span style="color:var(--err)">⚠ ${e.detail || 'Birleştirilemedi'}</span>`;
   }
 }
 

@@ -1,7 +1,38 @@
 """Referans tabloları için CRUD uçları (fabrikadan üretilir)."""
 
+from fastapi import HTTPException
+from sqlalchemy import select
+
 from app import models, schemas
 from app.crud_factory import make_crud_router
+
+
+def _lokasyon_dogrula(db, veri, mevcut):
+    """Proje kodunda çift kayıt olmasın.
+
+    Aynı proje kodu ancak ALT lokasyonlarda tekrar edebilir (bir projenin
+    satış ofisi, yönetim ofisi…). Kök (üstü olmayan) ikinci bir kayıt aynı
+    kodu alamaz — projenin kendisi tek olmalı.
+    """
+    kod = (veri.get("proje_kodu")
+           if "proje_kodu" in veri
+           else getattr(mevcut, "proje_kodu", None) or "")
+    kod = (kod or "").strip()
+    ust = (veri.get("parent_id")
+           if "parent_id" in veri
+           else getattr(mevcut, "parent_id", None))
+    if not kod or ust:
+        return
+    haric = mevcut.id if mevcut is not None else None
+    for lok in db.scalars(select(models.Location).where(
+            models.Location.proje_kodu == kod,
+            models.Location.parent_id.is_(None))).all():
+        if lok.id != haric:
+            raise HTTPException(
+                409, f"'{kod}' proje kodu zaten '{lok.name}' kaydında. "
+                     "Çift kayıt açmak yerine o kaydı kullanın; bu bir alt "
+                     "birimse 'Üst lokasyon' seçerek ekleyin.")
+
 
 companies = make_crud_router(
     model=models.Company,
@@ -20,6 +51,7 @@ locations = make_crud_router(
     read_schema=schemas.LocationRead,
     prefix="/locations",
     essiz_ad=True,
+    dogrula=_lokasyon_dogrula,
     tag="Lokasyonlar",
 )
 

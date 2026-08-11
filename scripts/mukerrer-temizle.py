@@ -90,7 +90,15 @@ def lokasyonlari_birlestir(db: Session, gruplar, sayilar) -> tuple[int, int]:
                           models.ActivityLog.target_id.in_(kimlikler))
                    .values(target_id=kalan.id))
 
-        for alan in ("proje_kodu", "city", "address"):
+        # Alt lokasyonlar kalan kayda bağlanır (kalan, silinenin altındaysa
+        # yukarı alınır — kendi kendisinin altına düşmesin)
+        for d in digerleri:
+            for cocuk in db.scalars(select(models.Location).where(
+                    models.Location.parent_id == d.id)).all():
+                cocuk.parent_id = d.parent_id if cocuk.id == kalan.id \
+                    else kalan.id
+
+        for alan in ("proje_kodu", "city", "address", "renk"):
             if not getattr(kalan, alan, None):
                 for d in digerleri:
                     deger = getattr(d, alan, None)

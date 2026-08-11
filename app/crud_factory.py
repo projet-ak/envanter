@@ -14,13 +14,16 @@ from app.excel.sema import _sadelestir
 
 
 def make_crud_router(*, model, create_schema, update_schema, read_schema,
-                     prefix, tag, essiz_ad: bool = False):
+                     prefix, tag, essiz_ad: bool = False, dogrula=None):
     """`essiz_ad=True` verilen tablolarda aynı ada ikinci kayıt açılamaz.
 
     Karşılaştırma _sadelestir ile yapılır: "ŞANTİYE U026", "Şantiye U026" ve
     "santiye u026" aynı sayılır. Mükerrer lokasyon/kategori kayıtlarının ana
     kaynağı buydu — içe aktarım Python tarafında eşleştirse de elle eklenen
     ikinci yazım listeyi bölüyordu.
+
+    `dogrula(db, veri, mevcut)` tabloya özgü ek kurallar için: yazımdan önce
+    çağrılır, kural bozuluyorsa HTTPException atar (mevcut=None → yeni kayıt).
     """
     router = APIRouter(prefix=prefix, tags=[tag])
     read = [Depends(get_current_user)]   # okuma: giriş şart
@@ -57,6 +60,8 @@ def make_crud_router(*, model, create_schema, update_schema, read_schema,
             raise HTTPException(
                 409, f"Aynı adla kayıt zaten var: {ayni}. "
                      "Mükerrer kayıt açmak yerine mevcut kaydı kullanın.")
+        if dogrula:
+            dogrula(db, veri, None)
         obj = model(**veri)
         db.add(obj)
         db.commit()
@@ -80,6 +85,8 @@ def make_crud_router(*, model, create_schema, update_schema, read_schema,
         if ayni:
             raise HTTPException(
                 409, f"Aynı adla başka kayıt var: {ayni}.")
+        if dogrula:
+            dogrula(db, veri, obj)
         for key, value in veri.items():
             setattr(obj, key, value)
         db.commit()

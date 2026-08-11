@@ -455,10 +455,17 @@ kaydedilmez. Birikmiş mükerrerler için:
 ./.venv/bin/python scripts/mukerrer-temizle.py --uygula    # lokasyonları birleştir
 ```
 
-Lokasyon birleştirmede cihaz/zimmet/personel bağlantıları kalan kayda
-taşınır, veri kaybolmaz. Cihaz mükerrerleri (aynı seri ya da B001/B001-2
-grupları) yalnızca raporlanır — hangisinin kalacağına bakıp Varlıklar
-ekranında onay kutularıyla seçip "Seçilileri sil" ile temizlersiniz.
+Lokasyon birleştirmede cihaz/zimmet/personel/alt-lokasyon bağlantıları
+kalan kayda taşınır, veri kaybolmaz. Cihaz mükerrerleri (aynı seri ya da
+B001/B001-2 grupları) yalnızca raporlanır — hangisinin kalacağına bakıp
+Varlıklar ekranında onay kutularıyla seçip "Seçilileri sil" ile
+temizlersiniz.
+
+Arayüzde de görünür: Tanımlar → Lokasyonlar aynı adlı kayıtları kırmızı
+"mükerrer" rozetiyle işaretler; satırdaki 🔀 düğmesi kaydı seçilen hedefle
+birleştirir. Proje kodu da korunur: aynı kodla ikinci bir KÖK lokasyon
+açılamaz (alt lokasyonlar — satış ofisi, yönetim ofisi — aynı kodu
+taşıyabilir).
 
 ### Marka nerede tutulur?
 

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app import models
-from app.auth import get_current_user
+from app.auth import get_current_user, require_editor
 from app.database import get_db
 
 router = APIRouter(prefix="/detay", tags=["Detay"],
@@ -315,6 +316,60 @@ def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
             for k in kisiler
         ],
     }
+
+
+class LokasyonBirlestirme(BaseModel):
+    kaynak_id: int      # silinecek mükerrer kayıt
+    hedef_id: int       # bağlantıların taşınacağı kalan kayıt
+
+
+@router.post("/lokasyon-birlestir", status_code=200)
+def lokasyon_birlestir(govde: LokasyonBirlestirme,
+                       db: Session = Depends(get_db),
+                       aktor: models.User = Depends(require_editor)):
+    """Mükerrer lokasyonu hedefle birleştirir: kaynak silinir, hiçbir
+    bağlantı kaybolmaz.
+
+    Taşınanlar: cihazların lokasyonu ve zimmet yeri, personel, alt
+    lokasyonlar, geçmiş kayıtlarının hedefi. Kaynağın dolu olup hedefte boş
+    olan alanları (proje kodu, şehir, adres, renk) hedefe kopyalanır.
+    """
+    if govde.kaynak_id == govde.hedef_id:
+        raise HTTPException(400, "Kaynak ve hedef aynı kayıt olamaz")
+    kaynak = db.get(models.Location, govde.kaynak_id)
+    hedef = db.get(models.Location, govde.hedef_id)
+    if kaynak is None or hedef is None:
+        raise HTTPException(404, "Lokasyon bulunamadı")
+
+    tasinan = 0
+    for sutun in (models.Asset.location_id, models.Asset.assigned_location_id,
+                  models.User.location_id):
+        tablo = sutun.parent.class_
+        tasinan += db.execute(
+            update(tablo).where(sutun == kaynak.id)
+            .values({sutun.key: hedef.id})).rowcount
+    db.execute(update(models.ActivityLog)
+               .where(models.ActivityLog.target_type == "location",
+                      models.ActivityLog.target_id == kaynak.id)
+               .values(target_id=hedef.id))
+
+    # Alt lokasyonlar hedefe bağlanır; hedef kaynağın altındaysa yukarı alınır
+    for cocuk in db.scalars(select(models.Location).where(
+            models.Location.parent_id == kaynak.id)).all():
+        cocuk.parent_id = kaynak.parent_id if cocuk.id == hedef.id else hedef.id
+
+    for alan in ("proje_kodu", "city", "address", "renk"):
+        if not getattr(hedef, alan, None) and getattr(kaynak, alan, None):
+            setattr(hedef, alan, getattr(kaynak, alan))
+
+    db.add(models.ActivityLog(
+        action=models.ActivityAction.update, item_type="location",
+        item_id=hedef.id, actor=aktor.username,
+        note=f"Mükerrer birleştirildi: '{kaynak.name}' → '{hedef.name}' "
+             f"({tasinan} bağlantı taşındı)"))
+    db.delete(kaynak)
+    db.commit()
+    return {"tasinan": tasinan, "hedef_id": hedef.id}
 
 
 @router.get("/user/{user_id}")

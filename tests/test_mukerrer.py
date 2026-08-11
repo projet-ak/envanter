@@ -160,3 +160,92 @@ def test_cihaz_gruplari_raporu(db_session):
     assert [sorted(a.asset_tag for a in g) for g in seri] == [["C900", "C901"]]
     assert [sorted(a.asset_tag for a in g) for g in etiket] == \
         [["B001", "B001-2", "B001-3"]]
+
+
+# --------------------------------------------------------------------------- #
+# Proje kodunda çift kayıt engeli
+# --------------------------------------------------------------------------- #
+def test_ayni_proje_kodlu_ikinci_kok_kayit_reddedilir(client):
+    client.post("/locations", json={"name": "KARTAL ESENTEPE",
+                                    "proje_kodu": "U030-U031"})
+    r = client.post("/locations", json={"name": "KARTAL BAŞKA",
+                                        "proje_kodu": "U030-U031"})
+    assert r.status_code == 409
+    assert "KARTAL ESENTEPE" in r.json()["detail"]
+    assert "Üst lokasyon" in r.json()["detail"]
+
+
+def test_alt_lokasyon_ayni_kodu_kullanabilir(client):
+    ust = client.post("/locations", json={"name": "ANA PROJE",
+                                          "proje_kodu": "U099"}).json()
+    r = client.post("/locations", json={"name": "SATIŞ OFİSİ",
+                                        "proje_kodu": "U099",
+                                        "parent_id": ust["id"]})
+    assert r.status_code == 201
+
+
+def test_guncellemede_kod_carpismasi_ve_kendi_kodu(client):
+    a = client.post("/locations", json={"name": "PROJE A",
+                                        "proje_kodu": "U101"}).json()
+    b = client.post("/locations", json={"name": "PROJE B"}).json()
+    # Başka kök kayda aynı kod verilemez
+    assert client.put(f"/locations/{b['id']}",
+                      json={"proje_kodu": "U101"}).status_code == 409
+    # Kendi kodunu yeniden göndermek serbest
+    assert client.put(f"/locations/{a['id']}",
+                      json={"proje_kodu": "U101",
+                            "city": "İstanbul"}).status_code == 200
+    # Üst seçilirse aynı kod alınabilir
+    assert client.put(f"/locations/{b['id']}",
+                      json={"proje_kodu": "U101",
+                            "parent_id": a["id"]}).status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# Arayüzden birleştirme ucu
+# --------------------------------------------------------------------------- #
+def test_lokasyon_birlestirme_ucu(client):
+    h = client.post("/locations", json={"name": "KARTAL ESENTEPE ETAP",
+                                        "proje_kodu": "U030"}).json()
+    k = client.post("/locations", json={"name": "Kartal Esentepe Etap X"}).json()
+    # kaynağa bağlı veri: cihaz, kişi, alt lokasyon
+    client.post("/assets", json={"asset_tag": "BR-1", "location_id": k["id"]})
+    kisi = client.post("/users", json={"first_name": "Taşınan",
+                                       "location_id": k["id"]}).json()
+    alt = client.post("/locations", json={"name": "BİRLEŞEN OFİS",
+                                          "parent_id": k["id"]}).json()
+
+    r = client.post("/detay/lokasyon-birlestir",
+                    json={"kaynak_id": k["id"], "hedef_id": h["id"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["tasinan"] == 2          # cihaz + kişi
+
+    assert client.get(f"/locations/{k['id']}").status_code == 404
+    varlik = next(a for a in client.get("/assets").json()
+                  if a["asset_tag"] == "BR-1")
+    assert varlik["location_id"] == h["id"]
+    assert client.get(f"/users/{kisi['id']}").json()["location_id"] == h["id"]
+    assert client.get(f"/locations/{alt['id']}").json()["parent_id"] == h["id"]
+
+
+def test_birlestirme_hedef_kaynagin_altindaysa_yukari_alinir(client):
+    k = client.post("/locations", json={"name": "ESKİ PROJE"}).json()
+    h = client.post("/locations", json={"name": "YENİ PROJE",
+                                        "parent_id": k["id"]}).json()
+    r = client.post("/detay/lokasyon-birlestir",
+                    json={"kaynak_id": k["id"], "hedef_id": h["id"]})
+    assert r.status_code == 200
+    assert client.get(f"/locations/{h['id']}").json()["parent_id"] is None
+
+
+def test_birlestirme_hatalari_ve_yetki(client, viewer_client):
+    a = client.post("/locations", json={"name": "TEK"}).json()
+    assert client.post("/detay/lokasyon-birlestir",
+                       json={"kaynak_id": a["id"],
+                             "hedef_id": a["id"]}).status_code == 400
+    assert client.post("/detay/lokasyon-birlestir",
+                       json={"kaynak_id": a["id"],
+                             "hedef_id": 9999}).status_code == 404
+    assert viewer_client.post("/detay/lokasyon-birlestir",
+                              json={"kaynak_id": 1,
+                                    "hedef_id": 2}).status_code == 403
