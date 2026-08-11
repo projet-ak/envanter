@@ -481,7 +481,11 @@ function renderTanimlarView() {
   loadTanim();
 }
 
-function secTanim(k) { aktifTanim = k; renderTanimlarView(); }
+function secTanim(k) {
+  aktifTanim = k;
+  tanimSirala = { alan: null, yon: 1 };   // tablo değişti, sıralama sıfırlansın
+  renderTanimlarView();
+}
 
 // İlişki alanları (marka, cihaz tipi…) için kimlik -> ad haritaları
 let tanimSecenek = {};
@@ -505,6 +509,27 @@ function tanimGoster(cfg, it, k) {
                  : '<span class="muted">— eksik —</span>';
 }
 
+// Tanım listesi sıralaması: kolona tıkla → artan, tekrar tıkla → azalan.
+// Yalnızca tablo yeniden çizilir; ekleme formundaki yazılanlar kaybolmaz.
+let tanimListe = [];
+let tanimSayilar = null;      // lokasyonlarda cihaz/kişi sayıları
+let tanimSirala = { alan: null, yon: 1 };
+
+function tanimSiralaDegis(alan) {
+  if (tanimSirala.alan === alan) tanimSirala.yon *= -1;
+  else tanimSirala = { alan, yon: 1 };
+  tanimTabloCiz();
+}
+
+function _tanimDeger(cfg, it, alan) {
+  if (alan === '_cihaz') return (tanimSayilar?.[it.id]?.cihaz) || 0;
+  if (alan === '_kisi') return (tanimSayilar?.[it.id]?.kisi) || 0;
+  // İlişki sütunları kimlikle değil görünen adla sıralanır ("3" değil "HP")
+  const liste = tanimSecenek[alan];
+  if (liste) return liste.find(x => x.id === it[alan])?.name || '';
+  return it[alan] ?? '';
+}
+
 async function loadTanim() {
   const cfg = TANIMLAR[aktifTanim];
   const lokMu = aktifTanim === 'locations';
@@ -513,12 +538,61 @@ async function loadTanim() {
     lokMu ? api('/detay/lokasyon-sayilari').catch(() => []) : Promise.resolve(null),
   ]);
   await tanimSecenekleriYukle(cfg);
-  const sayiMap = lokSayilar
+  tanimListe = items;
+  tanimSayilar = lokSayilar
     ? Object.fromEntries(lokSayilar.map(x => [x.location_id, x])) : null;
 
-  const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
-    (lokMu ? '<th>Cihaz</th><th>Kişi</th>' : '') +
+  document.getElementById('tanimIcerik').innerHTML = `
+    ${canWrite() ? `<div class="panel">
+      <h2>${cfg.label} — ekle</h2>
+      <div class="row">
+        ${cfg.add.map(([k, l, t]) =>
+          `<input id="t_${k}" type="${t}" placeholder="${l}"
+             class="${k === 'name' ? 'grow' : ''}" />`).join('')}
+        ${(cfg.sec || []).map(([k, l]) => `<select id="t_${k}">
+          <option value="">${l} seçilmedi</option>
+          ${(tanimSecenek[k] || []).map(o =>
+            `<option value="${o.id}">${kacir(o.name)}</option>`).join('')}
+        </select>`).join('')}
+        ${lokMu ? `<select id="t_renk" title="Lokasyon rengi">
+          ${renkSecenekleri('')}</select>` : ''}
+        <button class="primary" onclick="addTanim()">Ekle</button>
+      </div>
+      <div id="tanimInfo" class="note"></div>
+    </div>` : ''}
+    <div class="panel">
+      <h2>${cfg.label} (${items.length})</h2>
+      <div id="tanimTabloKutu"></div>
+    </div>`;
+  tanimTabloCiz();
+}
+
+function tanimTabloCiz() {
+  const kutu = document.getElementById('tanimTabloKutu');
+  if (!kutu) return;
+  const cfg = TANIMLAR[aktifTanim];
+  const lokMu = aktifTanim === 'locations';
+  const sayiMap = tanimSayilar;
+
+  const th = (alan, etiket) => `<th class="sirala"
+      onclick="tanimSiralaDegis('${alan}')">${etiket}
+      <span class="yon">${tanimSirala.alan === alan
+        ? (tanimSirala.yon === 1 ? '▲' : '▼') : '↕'}</span></th>`;
+  const head = cfg.cols.map(([k, l]) => th(k, l)).join('') +
+    (lokMu ? th('_cihaz', 'Cihaz') + th('_kisi', 'Kişi') : '') +
     (canWrite() ? '<th></th>' : '');
+
+  let items = tanimListe;
+  if (tanimSirala.alan) {
+    const { alan, yon } = tanimSirala;
+    items = [...items].sort((a, b) => {
+      const x = _tanimDeger(cfg, a, alan), y = _tanimDeger(cfg, b, alan);
+      if (typeof x === 'number' || typeof y === 'number')
+        return ((x || 0) - (y || 0)) * yon;
+      return String(x).localeCompare(String(y), 'tr') * yon;
+    });
+  }
+
   const rows = items.map(it => {
     const hucreler = cfg.cols.map(([k]) => {
       let v = tanimGoster(cfg, it, k);
@@ -545,28 +619,8 @@ async function loadTanim() {
       : '';
     return `<tr ${tikla}>${hucreler}${ekstra}${kalem}</tr>`;
   }).join('');
-  document.getElementById('tanimIcerik').innerHTML = `
-    ${canWrite() ? `<div class="panel">
-      <h2>${cfg.label} — ekle</h2>
-      <div class="row">
-        ${cfg.add.map(([k, l, t]) =>
-          `<input id="t_${k}" type="${t}" placeholder="${l}"
-             class="${k === 'name' ? 'grow' : ''}" />`).join('')}
-        ${(cfg.sec || []).map(([k, l]) => `<select id="t_${k}">
-          <option value="">${l} seçilmedi</option>
-          ${(tanimSecenek[k] || []).map(o =>
-            `<option value="${o.id}">${kacir(o.name)}</option>`).join('')}
-        </select>`).join('')}
-        ${lokMu ? `<select id="t_renk" title="Lokasyon rengi">
-          ${renkSecenekleri('')}</select>` : ''}
-        <button class="primary" onclick="addTanim()">Ekle</button>
-      </div>
-      <div id="tanimInfo" class="note"></div>
-    </div>` : ''}
-    <div class="panel">
-      <h2>${cfg.label} (${items.length})</h2>
-      <table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>
-    </div>`;
+  kutu.innerHTML =
+    `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // Tanım kaydını düzenle (lokasyon, kategori, üretici…)
