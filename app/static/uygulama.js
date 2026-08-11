@@ -2227,8 +2227,11 @@ function renderAssetsView() {
       <div id="filtreBilgi" class="note"></div>
     </div>
     <div class="panel">
-      <h2 id="varlikBaslik">Varlıklar (<span id="count">0</span><span id="toplamBilgi"></span>)</h2>
-      <div id="varlikTablo"></div>
+      <div class="row" style="align-items:center">
+        <h2 id="varlikBaslik" style="margin:0; flex:1">Varlıklar (<span id="count">0</span><span id="toplamBilgi"></span>)</h2>
+        <span id="varlikUstIslem" class="row" style="gap:8px"></span>
+      </div>
+      <div id="varlikTablo" style="margin-top:8px"></div>
       <div id="dahaFazla" class="row" style="margin-top:12px"></div>
     </div>`;
   filtreSecenekleriDoldur();
@@ -2372,6 +2375,16 @@ function varlikTumunuSec(secili) {
   varlikTabloCiz();
 }
 
+// Sağ üstteki "Tümünü seç": sayfadakini değil, filtreye uyan BÜTÜN listeyi
+// seçer; hepsi seçiliyken ikinci tık seçimi bırakır.
+function varlikHepsiniSec() {
+  const hepsiSecili = varlikListe.length &&
+    varlikListe.every(a => varlikSecim.has(a.id));
+  if (hepsiSecili) varlikSecim.clear();
+  else varlikListe.forEach(a => varlikSecim.add(a.id));
+  varlikTabloCiz();
+}
+
 function _varlikSirali() {
   if (!varlikSirala.alan) return varlikListe;
   const { alan, yon } = varlikSirala;
@@ -2387,6 +2400,20 @@ function varlikTabloCiz() {
   const kutu = document.getElementById('varlikTablo');
   if (!kutu) return;
   document.getElementById('count').textContent = varlikListe.length;
+
+  // Sağ üst hızlı işlemler: tüm listeyi seç + seçilileri başka lokasyona taşı
+  const ustIslem = document.getElementById('varlikUstIslem');
+  if (ustIslem) {
+    const tumu = varlikListe.length &&
+      varlikListe.every(a => varlikSecim.has(a.id));
+    ustIslem.innerHTML = `
+      <button class="ghost" ${varlikListe.length ? '' : 'disabled'}
+        onclick="varlikHepsiniSec()">${tumu
+          ? '✖ Seçimi bırak' : `☑ Tümünü seç (${varlikListe.length})`}</button>
+      ${canWrite() && !varlikArsiv ? `<button class="primary"
+        ${varlikSecim.size ? '' : 'disabled'}
+        onclick="varlikSecilenleriTasi()">📍 Başka lokasyona taşı (${varlikSecim.size})</button>` : ''}`;
+  }
 
   const sirali = _varlikSirali();
   const toplamSayfa = Math.max(1, Math.ceil(sirali.length / varlikLimit));
