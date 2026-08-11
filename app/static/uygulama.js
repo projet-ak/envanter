@@ -794,10 +794,11 @@ function tanimTabloCiz() {
     }).join('');
     let ekstra = '';
     if (sayiMap) {
-      const s = sayiMap[it.id] || { cihaz: 0, zimmetli: 0, kisi: 0 };
-      ekstra = `<td>${s.cihaz
-          ? `<span class="tag">${s.cihaz} cihaz</span>` +
-            (s.zimmetli ? ` <span class="tag used">${s.zimmetli} zimmetli</span>` : '')
+      const s = sayiMap[it.id] || { cihaz: 0, zimmetli: 0, kisi: 0, stok: 0 };
+      ekstra = `<td>${(s.cihaz || s.stok)
+          ? (s.cihaz ? `<span class="tag">${s.cihaz} cihaz</span>` : '') +
+            (s.zimmetli ? ` <span class="tag used">${s.zimmetli} zimmetli</span>` : '') +
+            (s.stok ? ` <span class="tag">${s.stok} stok</span>` : '')
           : '<span class="muted">—</span>'}</td>
         <td>${s.kisi ? `<span class="tag free">${s.kisi} kişi</span>`
                      : '<span class="muted">—</span>'}</td>`;
@@ -1012,7 +1013,23 @@ async function lokasyonDetay(id) {
     <div class="bolum"><h4>Bağlı Personel (${d.kisiler.length})</h4>
       ${kisiler}</div>
     <div class="bolum"><h4>Cihazlar (${d.cihaz_sayisi})</h4>
-      <div style="max-height:380px;overflow-y:auto">${cihazlar}</div></div>`,
+      <div style="max-height:380px;overflow-y:auto">${cihazlar}</div></div>
+    ${(d.stoklar || []).length ? (() => {
+      // Silme engelinin saydığı aksesuar/sarf/bileşen kayıtları adlarıyla
+      const SEKME = { accessory: ['accessories', 'Aksesuar'],
+                      consumable: ['consumables', 'Sarf'],
+                      component: ['components', 'Bileşen'] };
+      return `<div class="bolum">
+        <h4>Bağlı Stok Kayıtları (${d.stoklar.length})</h4>
+        <div class="row" style="flex-wrap:wrap">
+          ${d.stoklar.map(sk => {
+            const [tab, ad] = SEKME[sk.tur] || ['accessories', sk.tur];
+            return `<button class="ghost" onclick="stokDetay('${tab}', ${sk.id})">
+              <span class="tag">${ad}</span> ${kacir(sk.name)}
+              <span class="muted">· ${sk.qty ?? 0} adet</span></button>`;
+          }).join('')}
+        </div></div>`;
+    })() : ''}`,
     yaz ? `<button class="ghost" onclick="tanimDuzenle(${id})">✏️ Düzenle</button>` : '');
 }
 

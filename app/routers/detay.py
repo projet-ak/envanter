@@ -245,13 +245,21 @@ def lokasyon_sayilari(db: Session = Depends(get_db)):
         select(models.User.location_id, func.count())
         .where(models.User.location_id.is_not(None))
         .group_by(models.User.location_id)).all())
+    stok: dict[int, int] = {}
+    for tablo in (models.Accessory, models.Consumable, models.Component):
+        for lok_id, n in db.execute(
+                select(tablo.location_id, func.count())
+                .where(tablo.location_id.is_not(None))
+                .group_by(tablo.location_id)).all():
+            stok[lok_id] = stok.get(lok_id, 0) + n
 
     return [
         {"location_id": lok_id,
          "cihaz": cihaz.get(lok_id, 0),
          "zimmetli": zimmetli.get(lok_id, 0),
-         "kisi": kisi.get(lok_id, 0)}
-        for lok_id in {*cihaz, *zimmetli, *kisi}
+         "kisi": kisi.get(lok_id, 0),
+         "stok": stok.get(lok_id, 0)}
+        for lok_id in {*cihaz, *zimmetli, *kisi, *stok}
     ]
 
 
@@ -284,9 +292,18 @@ def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
     zimmet_yeri = db.scalar(
         select(func.count(models.Asset.id))
         .where(models.Asset.assigned_location_id == location_id)) or 0
-    stok = sum(db.scalar(
-        select(func.count(t.id)).where(t.location_id == location_id)) or 0
-        for t in (models.Accessory, models.Consumable, models.Component))
+    # Bağlı stok kayıtları adlarıyla listelenir — silme engelinin saydığı
+    # "5 aksesuar, 2 sarf" ekranda da görünsün.
+    stoklar = []
+    for tur, tablo in (("accessory", models.Accessory),
+                       ("consumable", models.Consumable),
+                       ("component", models.Component)):
+        for kayit in db.scalars(
+                select(tablo).where(tablo.location_id == location_id)
+                .order_by(tablo.name)).all():
+            stoklar.append({"tur": tur, "id": kayit.id,
+                            "name": kayit.name, "qty": kayit.qty})
+    stok = len(stoklar)
 
     ust = db.get(models.Location, lok.parent_id) if lok.parent_id else None
     altlar = db.scalars(
@@ -322,6 +339,7 @@ def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
                                if c.assigned_type is not None),
         "zimmet_yeri_sayisi": zimmet_yeri,
         "stok_sayisi": stok,
+        "stoklar": stoklar,
         "cihazlar": cihazlar,
         "kisiler": [
             {"id": k.id, "ad": _kisi_adi(k), "unvan": k.job_title,

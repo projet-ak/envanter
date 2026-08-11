@@ -208,3 +208,22 @@ def test_alt_projeler_detayda_listelenir(client):
     d2 = client.get(f"/detay/location/{satis['id']}").json()
     assert d2["ust"]["name"] == "KARTAL ESENTEPE 1. VE 2. ETAP"
     assert d2["alt_lokasyonlar"] == []
+
+
+def test_lokasyon_detayinda_stok_kayitlari_listelenir(client):
+    lok = client.post("/locations", json={"name": "STOK ŞANTİYESİ",
+                                          "proje_kodu": "U088"}).json()
+    client.post("/accessories", json={"name": "Depo Klavyesi", "qty": 5,
+                                      "location_id": lok["id"]})
+    client.post("/consumables", json={"name": "Depo Toneri", "qty": 2,
+                                      "location_id": lok["id"]})
+
+    d = client.get(f"/detay/location/{lok['id']}").json()
+    assert d["stok_sayisi"] == 2
+    stoklar = {(s["tur"], s["name"]): s for s in d["stoklar"]}
+    assert stoklar[("accessory", "Depo Klavyesi")]["qty"] == 5
+    assert stoklar[("consumable", "Depo Toneri")]["qty"] == 2
+
+    sayilar = client.get("/detay/lokasyon-sayilari").json()
+    s = next(x for x in sayilar if x["location_id"] == lok["id"])
+    assert s["stok"] == 2
