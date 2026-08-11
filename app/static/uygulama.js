@@ -2639,17 +2639,24 @@ function varlikCsv() {
   setTimeout(() => URL.revokeObjectURL(b.href), 4000);
 }
 
-let gosterilenSayi = 200;
+// Filtreye uyan TÜM kayıtlar parça parça çekilir; sayfalama istemcide
+// tam liste üzerinde döner. (Eskiden ilk 200 gelir, kalanına "Daha fazla
+// göster" ile gidilirdi — 9. sayfada takılı kalınıyordu.)
+const VARLIK_TAVANI = 5000;
 
-async function loadAssets(devam = false) {
+async function loadAssets() {
   const info = document.getElementById('searchInfo'); if (info) info.textContent = '';
-  if (!devam) gosterilenSayi = 200;
   const p = filtreSorgusu();
-  p.set('limit', gosterilenSayi);
-  const [liste, sayi] = await Promise.all([
-    api('/assets?' + p.toString()),
-    api('/assets/sayi?' + filtreSorgusu().toString()).catch(() => null),
-  ]);
+  const liste = [];
+  const adim = 500;
+  for (let skip = 0; ; skip += adim) {
+    const q = new URLSearchParams(p);
+    q.set('limit', adim);
+    q.set('skip', skip);
+    const parca = await api('/assets?' + q.toString());
+    liste.push(...parca);
+    if (parca.length < adim || liste.length >= VARLIK_TAVANI) break;
+  }
   renderAssets(liste);
 
   const bilgi = document.getElementById('filtreBilgi');
@@ -2665,19 +2672,13 @@ async function loadAssets(devam = false) {
     ? etiketler.map(e => `<span class="pill">${e}</span>`).join(' ')
     : '<span class="muted">Filtre yok — tüm kayıtlar</span>';
 
-  const toplam = sayi?.toplam;
   const bilgiEl = document.getElementById('toplamBilgi');
-  if (bilgiEl && toplam != null && toplam > liste.length)
-    bilgiEl.textContent = ` / ${toplam}`;
-  else if (bilgiEl) bilgiEl.textContent = '';
-
+  if (bilgiEl) bilgiEl.textContent = '';
   const daha = document.getElementById('dahaFazla');
-  if (daha) daha.innerHTML = (toplam != null && liste.length < toplam)
-    ? `<button class="ghost" onclick="dahaGoster()">↓ Daha fazla göster
-         (${liste.length}/${toplam})</button>` : '';
+  if (daha) daha.innerHTML = liste.length >= VARLIK_TAVANI
+    ? `<span class="muted">İlk ${VARLIK_TAVANI} kayıt yüklendi — daraltmak
+       için filtre kullanın.</span>` : '';
 }
-
-function dahaGoster() { gosterilenSayi += 300; loadAssets(true); }
 
 async function doSearch() {
   const q = document.getElementById('q').value.trim();
