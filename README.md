@@ -991,6 +991,7 @@ scripts/
   ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
   kategori-duzelt.py # Yanlış kategorideki modelleri bul/doğrusuna taşı
   mukerrer-temizle.py # Mükerrer lokasyonları birleştir, mükerrer cihazları raporla
+  kisi-lokasyon-esitle.py # Kişi lokasyonlarını zimmetli cihazlarına eşitle
   marka-kontrol.py   # Markası boş modelleri bul/doldur
   snipeit-karsilastir.py # Snipe-IT dışa aktarımı/dökümüyle karşılaştır, boşları doldur
   snipeit-dosya-aktar.py # Snipe-IT görsel ve belgelerini aktar

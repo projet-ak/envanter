@@ -302,3 +302,67 @@ def test_birlestirme_stok_kayitlarini_da_tasir(client):
         f"/accessories/{aks['id']}").json()["location_id"] == h["id"]
     # Kaynak artık silinebilir durumda değil — zaten silindi
     assert client.get(f"/locations/{k['id']}").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Kişi lokasyonlarını cihazlarına eşitleme betiği
+# --------------------------------------------------------------------------- #
+def _kle():
+    import importlib.util
+    yol = Path(__file__).resolve().parent.parent / "scripts" / "kisi-lokasyon-esitle.py"
+    spec = importlib.util.spec_from_file_location("kisi_lokasyon_esitle", yol)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_kisi_lokasyonu_cihazlarina_esitlenir(db_session):
+    kle = _kle()
+    db = db_session
+    eski = models.Location(name="ESKİ ŞANTİYE")
+    yeni = models.Location(name="YENİ ŞANTİYE")
+    db.add_all([eski, yeni])
+    db.flush()
+    k = models.User(first_name="Göçmen", last_name="Kişi", location_id=eski.id)
+    db.add(k)
+    db.flush()
+    for i in range(2):     # iki cihazı da yeni şantiyeye taşınmış
+        db.add(models.Asset(asset_tag=f"KL-{i}", location_id=yeni.id,
+                            assigned_type=models.AssignedType.user,
+                            assigned_user_id=k.id))
+    # Zimmeti olmayan kişi dokunulmadan kalmalı
+    db.add(models.User(first_name="Zimmesiz", location_id=eski.id))
+    db.commit()
+
+    esit, elle = kle.oneriler(db)
+    assert [x["ad"] for x in esit] == ["Göçmen Kişi"]
+    assert esit[0]["hedef_id"] == yeni.id and elle == []
+
+    for o in esit:
+        o["kisi"].location_id = o["hedef_id"]
+    db.commit()
+    assert db.get(models.User, k.id).location_id == yeni.id
+    assert kle.oneriler(db)[0] == []          # idempotent
+
+
+def test_esit_dagilim_elle_birakilir(db_session):
+    kle = _kle()
+    db = db_session
+    l1 = models.Location(name="BİR")
+    l2 = models.Location(name="İKİ")
+    l3 = models.Location(name="ÜÇ")
+    db.add_all([l1, l2, l3])
+    db.flush()
+    k = models.User(first_name="Kararsız", location_id=l3.id)
+    db.add(k)
+    db.flush()
+    db.add(models.Asset(asset_tag="ED-1", location_id=l1.id,
+                        assigned_type=models.AssignedType.user,
+                        assigned_user_id=k.id))
+    db.add(models.Asset(asset_tag="ED-2", location_id=l2.id,
+                        assigned_type=models.AssignedType.user,
+                        assigned_user_id=k.id))
+    db.commit()
+
+    esit, elle = kle.oneriler(db)
+    assert esit == [] and [x["ad"] for x in elle] == ["Kararsız"]

@@ -2668,6 +2668,11 @@ async function varlikSecilenleriTasi() {
   try { lokasyonlar = await api('/locations?limit=500'); }
   catch { return alert('⚠ Lokasyon listesi alınamadı.'); }
 
+  // Zimmetli kişi sayısı: kişiler cihazlarıyla birlikte taşınabilsin
+  const kisiSayisi = new Set(varlikListe
+    .filter(a => varlikSecim.has(a.id) && a.assigned_user_id)
+    .map(a => a.assigned_user_id)).size;
+
   modalAc(`📍 ${adet} cihazı taşı`, `
     <div class="note" style="margin-top:0">Seçili ${adet} cihazın
       "Bulunduğu Yer" bilgisi topluca değişir; zimmetler bozulmaz ve her
@@ -2679,6 +2684,11 @@ async function varlikSecilenleriTasi() {
         .map(l => `<option value="${l.id}">${kacir(l.name)}${
           l.proje_kodu ? ' (' + kacir(l.proje_kodu) + ')' : ''}</option>`).join('')}
     </select>
+    ${kisiSayisi ? `<label class="row" style="margin-top:10px;gap:8px;cursor:pointer">
+      <input type="checkbox" id="ltKisiler" checked />
+      <span>Zimmetli kişileri de taşı (${kisiSayisi} kişi) — kişi ile cihaz
+        farklı lokasyonda kalmasın</span>
+    </label>` : ''}
     <div class="row" style="margin-top:14px">
       <button class="primary" onclick="varlikTasiYap()">📍 Taşı</button>
       <button class="ghost" onclick="modalKapat()">Vazgeç</button>
@@ -2693,6 +2703,14 @@ async function varlikTasiYap() {
     bilgi.innerHTML = '<span style="color:var(--err)">Önce lokasyon seçin.</span>';
     return;
   }
+  // Kişi kimliklerini seçim temizlenmeden topla
+  const kisilerDeTasinsin = document.getElementById('ltKisiler')?.checked;
+  const kisiIdleri = kisilerDeTasinsin
+    ? [...new Set(varlikListe
+        .filter(a => varlikSecim.has(a.id) && a.assigned_user_id)
+        .map(a => a.assigned_user_id))]
+    : [];
+
   let hata = 0, sonHata = '';
   for (const id of varlikSecim) {
     try {
@@ -2701,10 +2719,18 @@ async function varlikTasiYap() {
         body: JSON.stringify({ location_id: hedef }) });
     } catch (e) { hata += 1; sonHata = e.detail || ''; }
   }
+  // Cihazların zimmetli kişileri de aynı lokasyona geçsin
+  for (const kid of kisiIdleri) {
+    try {
+      await api('/users/' + kid, { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_id: hedef }) });
+    } catch (e) { hata += 1; sonHata = e.detail || ''; }
+  }
   varlikSecim.clear();
   modalKapat(false);
   await loadAssets();
-  if (hata) alert(`⚠ ${hata} cihaz taşınamadı.` +
+  if (hata) alert(`⚠ ${hata} kayıt taşınamadı.` +
                   (sonHata ? `\nSon hata: ${sonHata}` : ''));
 }
 
