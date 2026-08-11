@@ -275,26 +275,46 @@ async function showApp() {
 
 // ---------- Personel ----------
 async function renderPersonelView() {
+  kisiSecim.clear();
   document.getElementById('view').innerHTML =
     sayfaBasligi('👥', 'Personel', 'Çalışanlar ve zimmetindeki cihazlar') + `
     <div class="panel">
       <div class="row" style="align-items:center">
         <h2 style="margin:0; flex:1">Personel (<span id="pCount">0</span>)</h2>
+        <span id="pUstIslem" class="row" style="gap:8px"></span>
         ${canWrite() ? `<button class="primary" onclick="personelEkleAc()">
           + Personel ekle</button>` : ''}
       </div>
       <div class="row" style="margin-top:12px">
+        <select id="pLok" onchange="loadPersonel()">
+          <option value="">Tüm lokasyonlar</option>
+        </select>
+        <select id="pZimmet" onchange="loadPersonel()">
+          <option value="">Zimmet: hepsi</option>
+          <option value="var">Zimmeti olanlar</option>
+          <option value="yok">Zimmeti olmayanlar</option>
+        </select>
         <input id="pAra" class="grow"
                placeholder="Ada, sicile, unvana veya lokasyona göre ara…"
                oninput="loadPersonel()" />
+        <button class="ghost" onclick="personelFiltreTemizle()">Temizle</button>
       </div>
-      <table style="margin-top:8px"><thead><tr><th>Ad Soyad</th>
+      <table style="margin-top:8px"><thead><tr>
+        <th class="dar"></th><th>Ad Soyad</th>
         <th class="gizle-mobil">Sicil</th><th>Unvan</th>
         <th class="gizle-mobil">Lokasyon</th><th class="gizle-mobil">E-posta</th>
         <th class="gizle-mobil">Telefon</th>
         <th>Zimmet</th><th></th></tr></thead>
         <tbody id="pRows"></tbody></table>
     </div>`;
+  loadPersonel();
+}
+
+function personelFiltreTemizle() {
+  ['pLok', 'pZimmet', 'pAra'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   loadPersonel();
 }
 
@@ -433,18 +453,45 @@ async function zimmetGeriAl(assetId, kisiId) {
   } catch (e) { alert('⚠ ' + (e.detail || 'İade alınamadı')); }
 }
 
+// Seçim ve toplu taşıma durumu (Varlıklar listesindeki desenle aynı)
+const kisiSecim = new Set();
+let personelListe = [];
+let personelSayac = {};
+
 async function loadPersonel() {
   const q = (document.getElementById('pAra')?.value || '').trim().toLocaleLowerCase('tr');
+  const lokSecili = document.getElementById('pLok')?.value || '';
+  const zimmetSecili = document.getElementById('pZimmet')?.value || '';
   const [kisiler, zimmetler, lokasyonlar] = await Promise.all([
     api('/users?limit=500'), api('/reports/personel-zimmet'),
     api('/locations?limit=500'),
   ]);
   const sayac = Object.fromEntries(zimmetler.map(z => [z.user_id, z.cihaz_sayisi]));
+  personelSayac = sayac;
   const lokAd = Object.fromEntries(lokasyonlar.map(l => [l.id, l.name]));
-  const liste = kisiler.filter(k => !q ||
-    [k.first_name, k.last_name, k.employee_num, k.job_title,
-     lokAd[k.location_id], k.department, k.sube, k.email, k.telefon]
-      .filter(Boolean).join(' ').toLocaleLowerCase('tr').includes(q));
+  lokasyonlar.forEach(l => { refLokasyonRenk[l.id] = l.renk; });
+
+  // Lokasyon filtresi seçenekleri (seçim korunarak)
+  const lokEl = document.getElementById('pLok');
+  if (lokEl && lokEl.options.length <= 1) {
+    lokEl.innerHTML = '<option value="">Tüm lokasyonlar</option>' + lokasyonlar
+      .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+      .map(l => `<option value="${l.id}">${kacir(l.name)}${
+        l.proje_kodu ? ' (' + kacir(l.proje_kodu) + ')' : ''}</option>`).join('');
+    lokEl.value = lokSecili;
+  }
+
+  const liste = kisiler.filter(k => {
+    if (lokSecili && String(k.location_id || '') !== lokSecili) return false;
+    const adet = sayac[k.id] || 0;
+    if (zimmetSecili === 'var' && !adet) return false;
+    if (zimmetSecili === 'yok' && adet) return false;
+    return !q ||
+      [k.first_name, k.last_name, k.employee_num, k.job_title,
+       lokAd[k.location_id], k.department, k.sube, k.email, k.telefon]
+        .filter(Boolean).join(' ').toLocaleLowerCase('tr').includes(q);
+  });
+  personelListe = liste;
   document.getElementById('pCount').textContent = liste.length;
   document.getElementById('pRows').innerHTML = liste.map(k => {
     const adet = sayac[k.id] || 0;
@@ -456,17 +503,114 @@ async function loadPersonel() {
     const fis = adet
       ? `<button class="ghost" title="Zimmet fişi (PDF)"
            onclick="openPdf('/documents/zimmet/user/${k.id}.pdf')">📄</button>` : '';
-    return `<tr class="tikla" onclick="if(!event.target.closest('button'))kisiDetay(${k.id})">
+    return `<tr class="tikla${kisiSecim.has(k.id) ? ' secili' : ''}"
+        onclick="if(!event.target.closest('button,input'))kisiDetay(${k.id})">
+      <td class="dar"><input type="checkbox" ${kisiSecim.has(k.id) ? 'checked' : ''}
+          onchange="kisiSec(${k.id}, this.checked)" /></td>
       <td><b>${kacir(tamAd)}</b></td>
       <td class="muted gizle-mobil">${esc(k.employee_num)}</td>
       <td>${esc(k.job_title)}</td>
-      <td class="muted gizle-mobil">${esc(lokAd[k.location_id])}</td>
+      <td class="muted gizle-mobil">${renkNokta(refLokasyonRenk[k.location_id])}${
+        esc(lokAd[k.location_id])}</td>
       <td class="muted gizle-mobil">${esc(k.email)}</td>
       <td class="muted gizle-mobil">${esc(k.telefon)}</td>
       <td>${adet ? `<span class="tag used">${adet} cihaz</span>`
                  : '<span class="muted">—</span>'}</td>
       <td>${zimmetle}${fis}</td></tr>`;
   }).join('');
+  personelUstIslemCiz();
+}
+
+function personelUstIslemCiz() {
+  const kutu = document.getElementById('pUstIslem');
+  if (!kutu) return;
+  const tumu = personelListe.length &&
+    personelListe.every(k => kisiSecim.has(k.id));
+  kutu.innerHTML = `
+    <button class="ghost" ${personelListe.length ? '' : 'disabled'}
+      onclick="kisiHepsiniSec()">${tumu
+        ? '✖ Seçimi bırak' : `☑ Tümünü seç (${personelListe.length})`}</button>
+    ${canWrite() ? `<button class="primary" ${kisiSecim.size ? '' : 'disabled'}
+      onclick="kisiSecilenleriTasi()">📍 Lokasyon değiştir (${kisiSecim.size})</button>` : ''}`;
+}
+
+function kisiSec(id, secili) {
+  secili ? kisiSecim.add(id) : kisiSecim.delete(id);
+  loadPersonel();
+}
+
+function kisiHepsiniSec() {
+  const tumu = personelListe.length &&
+    personelListe.every(k => kisiSecim.has(k.id));
+  if (tumu) kisiSecim.clear();
+  else personelListe.forEach(k => kisiSecim.add(k.id));
+  loadPersonel();
+}
+
+// Toplu lokasyon değiştirme: kişiler (istenirse zimmetli cihazlarıyla
+// birlikte) hedef lokasyona geçer — Varlıklar'daki taşımanın ikizi.
+async function kisiSecilenleriTasi() {
+  const adet = kisiSecim.size;
+  if (!adet) return;
+  let lokasyonlar;
+  try { lokasyonlar = await api('/locations?limit=500'); }
+  catch { return alert('⚠ Lokasyon listesi alınamadı.'); }
+  const cihazSayisi = [...kisiSecim]
+    .reduce((t, id) => t + (personelSayac[id] || 0), 0);
+
+  modalAc(`📍 ${adet} kişiyi taşı`, `
+    <div class="note" style="margin-top:0">Seçili ${adet} personelin
+      lokasyonu topluca değişir.</div>
+    <div class="stat-l" style="margin-bottom:4px">Yeni lokasyon</div>
+    <select id="ktHedef" style="width:100%">
+      <option value="">— lokasyon seç —</option>
+      ${lokasyonlar.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+        .map(l => `<option value="${l.id}">${kacir(l.name)}${
+          l.proje_kodu ? ' (' + kacir(l.proje_kodu) + ')' : ''}</option>`).join('')}
+    </select>
+    ${cihazSayisi ? `<label class="row" style="margin-top:10px;gap:8px;cursor:pointer">
+      <input type="checkbox" id="ktCihazlar" checked />
+      <span>Zimmetli cihazlarını da taşı (${cihazSayisi} cihaz) — kişi ile
+        cihaz farklı lokasyonda kalmasın</span>
+    </label>` : ''}
+    <div class="row" style="margin-top:14px">
+      <button class="primary" onclick="kisiTasiYap()">📍 Taşı</button>
+      <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+    </div>
+    <div id="ktInfo" class="note"></div>`);
+}
+
+async function kisiTasiYap() {
+  const hedef = Number(document.getElementById('ktHedef')?.value || 0);
+  const bilgi = document.getElementById('ktInfo');
+  if (!hedef) {
+    bilgi.innerHTML = '<span style="color:var(--err)">Önce lokasyon seçin.</span>';
+    return;
+  }
+  const cihazlarDa = document.getElementById('ktCihazlar')?.checked;
+  let hata = 0, sonHata = '';
+  for (const id of kisiSecim) {
+    try {
+      await api('/users/' + id, { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_id: hedef }) });
+      if (cihazlarDa) {
+        const cihazlar = await api(`/assets?user_id=${id}&limit=500`);
+        for (const a of cihazlar) {
+          try {
+            await api('/assets/' + a.id, { method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ location_id: hedef }) });
+          } catch (e) { hata += 1; sonHata = e.detail || ''; }
+        }
+      }
+    } catch (e) { hata += 1; sonHata = e.detail || ''; }
+  }
+  kisiSecim.clear();
+  modalKapat(false);
+  await loadPersonel();
+  if (hata) alert(`⚠ ${hata} kayıt taşınamadı.` +
+                  (sonHata ? `\nSon hata: ${sonHata}` : ''));
 }
 
 // ---------- Tanımlar (lokasyon, kategori, üretici…) ----------
