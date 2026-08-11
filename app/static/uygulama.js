@@ -28,7 +28,7 @@ const STOCK = {
     add: [['name','Ad','text'],['serial','Seri','text'],['qty','Adet','number'],['min_qty','Min','number']],
     lowStock: true },
   licenses: { label: 'Lisanslar', endpoint: '/licenses',
-    kayitTuru: 'license',
+    kayitTuru: 'license', hareket: true,
     ikon: '🔑', alt: 'Yazılım lisansları ve koltuk sayıları',
     cols: [['name','Ad'],['seats','Koltuk'],['license_key','Anahtar'],['expiration_date','Bitiş']],
     add: [['name','Ad','text'],['seats','Koltuk','number'],['license_key','Anahtar','text']],
@@ -3200,6 +3200,7 @@ async function downloadCsv(ev) {
 function renderStockView(tab) {
   const cfg = STOCK[tab];
   const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
+    (cfg.hareket ? '<th>Zimmet</th>' : '') +
     (canWrite() ? '<th></th>' : '');
   const addForm = canWrite() ? `<div class="panel">
     <h2>${cfg.label} — hızlı ekle</h2>
@@ -3221,7 +3222,13 @@ function renderStockView(tab) {
 
 async function loadStock(tab) {
   const cfg = STOCK[tab];
-  const items = await api(cfg.endpoint + '?limit=500');
+  const [items, dagilim] = await Promise.all([
+    api(cfg.endpoint + '?limit=500'),
+    cfg.hareket
+      ? api(`/stok/${cfg.kayitTuru}/dagilim-ozet`).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+  const dagMap = Object.fromEntries(dagilim.map(d => [d.kayit_id, d]));
   document.getElementById('scount').textContent = items.length;
   document.getElementById('srows').innerHTML = items.map(it => {
     const low = cfg.lowStock && it.min_qty != null && it.qty != null && it.qty <= it.min_qty;
@@ -3229,7 +3236,13 @@ async function loadStock(tab) {
       let v = esc(it[k]);
       if (k === 'qty' && low) v = `${it[k]} <span class="tag low">düşük stok</span>`;
       return `<td>${v}</td>`;
-    }).join('');
+    }).join('') + (cfg.hareket ? (() => {
+      // Kaç adet dağıtıldı, kaç kişide — detayında kimde olduğu görünür
+      const d = dagMap[it.id];
+      return `<td>${d && d.dagitilan
+        ? `<span class="tag used">${d.dagitilan} adet · ${d.kisi} kişide</span>`
+        : '<span class="muted">—</span>'}</td>`;
+    })() : '');
     // Hızlı işlem küpleri: stok girişi (+) ve kişiye zimmet — hep aynı
     // klavye/fare setleri için satırdan çıkmadan işlem yapılır.
     const ad = encodeURIComponent(it.name || '');
@@ -3304,13 +3317,16 @@ function renderRaporlarView() {
 // ---------- Stok kaydı detayı: bilgiler + dosya ekleri ----------
 async function stokDetay(tab, id) {
   const cfg = STOCK[tab];
-  let kayit, dosyalar, hareketler;
+  let kayit, dosyalar, hareketler, dagilim;
   try {
-    [kayit, dosyalar, hareketler] = await Promise.all([
+    [kayit, dosyalar, hareketler, dagilim] = await Promise.all([
       api(`${cfg.endpoint}/${id}`),
       api(`/stok/${cfg.kayitTuru}/${id}/dosyalar`).catch(() => []),
       cfg.hareket
         ? api(`/stok/${cfg.kayitTuru}/${id}/hareketler`).catch(() => [])
+        : Promise.resolve(null),
+      cfg.hareket
+        ? api(`/stok/${cfg.kayitTuru}/${id}/dagilim`).catch(() => null)
         : Promise.resolve(null),
     ]);
   } catch (e) { return alert('⚠ ' + (e.detail || 'Kayıt alınamadı')); }
@@ -3319,6 +3335,28 @@ async function stokDetay(tab, id) {
   const belgeler = dosyalar.filter(f => f.tur !== 'gorsel');
   const yaz = canWrite();
   const ad = encodeURIComponent(kayit.name || '');
+
+  // Kimde ne var: kişi başına adet + lokasyon; altta proje/lokasyon toplamı
+  const dagilimBolumu = dagilim && dagilim.kisiler.length ? `
+    <div class="bolum">
+      <h4>Kimde Ne Var (${dagilim.kisiler.length} kişi)</h4>
+      <table><thead><tr><th>Kişi</th><th>Adet</th>
+        <th class="gizle-mobil">Lokasyon</th></tr></thead><tbody>
+        ${dagilim.kisiler.map(k => `<tr class="tikla"
+            onclick="kisiDetay(${k.user_id})">
+          <td><b>👤 ${kacir(k.ad)}</b></td>
+          <td><span class="tag used">${k.adet} adet</span></td>
+          <td class="muted gizle-mobil">${esc(k.lokasyon)}${
+            k.proje_kodu ? ` (${kacir(k.proje_kodu)})` : ''}</td>
+        </tr>`).join('')}</tbody></table>
+      ${dagilim.lokasyonlar.length > 1 ? `
+        <div class="stat-l" style="margin:10px 0 4px">Proje / lokasyon dağılımı</div>
+        <div class="row" style="flex-wrap:wrap">
+          ${dagilim.lokasyonlar.map(l => `<span class="tag">
+            ${kacir(l.lokasyon)}${l.proje_kodu ? ` (${kacir(l.proje_kodu)})` : ''}
+            — ${l.adet} adet · ${l.kisi} kişi</span>`).join(' ')}
+        </div>` : ''}
+    </div>` : '';
 
   // Kim, ne zaman, kaç adet aldı — yeniden eskiye
   const hareketBolumu = hareketler === null ? '' : `
@@ -3353,6 +3391,7 @@ async function stokDetay(tab, id) {
   modalAc(`${cfg.ikon} ${kacir(kayit.name)}`, `
     <div class="bolum"><h4>${kacir(cfg.label)}</h4>${alanlar(kayit,
       cfg.cols.filter(([k]) => k !== 'name'))}</div>
+    ${dagilimBolumu}
     ${hareketBolumu}
     <div class="bolum">
       <h4>Görseller ve Belgeler</h4>
