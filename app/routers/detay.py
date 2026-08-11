@@ -274,6 +274,18 @@ def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
         .where(models.User.location_id == location_id)
         .order_by(models.User.first_name)).all()
 
+    # Alt projeler: "U030-U031" altında Satış Ofisi, Yönetim Ofisi gibi
+    from sqlalchemy import func
+    ust = db.get(models.Location, lok.parent_id) if lok.parent_id else None
+    altlar = db.scalars(
+        select(models.Location)
+        .where(models.Location.parent_id == location_id)
+        .order_by(models.Location.name)).all()
+    alt_cihaz = dict(db.execute(
+        select(models.Asset.location_id, func.count())
+        .where(models.Asset.location_id.in_([a.id for a in altlar]))
+        .group_by(models.Asset.location_id)).all()) if altlar else {}
+
     cihazlar = []
     for a in varliklar:
         ozet = _varlik_ozeti(db, a)
@@ -287,6 +299,12 @@ def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
             "id": lok.id, "name": lok.name, "proje_kodu": lok.proje_kodu,
             "city": lok.city, "address": lok.address, "renk": lok.renk,
         },
+        "ust": {"id": ust.id, "name": ust.name} if ust else None,
+        "alt_lokasyonlar": [
+            {"id": a.id, "name": a.name, "renk": a.renk,
+             "proje_kodu": a.proje_kodu, "cihaz": alt_cihaz.get(a.id, 0)}
+            for a in altlar
+        ],
         "cihaz_sayisi": len(cihazlar),
         "zimmetli_sayisi": sum(1 for c in varliklar
                                if c.assigned_type is not None),

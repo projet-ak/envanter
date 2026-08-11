@@ -40,7 +40,9 @@ const TANIMLAR = {
   locations:     { label: 'Lokasyonlar',  endpoint: '/locations',
     cols: [['name','Ad'],['proje_kodu','Proje Kodu'],['city','Şehir'],['address','Adres']],
     add: [['name','Ad','text'],['proje_kodu','Proje Kodu','text'],
-          ['city','Şehir','text'],['address','Adres','text']] },
+          ['city','Şehir','text'],['address','Adres','text']],
+    // Alt projeler: "U030-U031" altında Satış Ofisi, Yönetim Ofisi gibi
+    sec: [['parent_id','Üst lokasyon','/locations']] },
   categories:    { label: 'Kategoriler',  endpoint: '/categories',
     cols: [['name','Ad'],['type','Tür']],
     add: [['name','Ad','text']] },
@@ -521,6 +523,28 @@ function tanimSiralaDegis(alan) {
   tanimTabloCiz();
 }
 
+// Lokasyonları ağaç sırasına dizer: kökler, ardından altları (girintili).
+// Ziyaret kümesi olası döngülere (A↔B) karşı sonsuz özyinelemeyi keser.
+function _lokHiyerarsi(items) {
+  const cocuklar = {};
+  items.forEach(it => {
+    if (it.parent_id) (cocuklar[it.parent_id] ??= []).push(it);
+  });
+  const kokler = items.filter(it =>
+    !it.parent_id || !items.some(x => x.id === it.parent_id));
+  const sirali = [], gorulen = new Set();
+  const gez = (it, seviye) => {
+    if (gorulen.has(it.id)) return;
+    gorulen.add(it.id);
+    sirali.push({ ...it, _seviye: seviye });
+    (cocuklar[it.id] || [])
+      .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+      .forEach(c => gez(c, seviye + 1));
+  };
+  kokler.forEach(k => gez(k, 0));
+  return sirali;
+}
+
 function _tanimDeger(cfg, it, alan) {
   if (alan === '_cihaz') return (tanimSayilar?.[it.id]?.cihaz) || 0;
   if (alan === '_kisi') return (tanimSayilar?.[it.id]?.kisi) || 0;
@@ -591,13 +615,22 @@ function tanimTabloCiz() {
         return ((x || 0) - (y || 0)) * yon;
       return String(x).localeCompare(String(y), 'tr') * yon;
     });
+  } else if (lokMu) {
+    // Sıralama seçilmediyse hiyerarşi: alt projeler üstünün hemen altında,
+    // girintili. (Kolon sıralaması seçilince düz liste gösterilir.)
+    items = _lokHiyerarsi(items);
   }
 
   const rows = items.map(it => {
     const hucreler = cfg.cols.map(([k]) => {
       let v = tanimGoster(cfg, it, k);
-      // Lokasyon adının önünde rengi görünsün
-      if (lokMu && k === 'name') v = `${renkNokta(it.renk)}<b>${v}</b>`;
+      // Lokasyon adının önünde rengi görünsün; alt projeler girintili
+      if (lokMu && k === 'name') {
+        const girinti = it._seviye
+          ? `<span class="muted" style="padding-left:${it._seviye * 18}px">└</span> `
+          : '';
+        v = `${girinti}${renkNokta(it.renk)}<b>${v}</b>`;
+      }
       return `<td>${v}</td>`;
     }).join('');
     let ekstra = '';
@@ -645,7 +678,9 @@ async function tanimDuzenle(id) {
         <div class="stat-l" style="margin-bottom:3px">${l}</div>
         <select id="td_${k}" style="width:100%">
           <option value="">— seçilmedi —</option>
-          ${(tanimSecenek[k] || []).map(o =>
+          ${(tanimSecenek[k] || [])
+            .filter(o => !(k === 'parent_id' && o.id === kayit.id))
+            .map(o =>
             `<option value="${o.id}" ${o.id === kayit[k] ? 'selected' : ''}
              >${kacir(o.name)}</option>`).join('')}
         </select></div>`).join('')}
@@ -739,13 +774,28 @@ async function lokasyonDetay(id) {
         </div></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">Bu lokasyonda kayıtlı cihaz yok</div>';
 
+  // Alt projeler (Satış Ofisi, Yönetim Ofisi…) ve üst proje bağlantısı
+  const altlar = (d.alt_lokasyonlar || []).length ? `
+    <div class="bolum"><h4>Alt Lokasyonlar (${d.alt_lokasyonlar.length})</h4>
+      <div class="row" style="flex-wrap:wrap">
+        ${d.alt_lokasyonlar.map(a => `<button class="ghost"
+          onclick="lokasyonDetay(${a.id})">
+          ${renkNokta(a.renk)}📍 ${kacir(a.name)}
+          ${a.cihaz ? `<span class="muted">· ${a.cihaz} cihaz</span>` : ''}
+        </button>`).join('')}
+      </div></div>` : '';
+
   modalAc(`${renkNokta(lok.renk)}📍 ${kacir(lok.name)}`, `
+    ${d.ust ? `<div class="note" style="margin-top:0">Üst proje:
+      <a href="#" onclick="lokasyonDetay(${d.ust.id});return false">
+      📍 ${kacir(d.ust.name)}</a></div>` : ''}
     <div class="bolum"><h4>Künye</h4>${alanlar({
       proje_kodu: lok.proje_kodu, sehir: lok.city, adres: lok.address,
       cihaz: `${d.cihaz_sayisi} (${d.zimmetli_sayisi} zimmetli)`,
       personel: d.kisiler.length,
     }, [['proje_kodu','Proje Kodu'],['sehir','Şehir'],['adres','Adres'],
         ['cihaz','Cihaz'],['personel','Personel']])}</div>
+    ${altlar}
     <div class="bolum"><h4>Bağlı Personel (${d.kisiler.length})</h4>
       ${kisiler}</div>
     <div class="bolum"><h4>Cihazlar (${d.cihaz_sayisi})</h4>

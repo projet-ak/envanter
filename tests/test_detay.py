@@ -187,3 +187,24 @@ def test_lokasyon_rengi_dogrulanir(client):
     lok = client.post("/locations", json={"name": "Renk Testi"}).json()
     r = client.put(f"/locations/{lok['id']}", json={"renk": "#b91c1c"})
     assert r.status_code == 200 and r.json()["renk"] == "#b91c1c"
+
+
+def test_alt_projeler_detayda_listelenir(client):
+    ust = client.post("/locations", json={"name": "KARTAL ESENTEPE 1. VE 2. ETAP",
+                                          "proje_kodu": "U030-U031"}).json()
+    satis = client.post("/locations", json={"name": "SATIŞ OFİSİ",
+                                            "parent_id": ust["id"]}).json()
+    client.post("/locations", json={"name": "YÖNETİM OFİSİ",
+                                    "parent_id": ust["id"]})
+    client.post("/assets", json={"asset_tag": "ALT-1",
+                                 "location_id": satis["id"]})
+
+    d = client.get(f"/detay/location/{ust['id']}").json()
+    assert d["ust"] is None
+    altlar = {a["name"]: a for a in d["alt_lokasyonlar"]}
+    assert set(altlar) == {"SATIŞ OFİSİ", "YÖNETİM OFİSİ"}
+    assert altlar["SATIŞ OFİSİ"]["cihaz"] == 1
+
+    d2 = client.get(f"/detay/location/{satis['id']}").json()
+    assert d2["ust"]["name"] == "KARTAL ESENTEPE 1. VE 2. ETAP"
+    assert d2["alt_lokasyonlar"] == []
