@@ -2219,6 +2219,8 @@ function renderAssetsView() {
                placeholder="Etiket / seri / demirbaş / kişi / şantiye ara…"
                oninput="gecikmeliAra()" />
         <button class="ghost" onclick="filtreTemizle()">Temizle</button>
+        <button class="ghost" onclick="lokasyonSecAc()"
+                title="Lokasyona göre gez: hangi şantiyede ne var">📍 Lokasyon seç</button>
         <button class="ghost" id="arsivDug" onclick="varlikArsivDegis()"
                 title="Tedavülden kalkan cihazlar">🗃 Arşiv</button>
       </div>
@@ -2559,6 +2561,69 @@ async function varlikSecilenleriArsivle() {
   await loadAssets();
   if (hata) alert(`⚠ ${hata} cihaz için işlem yapılamadı.` +
                   (sonHata ? `\nSon hata: ${sonHata}` : ''));
+}
+
+// ---------- Lokasyon seçici: hangi lokasyonda hangi varlık var ----------
+// Lokasyonlar cihaz/kişi sayılarıyla listelenir; birini seçince varlık
+// listesi o lokasyona süzülür (sayfalama, dışa aktarma, toplu işlemler
+// süzülmüş listede çalışır). 👁 lokasyon detayını açar.
+let lokSecListe = [];
+
+async function lokasyonSecAc() {
+  let lokasyonlar, sayilar;
+  try {
+    [lokasyonlar, sayilar] = await Promise.all([
+      api('/locations?limit=500'),
+      api('/detay/lokasyon-sayilari').catch(() => []),
+    ]);
+  } catch { return alert('⚠ Lokasyon listesi alınamadı.'); }
+  const sayiMap = Object.fromEntries(sayilar.map(x => [x.location_id, x]));
+  lokSecListe = lokasyonlar
+    .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+    .map(l => ({ ...l, _s: sayiMap[l.id] || { cihaz: 0, zimmetli: 0, kisi: 0 } }));
+
+  modalAc('📍 Lokasyon seç', `
+    <div class="row">
+      <input id="lsAra" class="grow" autocomplete="off"
+             placeholder="Lokasyon ya da proje kodu ara…"
+             oninput="lokasyonSecCiz()" />
+      <button class="ghost" onclick="lokasyonSecUygula('')">Filtreyi kaldır</button>
+    </div>
+    <div id="lsSonuc" style="max-height:420px;overflow-y:auto;margin-top:10px"></div>`);
+  lokasyonSecCiz();
+  setTimeout(() => document.getElementById('lsAra')?.focus(), 60);
+}
+
+function lokasyonSecCiz() {
+  const kutu = document.getElementById('lsSonuc');
+  if (!kutu) return;
+  const q = sadeAd(document.getElementById('lsAra')?.value || '');
+  const liste = lokSecListe.filter(l => !q ||
+    sadeAd(`${l.name} ${l.proje_kodu || ''}`).includes(q));
+  kutu.innerHTML = liste.length ? `<table><thead><tr>
+      <th>Lokasyon</th><th>Proje</th><th>Cihaz</th><th>Kişi</th><th></th>
+      </tr></thead><tbody>
+      ${liste.map(l => `<tr class="tikla"
+          onclick="if(!event.target.closest('button'))lokasyonSecUygula(${l.id})">
+        <td>${renkNokta(l.renk)}<b>${kacir(l.name)}</b></td>
+        <td class="muted">${esc(l.proje_kodu)}</td>
+        <td>${l._s.cihaz
+          ? `<span class="tag">${l._s.cihaz} cihaz</span>` +
+            (l._s.zimmetli ? ` <span class="tag used">${l._s.zimmetli} zimmetli</span>` : '')
+          : '<span class="muted">—</span>'}</td>
+        <td>${l._s.kisi ? `<span class="tag free">${l._s.kisi} kişi</span>`
+                        : '<span class="muted">—</span>'}</td>
+        <td><button class="islem-kup gor" title="Lokasyon detayı"
+          onclick="lokasyonDetay(${l.id})">👁</button></td>
+      </tr>`).join('')}</tbody></table>`
+    : '<div class="muted">Eşleşen lokasyon yok</div>';
+}
+
+function lokasyonSecUygula(id) {
+  const el = document.getElementById('fLokasyon');
+  if (el) el.value = id === '' ? '' : String(id);
+  modalKapat(false);
+  loadAssets();
 }
 
 // Toplu lokasyon değiştirme: seçili cihazlar tek seferde başka şantiyeye
