@@ -656,8 +656,12 @@ async function lokasyonDetay(id) {
   const lok = d.lokasyon;
   const yaz = canWrite();
 
+  // Cihaz/kişi pencereleri lokIcinden ile açılır: başlıkta "← lokasyon"
+  // düğmesi çıkar, işi bitince tek tıkla bu listeye dönülür.
+  const lokArg = `${lok.id}, '${encodeURIComponent(lok.name)}'`;
   const kisiler = d.kisiler.length ? `<div class="row" style="flex-wrap:wrap">
-      ${d.kisiler.map(k => `<button class="ghost" onclick="kisiDetay(${k.id})">
+      ${d.kisiler.map(k => `<button class="ghost"
+        onclick="lokIcinden(${lokArg}, 'kisiDetay', ${k.id})">
         👤 ${kacir(k.ad)}${k.unvan ? ` <span class="muted">· ${kacir(k.unvan)}</span>` : ''}
       </button>`).join('')}</div>`
     : '<div class="muted">Bu lokasyona bağlı personel yok</div>';
@@ -667,7 +671,7 @@ async function lokasyonDetay(id) {
       <th>Durum</th><th class="gizle-mobil">Zimmetli</th><th></th>
       </tr></thead><tbody>
       ${d.cihazlar.map(c => `<tr class="tikla"
-          onclick="if(!event.target.closest('button'))cihazDetay(${c.id})">
+          onclick="if(!event.target.closest('button'))lokIcinden(${lokArg}, 'cihazDetay', ${c.id})">
         <td><b>${kacir(c.asset_tag)}</b></td>
         <td>${esc(c.name)}</td>
         <td class="muted gizle-mobil">${esc(c.kategori)}</td>
@@ -675,9 +679,9 @@ async function lokasyonDetay(id) {
         <td class="muted gizle-mobil">${esc(c.zimmetli)}</td>
         <td><div class="kup-kume">
           <button class="islem-kup gor" title="Görüntüle"
-            onclick="cihazDetay(${c.id})">👁</button>
+            onclick="lokIcinden(${lokArg}, 'cihazDetay', ${c.id})">👁</button>
           ${yaz ? `<button class="islem-kup duzen" title="Güncelle"
-            onclick="cihazDuzenle(${c.id})">✏️</button>` : ''}
+            onclick="lokIcinden(${lokArg}, 'cihazDuzenle', ${c.id})">✏️</button>` : ''}
         </div></td></tr>`).join('')}</tbody></table>`
     : '<div class="muted">Bu lokasyonda kayıtlı cihaz yok</div>';
 
@@ -1190,11 +1194,35 @@ function modalAc(baslik, govdeHtml, ekButonlar = '') {
 function modalKapat(yenile = true) {
   const acikti = document.getElementById('modalArka');
   acikti?.remove();
+  // Pencere gerçekten kapandı: "← geri" bağlamı da biter. Zincirleme
+  // geçişler modalAc üzerinden modalKapat(false) çağırdığı için korunur.
+  if (yenile) donusHedefi = null;
   if (yenile && acikti && verilerDegisti) {
     verilerDegisti = false;
     aktifVeriyiYenile();
   }
 }
+
+// ---------- "← geri" gezinmesi ----------
+// Lokasyon detayından cihaza/kişiye geçilince başlıkta dönüş düğmesi çıkar;
+// her seferinde Tanımlar → lokasyon → detay yolunu baştan yürümek gerekmez.
+let donusHedefi = null;      // {ad, ac}
+
+function lokIcinden(lokId, adKodlu, gorev, hedefId) {
+  donusHedefi = { ad: decodeURIComponent(adKodlu),
+                  ac: () => lokasyonDetay(lokId) };
+  ({ cihazDetay, cihazDuzenle, kisiDetay })[gorev](hedefId);
+}
+
+function donusGit() {
+  const h = donusHedefi;
+  donusHedefi = null;
+  h?.ac();
+}
+
+const geriButonu = () => donusHedefi
+  ? `<button class="ghost" title="Listeye dön"
+       onclick="donusGit()">← ${kacir(donusHedefi.ad)}</button>` : '';
 document.addEventListener('keydown', e => { if (e.key === 'Escape') modalKapat(); });
 
 function alanlar(obj, etiketler) {
@@ -1316,7 +1344,7 @@ async function cihazDetay(id) {
       }).join('') + '</tbody></table>'
     : '<div class="muted">Kayıt yok</div>';
 
-  const butonlar =
+  const butonlar = geriButonu() +
     (yaz ? (z.tur
       ? `<button class="ghost" onclick="cihazIadeAl(${id})">↩ İade al</button>`
       : `<button class="primary" onclick="checkoutPrompt(${id}, '${
@@ -1794,6 +1822,7 @@ async function kisiDetay(id) {
     </div>
     ${sekmeler.map(([ad, , icerik], i) => `<div class="kisi-sekme"
       id="sekme_${ad}" ${i === 1 ? '' : 'hidden'}>${icerik}</div>`).join('')}`,
+    geriButonu() +
     (d.cihaz_sayisi ? `<button class="ghost" title="Zimmet fişi"
       onclick="openPdf('/documents/zimmet/user/${id}.pdf')">📄</button>` : '') +
     (canWrite() ? `<button class="ghost" onclick="kisiDuzenle(${id})">✏️ Düzenle</button>` : ''));
@@ -1875,7 +1904,7 @@ async function cihazDuzenle(id) {
       <button class="primary" onclick="cihazKaydet(${id})">Kaydet</button>
       <button class="ghost" onclick="cihazDetay(${id})">Vazgeç</button>
     </div>
-    <div id="duzInfo" class="note"></div>`);
+    <div id="duzInfo" class="note"></div>`, geriButonu());
 }
 
 // Model değişince Kategori kutusu yeni modelin kategorisini gösterir
