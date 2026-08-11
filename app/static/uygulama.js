@@ -2475,6 +2475,9 @@ function varlikTabloCiz() {
         onclick="varlikSecilenleriArsivle()">${varlikArsiv
           ? `♻️ Seçilileri tedavüle döndür (${varlikSecim.size})`
           : `🗃 Seçilileri arşivle (${varlikSecim.size})`}</button>` : ''}
+      ${yaz && !varlikArsiv ? `<button class="ghost"
+        ${varlikSecim.size ? '' : 'disabled'}
+        onclick="varlikSecilenleriTasi()">📍 Lokasyon değiştir (${varlikSecim.size})</button>` : ''}
       <div class="acilir" id="disaAktarKutu">
         <button class="ghost" onclick="document.getElementById('disaAktarKutu')
             .classList.toggle('acik')">⬇ Dışa aktar ▾</button>
@@ -2555,6 +2558,56 @@ async function varlikSecilenleriArsivle() {
   varlikSecim.clear();
   await loadAssets();
   if (hata) alert(`⚠ ${hata} cihaz için işlem yapılamadı.` +
+                  (sonHata ? `\nSon hata: ${sonHata}` : ''));
+}
+
+// Toplu lokasyon değiştirme: seçili cihazlar tek seferde başka şantiyeye
+// taşınır. Her taşıma cihazın işlem geçmişine ve Transferler listesine düşer
+// (lokasyon değişikliği zaten logda eski → yeni olarak tutuluyor).
+async function varlikSecilenleriTasi() {
+  const adet = varlikSecim.size;
+  if (!adet) return;
+  let lokasyonlar;
+  try { lokasyonlar = await api('/locations?limit=500'); }
+  catch { return alert('⚠ Lokasyon listesi alınamadı.'); }
+
+  modalAc(`📍 ${adet} cihazı taşı`, `
+    <div class="note" style="margin-top:0">Seçili ${adet} cihazın
+      "Bulunduğu Yer" bilgisi topluca değişir; zimmetler bozulmaz ve her
+      cihazın işlem geçmişine <b>eski → yeni</b> olarak yazılır.</div>
+    <div class="stat-l" style="margin-bottom:4px">Yeni lokasyon</div>
+    <select id="ltHedef" style="width:100%">
+      <option value="">— lokasyon seç —</option>
+      ${lokasyonlar.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+        .map(l => `<option value="${l.id}">${kacir(l.name)}${
+          l.proje_kodu ? ' (' + kacir(l.proje_kodu) + ')' : ''}</option>`).join('')}
+    </select>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" onclick="varlikTasiYap()">📍 Taşı</button>
+      <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+    </div>
+    <div id="ltInfo" class="note"></div>`);
+}
+
+async function varlikTasiYap() {
+  const hedef = Number(document.getElementById('ltHedef')?.value || 0);
+  const bilgi = document.getElementById('ltInfo');
+  if (!hedef) {
+    bilgi.innerHTML = '<span style="color:var(--err)">Önce lokasyon seçin.</span>';
+    return;
+  }
+  let hata = 0, sonHata = '';
+  for (const id of varlikSecim) {
+    try {
+      await api('/assets/' + id, { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_id: hedef }) });
+    } catch (e) { hata += 1; sonHata = e.detail || ''; }
+  }
+  varlikSecim.clear();
+  modalKapat(false);
+  await loadAssets();
+  if (hata) alert(`⚠ ${hata} cihaz taşınamadı.` +
                   (sonHata ? `\nSon hata: ${sonHata}` : ''));
 }
 
