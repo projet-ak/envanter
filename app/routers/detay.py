@@ -277,6 +277,17 @@ def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
 
     # Alt projeler: "U030-U031" altında Satış Ofisi, Yönetim Ofisi gibi
     from sqlalchemy import func
+
+    # Gizli bağlantılar: silme/temizlik kararında görünmeleri gerekir —
+    # "bağlı bir şey yok" sanılan lokasyonun zimmet yeri ya da stok kaydı
+    # olabilir.
+    zimmet_yeri = db.scalar(
+        select(func.count(models.Asset.id))
+        .where(models.Asset.assigned_location_id == location_id)) or 0
+    stok = sum(db.scalar(
+        select(func.count(t.id)).where(t.location_id == location_id)) or 0
+        for t in (models.Accessory, models.Consumable, models.Component))
+
     ust = db.get(models.Location, lok.parent_id) if lok.parent_id else None
     altlar = db.scalars(
         select(models.Location)
@@ -309,6 +320,8 @@ def lokasyon_detay(location_id: int, db: Session = Depends(get_db)):
         "cihaz_sayisi": len(cihazlar),
         "zimmetli_sayisi": sum(1 for c in varliklar
                                if c.assigned_type is not None),
+        "zimmet_yeri_sayisi": zimmet_yeri,
+        "stok_sayisi": stok,
         "cihazlar": cihazlar,
         "kisiler": [
             {"id": k.id, "ad": _kisi_adi(k), "unvan": k.job_title,
@@ -343,7 +356,8 @@ def lokasyon_birlestir(govde: LokasyonBirlestirme,
 
     tasinan = 0
     for sutun in (models.Asset.location_id, models.Asset.assigned_location_id,
-                  models.User.location_id):
+                  models.User.location_id, models.Accessory.location_id,
+                  models.Consumable.location_id, models.Component.location_id):
         tablo = sutun.parent.class_
         tasinan += db.execute(
             update(tablo).where(sutun == kaynak.id)

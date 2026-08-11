@@ -34,6 +34,40 @@ def _lokasyon_dogrula(db, veri, mevcut):
                      "birimse 'Üst lokasyon' seçerek ekleyin.")
 
 
+def _lokasyon_silme_dogrula(db, lok):
+    """Silmeden önce GÖRÜNMEYEN bağlantıları da denetler.
+
+    Detay ekranı yalnızca 'bulunduğu yer' cihazlarını ve personeli sayar;
+    oysa lokasyonu zimmet yeri yapan cihazlar, oraya bağlı stok kayıtları ve
+    alt lokasyonlar da silmeyi engeller (PostgreSQL yabancı anahtarları).
+    Genel 500 yerine ne takıldığını söyleyen 409 dönülür.
+    """
+    from sqlalchemy import func
+
+    def _say(sutun):
+        return db.scalar(select(func.count()).select_from(
+            sutun.parent.class_).where(sutun == lok.id)) or 0
+
+    engeller = []
+    for sutun, ad in (
+        (models.Asset.location_id, "cihaz burada"),
+        (models.Asset.assigned_location_id, "cihazın zimmet yeri burası"),
+        (models.User.location_id, "personel burada"),
+        (models.Location.parent_id, "alt lokasyonu var"),
+        (models.Accessory.location_id, "aksesuar kaydı burada"),
+        (models.Consumable.location_id, "sarf kaydı burada"),
+        (models.Component.location_id, "bileşen kaydı burada"),
+    ):
+        n = _say(sutun)
+        if n:
+            engeller.append(f"{n} {ad}")
+    if engeller:
+        raise HTTPException(
+            409, f"'{lok.name}' silinemedi: {', '.join(engeller)}. "
+                 "Önce bunları taşıyın ya da listede 🔀 Birleştir kullanın — "
+                 "birleştirme tüm bağlantıları hedef kayda taşır.")
+
+
 companies = make_crud_router(
     model=models.Company,
     create_schema=schemas.CompanyCreate,
@@ -52,6 +86,7 @@ locations = make_crud_router(
     prefix="/locations",
     essiz_ad=True,
     dogrula=_lokasyon_dogrula,
+    silme_dogrula=_lokasyon_silme_dogrula,
     tag="Lokasyonlar",
 )
 

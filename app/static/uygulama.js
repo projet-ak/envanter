@@ -857,8 +857,13 @@ async function lokasyonDetay(id) {
       proje_kodu: lok.proje_kodu, sehir: lok.city, adres: lok.address,
       cihaz: `${d.cihaz_sayisi} (${d.zimmetli_sayisi} zimmetli)`,
       personel: d.kisiler.length,
+      // Silmeyi engelleyen "görünmez" bağlantılar da burada dursun
+      zimmet_yeri: d.zimmet_yeri_sayisi
+        ? `${d.zimmet_yeri_sayisi} cihazın zimmet yeri` : null,
+      stok: d.stok_sayisi ? `${d.stok_sayisi} stok kaydı` : null,
     }, [['proje_kodu','Proje Kodu'],['sehir','Şehir'],['adres','Adres'],
-        ['cihaz','Cihaz'],['personel','Personel']])}</div>
+        ['cihaz','Cihaz'],['personel','Personel'],
+        ['zimmet_yeri','Zimmet Yeri'],['stok','Stok']])}</div>
     ${altlar}
     <div class="bolum"><h4>Bağlı Personel (${d.kisiler.length})</h4>
       ${kisiler}</div>

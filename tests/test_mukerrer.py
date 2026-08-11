@@ -249,3 +249,56 @@ def test_birlestirme_hatalari_ve_yetki(client, viewer_client):
     assert viewer_client.post("/detay/lokasyon-birlestir",
                               json={"kaynak_id": 1,
                                     "hedef_id": 2}).status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# Lokasyon silme: gizli bağlantılar anlaşılır 409 ile engellenir
+# --------------------------------------------------------------------------- #
+def test_zimmet_yeri_olan_lokasyon_silinemez_aciklamali(client):
+    lok = client.post("/locations", json={"name": "GİZLİ BAĞLI"}).json()
+    a = client.post("/assets", json={"asset_tag": "GB-1"}).json()
+    client.post(f"/assets/{a['id']}/checkout",
+                json={"assigned_type": "location", "assigned_id": lok["id"]})
+
+    r = client.delete(f"/locations/{lok['id']}")
+    assert r.status_code == 409
+    assert "zimmet yeri" in r.json()["detail"]
+    assert "Birleştir" in r.json()["detail"]
+
+    # Detay da gizli bağlantıyı gösterir
+    d = client.get(f"/detay/location/{lok['id']}").json()
+    assert d["zimmet_yeri_sayisi"] == 1 and d["cihaz_sayisi"] == 0
+
+
+def test_stok_kaydi_olan_lokasyon_silinemez(client):
+    lok = client.post("/locations", json={"name": "STOKLU"}).json()
+    client.post("/accessories", json={"name": "Depodaki Klavye", "qty": 3,
+                                      "location_id": lok["id"]})
+    r = client.delete(f"/locations/{lok['id']}")
+    assert r.status_code == 409 and "aksesuar" in r.json()["detail"]
+    assert client.get(
+        f"/detay/location/{lok['id']}").json()["stok_sayisi"] == 1
+
+
+def test_alt_lokasyonu_olan_silinemez_bos_olan_silinir(client):
+    ust = client.post("/locations", json={"name": "ÜSTLÜ"}).json()
+    client.post("/locations", json={"name": "ALTI", "parent_id": ust["id"]})
+    r = client.delete(f"/locations/{ust['id']}")
+    assert r.status_code == 409 and "alt lokasyon" in r.json()["detail"]
+
+    bos = client.post("/locations", json={"name": "BOŞ KAYIT"}).json()
+    assert client.delete(f"/locations/{bos['id']}").status_code == 204
+
+
+def test_birlestirme_stok_kayitlarini_da_tasir(client):
+    h = client.post("/locations", json={"name": "STOK HEDEF"}).json()
+    k = client.post("/locations", json={"name": "Stok Hedef X"}).json()
+    aks = client.post("/accessories", json={"name": "Taşınan Mouse", "qty": 2,
+                                            "location_id": k["id"]}).json()
+    r = client.post("/detay/lokasyon-birlestir",
+                    json={"kaynak_id": k["id"], "hedef_id": h["id"]})
+    assert r.status_code == 200 and r.json()["tasinan"] == 1
+    assert client.get(
+        f"/accessories/{aks['id']}").json()["location_id"] == h["id"]
+    # Kaynak artık silinebilir durumda değil — zaten silindi
+    assert client.get(f"/locations/{k['id']}").status_code == 404

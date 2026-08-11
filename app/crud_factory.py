@@ -6,6 +6,7 @@ parametre tiplerini çalışma anında (closure değişkeninden) çözebilmesi g
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_editor
@@ -14,7 +15,8 @@ from app.excel.sema import _sadelestir
 
 
 def make_crud_router(*, model, create_schema, update_schema, read_schema,
-                     prefix, tag, essiz_ad: bool = False, dogrula=None):
+                     prefix, tag, essiz_ad: bool = False, dogrula=None,
+                     silme_dogrula=None):
     """`essiz_ad=True` verilen tablolarda aynı ada ikinci kayıt açılamaz.
 
     Karşılaştırma _sadelestir ile yapılır: "ŞANTİYE U026", "Şantiye U026" ve
@@ -98,7 +100,18 @@ def make_crud_router(*, model, create_schema, update_schema, read_schema,
         obj = db.get(model, item_id)
         if obj is None:
             raise HTTPException(404, f"{tag} bulunamadı")
-        db.delete(obj)
-        db.commit()
+        if silme_dogrula:
+            silme_dogrula(db, obj)
+        try:
+            db.delete(obj)
+            db.commit()
+        except IntegrityError:
+            # PostgreSQL yabancı anahtarı: bağlı kayıt varken silme 500 değil
+            # anlaşılır bir 409 dönsün (SQLite FK denetlemediği için testte
+            # görünmez, üretimde görünürdü).
+            db.rollback()
+            raise HTTPException(
+                409, f"Silinemedi: bu {tag.lower()} kaydına bağlı veriler var. "
+                     "Önce bağlantıları kaldırın ya da başka kayda taşıyın.")
 
     return router

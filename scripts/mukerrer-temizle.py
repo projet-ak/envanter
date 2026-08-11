@@ -54,11 +54,17 @@ def lokasyon_gruplari(db: Session) -> list[list[models.Location]]:
             if len(g) > 1]
 
 
+_LOKASYON_SUTUNLARI = (
+    models.Asset.location_id, models.Asset.assigned_location_id,
+    models.User.location_id, models.Accessory.location_id,
+    models.Consumable.location_id, models.Component.location_id,
+)
+
+
 def _referans_sayilari(db: Session) -> dict[int, int]:
-    """Lokasyon başına bağlantı sayısı (cihaz + zimmet yeri + personel)."""
+    """Lokasyon başına bağlantı sayısı (cihaz + zimmet yeri + personel + stok)."""
     sayilar: dict[int, int] = {}
-    for sutun in (models.Asset.location_id, models.Asset.assigned_location_id,
-                  models.User.location_id):
+    for sutun in _LOKASYON_SUTUNLARI:
         tablo = sutun.parent.class_
         for kimlik, adet in db.execute(
                 select(sutun, func.count()).select_from(tablo)
@@ -77,9 +83,7 @@ def lokasyonlari_birlestir(db: Session, gruplar, sayilar) -> tuple[int, int]:
         digerleri = [x for x in grup if x.id != kalan.id]
         kimlikler = [x.id for x in digerleri]
 
-        for sutun in (models.Asset.location_id,
-                      models.Asset.assigned_location_id,
-                      models.User.location_id):
+        for sutun in _LOKASYON_SUTUNLARI:
             tablo = sutun.parent.class_
             tasinan += db.execute(
                 update(tablo).where(sutun.in_(kimlikler))
