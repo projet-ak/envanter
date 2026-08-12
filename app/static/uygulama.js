@@ -2503,10 +2503,20 @@ let varlikSirala = { alan: null, yon: 1 };
 let varlikSayfa = 1;
 let varlikLimit = 20;
 
-function renderAssets(assets) {
+function renderAssets(assets, { sifirla = true } = {}) {
   varlikListe = assets;
-  varlikSecim.clear();
-  varlikSayfa = 1;
+  if (sifirla) {
+    // Yeni sorgu/arama: baştan başla
+    varlikSecim.clear();
+    varlikSayfa = 1;
+  } else {
+    // Aynı görünümün tazelenmesi (kayıt güncelleme vb.): sayfa ve seçim
+    // korunur — 2. sayfada düzenleme yapan kullanıcı 1. sayfaya atılmaz.
+    const kimlikler = new Set(assets.map(a => a.id));
+    [...varlikSecim].forEach(id => {
+      if (!kimlikler.has(id)) varlikSecim.delete(id);
+    });
+  }
   varlikTabloCiz();
 }
 
@@ -2927,10 +2937,14 @@ function varlikCsv() {
 // tam liste üzerinde döner. (Eskiden ilk 200 gelir, kalanına "Daha fazla
 // göster" ile gidilirdi — 9. sayfada takılı kalınıyordu.)
 const VARLIK_TAVANI = 5000;
+let sonVarlikSorgu = null;      // filtre imzası: değişmediyse sayfa korunur
 
 async function loadAssets() {
   const info = document.getElementById('searchInfo'); if (info) info.textContent = '';
   const p = filtreSorgusu();
+  const imza = p.toString();
+  const yeniSorgu = imza !== sonVarlikSorgu;
+  sonVarlikSorgu = imza;
   const liste = [];
   const adim = 500;
   for (let skip = 0; ; skip += adim) {
@@ -2941,7 +2955,7 @@ async function loadAssets() {
     liste.push(...parca);
     if (parca.length < adim || liste.length >= VARLIK_TAVANI) break;
   }
-  renderAssets(liste);
+  renderAssets(liste, { sifirla: yeniSorgu });
 
   const bilgi = document.getElementById('filtreBilgi');
   const etiketler = [];
