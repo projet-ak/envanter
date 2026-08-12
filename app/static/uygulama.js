@@ -10,19 +10,19 @@ const canWrite = () => me && (me.role === 'admin' || me.role === 'editor');
 // Adet bazlı türlerin yapılandırması (veri-odaklı arayüz)
 const STOCK = {
   accessories: { label: 'Aksesuarlar', endpoint: '/accessories',
-    kayitTuru: 'accessory', hareket: true,
+    kayitTuru: 'accessory', hareket: true, lokasyonlu: true,
     ikon: '🎧', alt: 'Klavye, mouse, kulaklık gibi adet bazlı malzemeler',
     cols: [['name','Ad'],['model_number','Model No'],['qty','Adet'],['min_qty','Min']],
     add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
     lowStock: true },
   consumables: { label: 'Sarf Malzeme', endpoint: '/consumables',
-    kayitTuru: 'consumable', hareket: true,
+    kayitTuru: 'consumable', hareket: true, lokasyonlu: true,
     ikon: '📦', alt: 'Toner, kablo, pil gibi tüketilen malzemeler',
     cols: [['name','Ad'],['qty','Adet'],['min_qty','Min']],
     add: [['name','Ad','text'],['qty','Adet','number'],['min_qty','Min','number']],
     lowStock: true },
   components: { label: 'Bileşenler', endpoint: '/components',
-    kayitTuru: 'component', hareket: true,
+    kayitTuru: 'component', hareket: true, lokasyonlu: true,
     ikon: '🔩', alt: 'RAM, disk, ekran kartı gibi cihaz parçaları',
     cols: [['name','Ad'],['serial','Seri'],['qty','Adet'],['min_qty','Min']],
     add: [['name','Ad','text'],['serial','Seri','text'],['qty','Adet','number'],['min_qty','Min','number']],
@@ -3216,7 +3216,10 @@ async function downloadCsv(ev) {
 // ---------- Adet bazlı türler (genel) ----------
 function renderStockView(tab) {
   const cfg = STOCK[tab];
-  const head = cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
+  stokSecim.clear();
+  const head = (cfg.lokasyonlu ? '<th class="dar"></th>' : '') +
+    cfg.cols.map(([, l]) => `<th>${l}</th>`).join('') +
+    (cfg.lokasyonlu ? '<th>Lokasyon</th>' : '') +
     (cfg.hareket ? '<th>Zimmet</th>' : '') +
     (canWrite() ? '<th></th>' : '');
   const addForm = canWrite() ? `<div class="panel">
@@ -3231,29 +3234,68 @@ function renderStockView(tab) {
   document.getElementById('view').innerHTML =
     sayfaBasligi(cfg.ikon || '📦', cfg.label, cfg.alt || '') + `${addForm}
     <div class="panel">
-      <h2>${cfg.label} (<span id="scount">0</span>)</h2>
-      <table><thead><tr>${head}</tr></thead><tbody id="srows"></tbody></table>
+      <div class="row" style="align-items:center">
+        <h2 style="margin:0; flex:1">${cfg.label} (<span id="scount">0</span>)</h2>
+        <span id="sUstIslem" class="row" style="gap:8px"></span>
+      </div>
+      ${cfg.lokasyonlu ? `<div class="row" style="margin-top:10px">
+        <select id="sLok" onchange="loadStock('${tab}')">
+          <option value="">Tüm lokasyonlar</option>
+        </select>
+      </div>` : ''}
+      <table style="margin-top:8px"><thead><tr>${head}</tr></thead>
+        <tbody id="srows"></tbody></table>
     </div>`;
   loadStock(tab);
 }
 
+// Stok listelerinde seçim + toplu lokasyon değişimi (Varlıklar deseni)
+const stokSecim = new Set();
+let stokListe = [];
+
 async function loadStock(tab) {
   const cfg = STOCK[tab];
-  const [items, dagilim] = await Promise.all([
+  const lokSecili = document.getElementById('sLok')?.value || '';
+  const [tumu, dagilim, lokasyonlar] = await Promise.all([
     api(cfg.endpoint + '?limit=500'),
     cfg.hareket
       ? api(`/stok/${cfg.kayitTuru}/dagilim-ozet`).catch(() => [])
       : Promise.resolve([]),
+    cfg.lokasyonlu
+      ? api('/locations?limit=500').catch(() => [])
+      : Promise.resolve([]),
   ]);
   const dagMap = Object.fromEntries(dagilim.map(d => [d.kayit_id, d]));
+  const lokAd = Object.fromEntries(lokasyonlar.map(l => [l.id, l.name]));
+  lokasyonlar.forEach(l => { refLokasyonRenk[l.id] = l.renk; });
+
+  // Lokasyon filtresi seçenekleri (seçim korunarak)
+  const lokEl = document.getElementById('sLok');
+  if (lokEl && lokEl.options.length <= 1) {
+    lokEl.innerHTML = '<option value="">Tüm lokasyonlar</option>' + lokasyonlar
+      .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+      .map(l => `<option value="${l.id}">${kacir(l.name)}${
+        l.proje_kodu ? ' (' + kacir(l.proje_kodu) + ')' : ''}</option>`).join('');
+    lokEl.value = lokSecili;
+  }
+
+  const items = lokSecili
+    ? tumu.filter(it => String(it.location_id || '') === lokSecili) : tumu;
+  stokListe = items;
   document.getElementById('scount').textContent = items.length;
   document.getElementById('srows').innerHTML = items.map(it => {
     const low = cfg.lowStock && it.min_qty != null && it.qty != null && it.qty <= it.min_qty;
+    const secim = cfg.lokasyonlu
+      ? `<td class="dar"><input type="checkbox" ${stokSecim.has(it.id) ? 'checked' : ''}
+           onchange="stokSec(${it.id}, this.checked)" /></td>` : '';
     const cells = cfg.cols.map(([k]) => {
       let v = esc(it[k]);
       if (k === 'qty' && low) v = `${it[k]} <span class="tag low">düşük stok</span>`;
       return `<td>${v}</td>`;
-    }).join('') + (cfg.hareket ? (() => {
+    }).join('') + (cfg.lokasyonlu
+      ? `<td class="muted">${renkNokta(refLokasyonRenk[it.location_id])}${
+          esc(lokAd[it.location_id])}</td>` : ''
+    ) + (cfg.hareket ? (() => {
       // Kaç adet dağıtıldı, kaç kişide — detayında kimde olduğu görünür
       const d = dagMap[it.id];
       return `<td>${d && d.dagitilan
@@ -3272,8 +3314,88 @@ async function loadStock(tab) {
       <button class="islem-kup zimmet" title="Kişiye zimmetle"
         onclick="event.stopPropagation();stokZimmetPrompt('${tab}',${it.id},'${ad}')">🤝</button>` : ''}
       </div></td>` : '';
-    return `<tr class="tikla" onclick="stokDetay('${tab}', ${it.id})">${cells}${kupler}</tr>`;
+    return `<tr class="tikla${stokSecim.has(it.id) ? ' secili' : ''}"
+      onclick="if(!event.target.closest('button,input'))stokDetay('${tab}', ${it.id})">${
+      secim}${cells}${kupler}</tr>`;
   }).join('');
+  stokUstIslemCiz(tab);
+}
+
+function stokUstIslemCiz(tab) {
+  const kutu = document.getElementById('sUstIslem');
+  if (!kutu) return;
+  const cfg = STOCK[tab];
+  if (!cfg.lokasyonlu) { kutu.innerHTML = ''; return; }
+  const tumu = stokListe.length && stokListe.every(it => stokSecim.has(it.id));
+  kutu.innerHTML = `
+    <button class="ghost" ${stokListe.length ? '' : 'disabled'}
+      onclick="stokHepsiniSec('${tab}')">${tumu
+        ? '✖ Seçimi bırak' : `☑ Tümünü seç (${stokListe.length})`}</button>
+    ${canWrite() ? `<button class="primary" ${stokSecim.size ? '' : 'disabled'}
+      onclick="stokSecilenleriTasi('${tab}')">📍 Lokasyon değiştir (${stokSecim.size})</button>` : ''}`;
+}
+
+function stokSec(id, secili) {
+  secili ? stokSecim.add(id) : stokSecim.delete(id);
+  loadStock(aktifStokTab());
+}
+
+function aktifStokTab() {
+  return Object.keys(STOCK).includes(activeTab) ? activeTab : 'accessories';
+}
+
+function stokHepsiniSec(tab) {
+  const tumu = stokListe.length && stokListe.every(it => stokSecim.has(it.id));
+  if (tumu) stokSecim.clear();
+  else stokListe.forEach(it => stokSecim.add(it.id));
+  loadStock(tab);
+}
+
+async function stokSecilenleriTasi(tab) {
+  const cfg = STOCK[tab];
+  const adet = stokSecim.size;
+  if (!adet) return;
+  let lokasyonlar;
+  try { lokasyonlar = await api('/locations?limit=500'); }
+  catch { return alert('⚠ Lokasyon listesi alınamadı.'); }
+  modalAc(`📍 ${adet} stok kaydını taşı`, `
+    <div class="note" style="margin-top:0">Seçili ${adet} ${cfg.label.toLocaleLowerCase('tr')}
+      kaydının lokasyonu topluca değişir; adetler ve zimmet geçmişi aynen kalır.</div>
+    <div class="stat-l" style="margin-bottom:4px">Yeni lokasyon</div>
+    <select id="stHedef" style="width:100%">
+      <option value="">— lokasyon seç —</option>
+      ${lokasyonlar.slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+        .map(l => `<option value="${l.id}">${kacir(l.name)}${
+          l.proje_kodu ? ' (' + kacir(l.proje_kodu) + ')' : ''}</option>`).join('')}
+    </select>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" onclick="stokTasiYap('${tab}')">📍 Taşı</button>
+      <button class="ghost" onclick="modalKapat()">Vazgeç</button>
+    </div>
+    <div id="stInfo" class="note"></div>`);
+}
+
+async function stokTasiYap(tab) {
+  const cfg = STOCK[tab];
+  const hedef = Number(document.getElementById('stHedef')?.value || 0);
+  const bilgi = document.getElementById('stInfo');
+  if (!hedef) {
+    bilgi.innerHTML = '<span style="color:var(--err)">Önce lokasyon seçin.</span>';
+    return;
+  }
+  let hata = 0, sonHata = '';
+  for (const id of stokSecim) {
+    try {
+      await api(`${cfg.endpoint}/${id}`, { method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location_id: hedef }) });
+    } catch (e) { hata += 1; sonHata = e.detail || ''; }
+  }
+  stokSecim.clear();
+  modalKapat(false);
+  await loadStock(tab);
+  if (hata) alert(`⚠ ${hata} kayıt taşınamadı.` +
+                  (sonHata ? `\nSon hata: ${sonHata}` : ''));
 }
 
 async function addStock(tab) {
