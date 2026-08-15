@@ -726,7 +726,7 @@ async function loadTanim() {
         ${(cfg.sec || []).map(([k, l]) => `<select id="t_${k}">
           <option value="">${l} seçilmedi</option>
           ${(tanimSecenek[k] || []).map(o =>
-            `<option value="${o.id}">${kacir(o.name)}</option>`).join('')}
+            `<option value="${o.id}">${secenekAdi(o)}</option>`).join('')}
         </select>`).join('')}
         ${lokMu ? `<select id="t_renk" title="Lokasyon rengi">
           ${renkSecenekleri('')}</select>` : ''}
@@ -847,7 +847,7 @@ async function tanimDuzenle(id) {
             .filter(o => !(k === 'parent_id' && o.id === kayit.id))
             .map(o =>
             `<option value="${o.id}" ${o.id === kayit[k] ? 'selected' : ''}
-             >${kacir(o.name)}</option>`).join('')}
+             >${secenekAdi(o)}</option>`).join('')}
         </select></div>`).join('')}
       ${aktifTanim === 'locations' ? `<div>
         <div class="stat-l" style="margin-bottom:3px">Renk</div>
@@ -2171,11 +2171,17 @@ function kisiSekme(ad) {
 }
 
 // ---------- Cihaz düzenleme ----------
+// Açılır liste seçenekleri. Lokasyonlarda proje kodu da yazılır ("ŞANTİYE
+// U026 (U026)") — aynı adlı şantiyeler ayırt edilebilsin; kodu olmayan
+// kayıtlar ve diğer tablolar (kategori, model…) yalnız adla görünür.
+const secenekAdi = (x) => kacir(x.name) +
+  (x.proje_kodu ? ` (${kacir(x.proje_kodu)})` : '');
+
 function secenekler(liste, secili) {
   return '<option value="">— seçilmedi —</option>' + liste
     .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
-    .map(x => `<option value="${x.id}"${x.id === secili ? ' selected' : ''}>
-               ${x.name}</option>`).join('');
+    .map(x => `<option value="${x.id}"${x.id === secili ? ' selected' : ''}
+               >${secenekAdi(x)}</option>`).join('');
 }
 
 // Model -> kategori eşlemesi: düzenleme formundaki Kategori kutusu modelin
@@ -2422,7 +2428,7 @@ async function filtreSecenekleriDoldur() {
     const secili = el.value;
     el.innerHTML = `<option value="">${bos}</option>` + liste
       .slice().sort((a, b) => a.name.localeCompare(b.name, 'tr'))
-      .map(x => `<option value="${x.id}">${x.name}</option>`).join('');
+      .map(x => `<option value="${x.id}">${secenekAdi(x)}</option>`).join('');
     el.value = secili;
   };
   // Proje kodları ayrı uçtan gelir (cihaz sayısıyla birlikte)
