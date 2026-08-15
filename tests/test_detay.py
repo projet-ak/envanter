@@ -227,3 +227,22 @@ def test_lokasyon_detayinda_stok_kayitlari_listelenir(client):
     sayilar = client.get("/detay/lokasyon-sayilari").json()
     s = next(x for x in sayilar if x["location_id"] == lok["id"])
     assert s["stok"] == 2
+
+
+def test_varlik_detayi_durum_tipini_verir(client):
+    durumlar = {s["name"]: s for s in client.get("/status-labels").json()}
+    kayip = client.post("/status-labels", json={"name": "Kayıp",
+                                                "type": "undeployable"}).json()
+    a = client.post("/assets", json={"asset_tag": "KY-1",
+                                     "status_id": kayip["id"]}).json()
+    k = client.get(f"/detay/asset/{a['id']}").json()["kunye"]
+    assert k["durum"] == "Kayıp" and k["durum_tipi"] == "undeployable"
+
+    hazir = durumlar["Kullanıma Hazır"]
+    client.put(f"/assets/{a['id']}", json={"status_id": hazir["id"]})
+    k = client.get(f"/detay/asset/{a['id']}").json()["kunye"]
+    assert k["durum_tipi"] == "deployable"
+
+    b = client.post("/assets", json={"asset_tag": "KY-2"}).json()
+    assert client.get(
+        f"/detay/asset/{b['id']}").json()["kunye"]["durum_tipi"] is None

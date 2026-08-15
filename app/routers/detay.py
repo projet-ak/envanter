@@ -95,6 +95,11 @@ def _varlik_ozeti(db: Session, a: models.Asset) -> dict:
                  if mdl and mdl.manufacturer_id else None,
         "model": _ad(mdl),
         "durum": _ad(db.get(models.StatusLabel, a.status_id)) if a.status_id else None,
+        # Durumun tipi arayüzde "kullanım dışı" ayrımı için gerekir:
+        # kayıp/hurda/arızalı cihaz "boşta" diye gösterilmemeli.
+        "durum_tipi": (db.get(models.StatusLabel, a.status_id).type.value
+                       if a.status_id and db.get(models.StatusLabel, a.status_id)
+                       else None),
         "lokasyon": _ad(db.get(models.Location, a.location_id))
                     if a.location_id else None,
         "ip_address": a.ip_address,

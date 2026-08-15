@@ -4,6 +4,11 @@
 let token = localStorage.getItem('token') || '';
 let me = JSON.parse(localStorage.getItem('me') || 'null');
 let statusMap = {};
+let statusTipi = {};       // durum kimliği -> deployable | undeployable | …
+// Kayıp, hurda, arızalı gibi durumlar: cihaz kullanımda değildir, "boşta"
+// diye gösterilmez ve zimmetlenmeden önce uyarı verilir.
+const kullanimDisi = (a) => ['undeployable', 'archived']
+  .includes(statusTipi[a?.status_id]);
 let activeTab = 'assets';
 const canWrite = () => me && (me.role === 'admin' || me.role === 'editor');
 
@@ -270,6 +275,9 @@ async function showApp() {
   sayacBaslat();
   const s = await api('/status-labels');
   statusMap = Object.fromEntries(s.map(x => [x.id, x.name]));
+  // Durumun TİPİ de tutulur: kayıp/hurda/arızalı (undeployable) ve arşiv
+  // cihazlar "boşta" sayılmamalı — zimmetlenmeye de uygun değiller.
+  statusTipi = Object.fromEntries(s.map(x => [x.id, x.type]));
   selectTab('dashboard');
 }
 
@@ -1576,6 +1584,10 @@ async function cihazDetay(id) {
   const k = d.kunye, z = d.zimmet;
 
   const yaz = canWrite();
+  // Kayıp / hurda / arızalı (ya da arşiv): cihaz kullanımda değil. Zimmet
+  // bölümü "boşta" demek yerine durumu ve son kullananı söyler.
+  const disi = ['undeployable', 'archived'].includes(k.durum_tipi);
+  const sonKullanan = (d.kullanim_gecmisi || [])[0] || null;
   const ozellikHtml = Object.entries(d.ozellikler || {}).map(([grup, degerler]) => {
     if (!degerler || typeof degerler !== 'object') return '';
     // Grup/alan adları öznitelik içine gömüldüğü için URL kodlaması
@@ -1708,9 +1720,23 @@ async function cihazDetay(id) {
     <div class="bolum"><h4>Zimmet</h4>${z.kisi || z.lokasyon ? alanlar(z, [
       ['kisi','Kişi'],['departman','Departman'],['unvan','Unvan'],
       ['lokasyon','Lokasyon'],['tarih','Zimmet Tarihi'],
-    ]) : '<div class="muted">Cihaz boşta</div>'}
+    ]) + (disi ? `<div class="note" style="margin-top:8px">
+        ⚠ Cihaz <b>${kacir(k.durum)}</b> durumunda ama üzerinde zimmet
+        görünüyor — kayıp/hurda cihazı iade alıp kapatmak isteyebilirsiniz.
+      </div>` : '')
+    : (disi
+        ? `<div class="note" style="margin-top:0">
+             <b>${kacir(k.durum)}</b> — cihaz kullanımda değil, zimmetlenemez.
+             ${sonKullanan ? `Son kullanan: <b>${kacir(sonKullanan.kime)}</b>` +
+               (sonKullanan.iade
+                 ? ` (iade: ${trTarih(sonKullanan.iade)})` : '') : ''}
+           </div>`
+        : '<div class="muted">Cihaz boşta</div>')}
     ${z.kisi_id ? `<button class="ghost" style="margin-top:8px"
-        onclick="kisiDetay(${z.kisi_id})">👤 ${z.kisi} — tüm cihazları</button>` : ''}
+        onclick="kisiDetay(${z.kisi_id})">👤 ${z.kisi} — tüm cihazları</button>`
+      : (disi && sonKullanan?.kisi_id ? `<button class="ghost" style="margin-top:8px"
+        onclick="kisiDetay(${sonKullanan.kisi_id})">👤 ${kacir(sonKullanan.kime)} —
+        son kullanan</button>` : '')}
     </div>
     <div class="bolum"><h4>Kimler kullandı</h4>
       ${(d.kullanim_gecmisi || []).length ? `<table><thead><tr>
@@ -2690,10 +2716,13 @@ function varlikTabloCiz() {
         esc(refLokasyon[a.location_id])}</td>
       <td class="muted gizle-mobil">${esc(a.serial)}</td>
       <td>${statusMap[a.status_id]
-        ? `<span class="tag">${kacir(statusMap[a.status_id])}</span>` : '—'}</td>
+        ? `<span class="tag${kullanimDisi(a) ? ' low' : ''}">${
+            kacir(statusMap[a.status_id])}</span>` : '—'}</td>
       <td>${a.assigned_type
         ? '<span class="tag used">zimmetli</span>'
-        : '<span class="tag free">boşta</span>'}</td>
+        : (kullanimDisi(a)
+            ? `<span class="tag low">kullanım dışı</span>`
+            : '<span class="tag free">boşta</span>')}</td>
       <td class="islemler">${kupler}</td></tr>`;
   }).join('');
 
@@ -3069,7 +3098,17 @@ async function checkoutPrompt(id, etiketKodlu = '', sonra = null) {
   zimmetIsleyici = null;
   zimmetCihaz = { id, etiket };
   zimmetSonra = sonra || (() => loadAssets());
+  // Kayıp/hurda/arızalı cihaz kimseye verilmemeli: durum önce düzeltilsin
+  const cihaz = varlikListe.find(a => a.id === id);
+  const disi = cihaz && kullanimDisi(cihaz);
+  if (disi && !confirm(
+      `Bu cihaz "${statusMap[cihaz.status_id]}" durumunda — kullanımda ` +
+      'değil. Yine de zimmetlemek istiyor musunuz?\n' +
+      'Önce Düzenle ile durumu "Kullanıma Hazır" yapmanız önerilir.')) return;
   modalAc(`Zimmetle${etiket ? ' — ' + kacir(etiket) : ''}`, `
+    ${disi ? `<div class="note" style="margin-top:0;color:var(--err)">
+      ⚠ Cihaz <b>${kacir(statusMap[cihaz.status_id])}</b> durumunda.
+    </div>` : ''}
     <div class="row">
       <input id="zkAra" class="grow" autocomplete="off"
              placeholder="Personel ara: ad soyad, sicil no, departman…"
