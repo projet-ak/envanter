@@ -934,3 +934,56 @@ def test_hat_bayragi_yalniz_mobil_internette(client):
 ])
 def test_mobil_internet_kategorileri(kategori, beklenen):
     assert ag.tur_bul(kategori) == beklenen
+
+
+# --------------------------------------------------------------------------- #
+# Sistem ürünleri genel Varlıklar listesinde görünmesin
+# --------------------------------------------------------------------------- #
+def test_sistem_urunleri_varlik_listesinden_gizlenebilir(client):
+    kat = client.post("/categories", json={"name": "Switch"}).json()
+    mdl = client.post("/models", json={"name": "SW-2960",
+                                       "category_id": kat["id"]}).json()
+    client.post("/assets", json={"asset_tag": "SW-1", "model_id": mdl["id"]})
+    client.post("/assets", json={"asset_tag": "PC-1"})          # modelsiz
+    pcKat = client.post("/categories", json={"name": "Dizüstü"}).json()
+    pcMdl = client.post("/models", json={"name": "ProBook",
+                                         "category_id": pcKat["id"]}).json()
+    client.post("/assets", json={"asset_tag": "PC-2", "model_id": pcMdl["id"]})
+
+    hepsi = {a["asset_tag"] for a in client.get("/assets").json()}
+    assert hepsi == {"SW-1", "PC-1", "PC-2"}
+
+    # sistem=false: switch düşer, modelsiz ve normal cihaz kalır
+    genel = {a["asset_tag"] for a in
+             client.get("/assets", params={"sistem": "false"}).json()}
+    assert genel == {"PC-1", "PC-2"}
+
+    # sistem=true: yalnız sistem ürünleri
+    sistem = {a["asset_tag"] for a in
+              client.get("/assets", params={"sistem": "true"}).json()}
+    assert sistem == {"SW-1"}
+
+    # Sayı ucu da aynı ayrımı yapar
+    assert client.get("/assets/sayi",
+                      params={"sistem": "false"}).json()["toplam"] == 2
+    assert client.get("/assets/sayi",
+                      params={"sistem": "true"}).json()["toplam"] == 1
+
+    # Ağ ürünleri ekranı etkilenmez
+    assert {u["asset_tag"] for u in
+            client.get("/ag/urunler", params={"tur": "switch"}).json()} == {"SW-1"}
+
+
+def test_sistem_suzgeci_diger_filtrelerle_birlikte(client):
+    lok = client.post("/locations", json={"name": "ŞANTİYE X"}).json()
+    kat = client.post("/categories", json={"name": "Access Point"}).json()
+    mdl = client.post("/models", json={"name": "AP-1",
+                                       "category_id": kat["id"]}).json()
+    client.post("/assets", json={"asset_tag": "AP-A", "model_id": mdl["id"],
+                                 "location_id": lok["id"]})
+    client.post("/assets", json={"asset_tag": "NB-A", "location_id": lok["id"]})
+
+    etiketler = {a["asset_tag"] for a in client.get(
+        "/assets", params={"sistem": "false",
+                           "location_id": lok["id"]}).json()}
+    assert etiketler == {"NB-A"}

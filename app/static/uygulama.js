@@ -2465,6 +2465,9 @@ function renderAssetsView() {
         <button class="ghost" onclick="filtreTemizle()">Temizle</button>
         <button class="ghost" onclick="lokasyonSecAc()"
                 title="Lokasyona göre gez: hangi şantiyede ne var">📍 Lokasyon seç</button>
+        <button class="ghost" id="sistemDug" onclick="varlikSistemDegis()"
+                title="Ağ, yangın, alarm, geçiş ve kantar ürünleri kendi
+menülerinde listelenir">🌐 Sistem ürünleri</button>
         <button class="ghost" id="arsivDug" onclick="varlikArsivDegis()"
                 title="Tedavülden kalkan cihazlar">🗃 Arşiv</button>
       </div>
@@ -2554,7 +2557,24 @@ function filtreSorgusu() {
   ekle('fZimmet', 'assigned');
   ekle('fAra', 'q');
   if (varlikArsiv) p.set('arsiv', 'true');
+  // Ağ/yangın/alarm/geçiş/kantar ürünlerinin kendi ekranları var; genel
+  // listeyi şişirmesinler diye varsayılan olarak gizlenirler.
+  if (!varlikSistem) p.set('sistem', 'false');
   return p;
+}
+
+// Sistem ürünlerini göster/gizle (varsayılan: gizli)
+let varlikSistem = false;
+
+function varlikSistemDegis() {
+  varlikSistem = !varlikSistem;
+  const dug = document.getElementById('sistemDug');
+  if (dug) {
+    dug.classList.toggle('sec-sayfa', varlikSistem);
+    dug.textContent = varlikSistem
+      ? '🌐 Sistem ürünleri açık' : '🌐 Sistem ürünleri';
+  }
+  loadAssets();
 }
 
 // Arşiv görünümü: tedavülden kalkan cihazlar ayrı listede yaşar

@@ -17,6 +17,39 @@ READ = [Depends(get_current_user)]
 WRITE = [Depends(require_editor)]
 
 
+def _sistem_kategorileri(db: Session) -> list[int]:
+    """Kendi ekranı olan sistem ürünlerinin kategori kimlikleri.
+
+    Ağ, yangın, alarm, geçiş ve kantar ürünleri kendi sayfalarında
+    listelenir; genel Varlıklar listesini şişirmemeleri için oradan
+    çıkarılabilirler (bkz. `sistem` parametresi).
+    """
+    from app import ag
+
+    return [kid for kid, ad in db.execute(
+        select(models.Category.id, models.Category.name)).all()
+        if ag.tur_bul(ad)]
+
+
+def _sistem_suzgeci(stmt, db: Session, sistem: bool | None):
+    """`sistem=False` sistem ürünlerini eler, `True` yalnız onları getirir."""
+    if sistem is None:
+        return stmt
+    kategoriler = _sistem_kategorileri(db)
+    if not kategoriler:
+        # Hiç sistem kategorisi yoksa: eleyecek bir şey yok / sonuç boş
+        return stmt if sistem is False else stmt.where(False)
+    from sqlalchemy import or_
+
+    alt = select(models.AssetModel.id).where(
+        models.AssetModel.category_id.in_(kategoriler))
+    if sistem:
+        return stmt.where(models.Asset.model_id.in_(alt))
+    # Modeli/kategorisi olmayan cihazlar genel listede kalır
+    return stmt.where(or_(models.Asset.model_id.is_(None),
+                          models.Asset.model_id.not_in(alt)))
+
+
 def _arsiv_suzgeci(stmt, arsiv: bool):
     """Tedavülden kalkan (arşiv durumundaki) cihazları listeden ayırır.
 
@@ -72,11 +105,16 @@ def list_assets(
     assigned: bool | None = Query(None, description="true=zimmetli, false=boşta"),
     arsiv: bool = Query(False, description="true=yalnız arşivdekiler; "
                         "varsayılan liste arşivi göstermez"),
+    sistem: bool | None = Query(
+        None, description="false=ağ/yangın/alarm/geçiş/kantar ürünlerini "
+                          "gizle (kendi ekranlarında listelenirler), "
+                          "true=yalnız onlar"),
     q: str | None = Query(
         None, description="Etiket/seri/ad/demirbaş/IP veya zimmetli personel adı"),
     db: Session = Depends(get_db),
 ):
-    stmt = _arsiv_suzgeci(select(models.Asset), arsiv)
+    stmt = _sistem_suzgeci(_arsiv_suzgeci(select(models.Asset), arsiv),
+                           db, sistem)
     if status_id is not None:
         stmt = stmt.where(models.Asset.status_id == status_id)
     if location_id is not None:
@@ -213,13 +251,15 @@ def asset_sayisi(
     proje_kodu: str | None = None,
     assigned: bool | None = None,
     arsiv: bool = False,
+    sistem: bool | None = None,
     q: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Filtrelere uyan toplam kayıt sayısı (sayfalamadan bağımsız)."""
     from sqlalchemy import func
 
-    stmt = _arsiv_suzgeci(select(func.count(models.Asset.id)), arsiv)
+    stmt = _sistem_suzgeci(
+        _arsiv_suzgeci(select(func.count(models.Asset.id)), arsiv), db, sistem)
     if status_id is not None:
         stmt = stmt.where(models.Asset.status_id == status_id)
     if location_id is not None:
