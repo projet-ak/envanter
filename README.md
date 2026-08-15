@@ -342,6 +342,7 @@ teknik alan listesi olmasıdır.
 | 📡 Router / Modem | Port, WAN, throughput, bağlantı tipi (fiber/VDSL/4G…), ağdaki yeri |
 | 📱 Mobil İnternet / Superbox | Cihaz tipi (Superbox / Vinn-MiFi / USB modem / SIM'li router), şebeke nesli (4G-4.5G-5G), Wi-Fi standardı, bağlanabilen cihaz, **tarife/kota**, taahhüt bitişi, batarya — ayrıca künyede **operatör, hat no, SIM no, IMEI** |
 | 🎥 NVR / Kayıt Cihazı | Kanal sayısı, PoE portu, PoE bütçesi, disk yuvası, takılı disk, RAID, azami çözünürlük, kayıt süresi |
+| 📹 IP Kamera | Kamera tipi (dome/bullet/PTZ/fisheye/termal), çözünürlük, lens, görüş açısı, **gece görüşü (IR) mesafesi**, bağlantı (IP/Wi-Fi/analog), besleme, **bağlı NVR + kanal no**, SD kart, ses, akıllı özellik, IP koruma sınıfı, montaj, izlediği alan |
 | 🗄️ Kabinet / Patch Panel | Boyut (U), port sayısı, kablo kategorisi, derinlik |
 
 ### 🔥 Yangın Sistemleri

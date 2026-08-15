@@ -987,3 +987,51 @@ def test_sistem_suzgeci_diger_filtrelerle_birlikte(client):
         "/assets", params={"sistem": "false",
                            "location_id": lok["id"]}).json()}
     assert etiketler == {"NB-A"}
+
+
+# --------------------------------------------------------------------------- #
+# IP kameralar (ağ ailesi)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("kategori,beklenen", [
+    ("IP Kamera", "kamera"),
+    ("Güvenlik Kamerası", "kamera"),
+    ("Dome Kamera", "kamera"),
+    ("Bullet Kamera", "kamera"),
+    ("PTZ Kamera", "kamera"),
+    ("CCTV Kamera", "kamera"),
+    # Karışmaması gerekenler
+    ("NVR / Kayıt Cihazı", "nvr"),
+    ("Kamera Kayıt Cihazı", "nvr"),
+    ("Plaka Tanıma Kamerası", "plaka_kamera"),
+    ("Kamera Kablosu", None),          # parça
+    ("Kamera Adaptörü", None),
+])
+def test_kamera_kategorileri(kategori, beklenen):
+    assert ag.tur_bul(kategori) == beklenen
+
+
+def test_kamera_sablonu_ve_ekleme(client):
+    s = next(x for x in client.get("/ag/sablon").json() if x["tur"] == "kamera")
+    assert s["aile"] == "ag" and s["ad"] == "IP Kamera"
+    alanlar = {a["ad"] for a in s["alanlar"]}
+    assert {"Kamera Tipi", "Çözünürlük", "IR Mesafesi", "Bağlı NVR",
+            "Kanal No", "IP Sınıfı"} <= alanlar
+    tip = next(a for a in s["alanlar"] if a["ad"] == "Kamera Tipi")
+    assert tip["tip"] == "secim" and "PTZ (hareketli)" in tip["secenekler"]
+
+    lok = client.post("/locations", json={"name": "ŞANTİYE KAM"}).json()
+    r = client.post("/ag/urunler", json={
+        "tur": "kamera", "asset_tag": "KAM-01", "marka": "Hikvision",
+        "model": "DS-2CD2143G2", "location_id": lok["id"],
+        "ozellikler": {"Kamera Tipi": "Dome", "Çözünürlük": "4 MP",
+                       "Bağlı NVR": "NVR-01", "Kanal No": "7"}})
+    assert r.status_code == 201, r.text
+
+    urun = client.get("/ag/urunler", params={"tur": "kamera"}).json()[0]
+    assert urun["asset_tag"] == "KAM-01" and urun["marka"] == "Hikvision"
+    assert urun["ozellikler"]["Bağlı NVR"] == "NVR-01"
+    # Ağ ailesinin özetinde ve Varlıklar dışında görünür
+    assert "kamera" in {d["tur"] for d in
+                        client.get("/ag/ozet", params={"aile": "ag"}).json()["tur_dagilimi"]}
+    assert "KAM-01" not in {a["asset_tag"] for a in
+                            client.get("/assets", params={"sistem": "false"}).json()}
