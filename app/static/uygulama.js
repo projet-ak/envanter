@@ -2370,7 +2370,8 @@ async function kisiDuzenle(id) {
     ['email','E-posta','text'],['telefon','Telefon','text'],
     ['tckn','TCKN','text'],['ise_giris','İşe Giriş','date'],
     ['isten_cikis','İşten Çıkış','date'],
-    ['username','Kullanıcı Adı (giriş için)','text'],
+    // Kullanıcı adı burada değil, Ayarlar → Hesaplar'da yönetilir: personel
+    // kartı çalışan bilgisidir, sisteme giriş hesabı ayrı bir iştir.
   ];
   modalAc(`✏️ ${k.first_name} ${k.last_name ?? ''} düzenle`, `
     <div class="alan-grid">
