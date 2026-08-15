@@ -168,6 +168,21 @@ curl http://localhost:8000/assets -H "Authorization: Bearer <TOKEN>"
 > içe aktarılan kullanıcılar parolasız gelir (giriş yapamaz); birini yönetici
 > yapmak için `create_admin.py`'yi o kullanıcı adıyla çalıştır.
 
+### Giriş yapılamıyorsa
+
+Parolalar geri döndürülemez biçimde saklanır — unutulan parola okunamaz,
+yenisi atanır:
+
+```bash
+./.venv/bin/python scripts/hesap-yonet.py                  # kullanıcı adları + durum
+./.venv/bin/python scripts/hesap-yonet.py --parola tayyar  # güçlü parola üret ve ata
+./.venv/bin/python scripts/hesap-yonet.py --parola tayyar --admin   # yönetici yap + aç
+```
+
+Hesap listesindeki **DURUM** sütunu KAPALI ise giriş "kullanıcı adı veya
+parola hatalı" der; `--parola … --admin` hesabı açar. Hiç hesap yoksa
+`create_admin.py` ile ilk yönetici açılır.
+
 ## Sunucuya kurulum (VPS / aaPanel)
 
 Uygulamayı kendi sunucunda yayınlamak için: **[deploy/KURULUM.md](deploy/KURULUM.md)**
@@ -990,6 +1005,7 @@ scripts/
   kurulum-kontrol.sh # Güncelleme sonrası sağlık kontrolü (hiçbir şey değiştirmez)
   ag-urun-aktar.py   # Ağ ürünlerini metin tablosundan içe aktar
   ag-kategori-kontrol.py # Hangi kategoriler sistem ürünü sayılıyor
+  hesap-yonet.py     # Giriş hesaplarını listele, parola ata, kilidi aç
   kategori-duzelt.py # Yanlış kategorideki modelleri bul/doğrusuna taşı
   mukerrer-temizle.py # Mükerrer lokasyonları birleştir, mükerrer cihazları raporla
   kisi-lokasyon-esitle.py # Kişi lokasyonlarını zimmetli cihazlarına eşitle

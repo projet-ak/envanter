@@ -45,3 +45,42 @@ def test_admin_can_write(client):
 def test_invalid_token_rejected(anon_client):
     h = {"Authorization": "Bearer not-a-real-token"}
     assert anon_client.get("/assets", headers=h).status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# Hesap yönetim betiği (parola sıfırlama)
+# --------------------------------------------------------------------------- #
+def _hy():
+    import importlib.util
+    from pathlib import Path
+
+    yol = Path(__file__).resolve().parent.parent / "scripts" / "hesap-yonet.py"
+    spec = importlib.util.spec_from_file_location("hesap_yonet", yol)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_uretilen_parola_gucludur():
+    hy = _hy()
+    p = hy.parola_uret()
+    assert len(p) == 14
+    assert any(c.islower() for c in p) and any(c.isupper() for c in p)
+    assert any(c.isdigit() for c in p) and any(c in hy.SIMGE for c in p)
+    # Karışan karakterler havuzda yok
+    assert not set("0O1lI") & set(p)
+    assert hy.parola_uret() != hy.parola_uret()      # rastgele
+
+
+def test_hesap_listesi_yalniz_giris_yapabilenler(db_session):
+    from app import models
+    from app.auth import hash_password
+
+    hy = _hy()
+    db_session.add(models.User(first_name="Girişsiz", last_name="Personel"))
+    db_session.add(models.User(first_name="Girişli", username="girisli",
+                               password_hash=hash_password("x" * 10)))
+    db_session.commit()
+
+    adlar = {k.username for k in hy.hesaplari_listele(db_session)}
+    assert "girisli" in adlar and None not in adlar
