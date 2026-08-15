@@ -2217,11 +2217,20 @@ async function cihazDuzenle(id) {
     ['company_id','Şirket', sirketler],
   ];
 
+  // Proje kodundan lokasyon seçme: kod seçilince lokasyon listesi o projeye
+  // daralır (tek adaysa kendiliğinden seçilir). Kod cihazda değil lokasyonda
+  // durur — bu kutu yalnız seçimi kolaylaştırır, kaydedilmez.
+  duzenleLokasyonlar = lokasyonlar;
+  const secilenLok = lokasyonlar.find(l => l.id === a.location_id);
+  const kodlar = [...new Set(lokasyonlar.map(l => l.proje_kodu).filter(Boolean))]
+    .sort((x, y) => x.localeCompare(y, 'tr'));
+
   // Kategori kutusu s_ önekini almaz: cihaza değil, seçili modele kaydedilir
   const iliskiHtml = iliskiAlanlar.map(([k, l, liste]) => `<div>
     <div class="stat-l" style="margin-bottom:3px">${l}</div>
     <select id="s_${k}" style="width:100%"
-      ${k === 'model_id' ? 'onchange="modelKatEsitle()"' : ''}>
+      ${k === 'model_id' ? 'onchange="modelKatEsitle()"'
+        : k === 'location_id' ? 'onchange="projeKoduEsitle()"' : ''}>
       ${secenekler(liste, a[k])}</select>
     </div>`);
   iliskiHtml.splice(1, 0, `<div>
@@ -2229,6 +2238,14 @@ async function cihazDuzenle(id) {
     <select id="mk_kategori" style="width:100%" ${a.model_id ? '' : 'disabled'}>
       ${secenekler(kategoriler, duzenleModelKat[a.model_id] ?? null)}</select>
     </div>`);
+  iliskiHtml.splice(2, 0, `<div>
+    <div class="stat-l" style="margin-bottom:3px">Proje Kodu (lokasyonu daraltır)</div>
+    <select id="pk_proje" style="width:100%" onchange="projeKoduSecildi()">
+      <option value="">— tüm projeler —</option>
+      ${kodlar.map(k => `<option value="${kacir(k)}"
+        ${k === (secilenLok?.proje_kodu || '') ? 'selected' : ''}
+        >${kacir(k)}</option>`).join('')}
+    </select></div>`);
 
   modalAc(`✏️ ${a.asset_tag} düzenle`, `
     <div class="bolum"><h4>İlişkiler</h4><div class="alan-grid">
@@ -2245,6 +2262,34 @@ async function cihazDuzenle(id) {
       <button class="ghost" onclick="cihazDetay(${id})">Vazgeç</button>
     </div>
     <div id="duzInfo" class="note"></div>`, geriButonu());
+}
+
+// Proje kodu kutusu ile lokasyon listesi arasındaki bağ
+let duzenleLokasyonlar = [];
+
+// Kod seçilince lokasyon listesi daralır; tek aday varsa seçilir
+function projeKoduSecildi() {
+  const kod = document.getElementById('pk_proje')?.value || '';
+  const lokEl = document.getElementById('s_location_id');
+  if (!lokEl) return;
+  const mevcut = Number(lokEl.value || 0);
+  const liste = kod
+    ? duzenleLokasyonlar.filter(l => l.proje_kodu === kod)
+    : duzenleLokasyonlar;
+  // Seçili lokasyon yeni listede yoksa: tek aday varsa ona geç, yoksa boşalt
+  let secili = liste.some(l => l.id === mevcut) ? mevcut
+    : (liste.length === 1 ? liste[0].id : null);
+  lokEl.innerHTML = secenekler(liste, secili);
+  lokEl.value = secili ? String(secili) : '';
+}
+
+// Lokasyon elle değiştirilince kod kutusu ona uyar
+function projeKoduEsitle() {
+  const lokId = Number(document.getElementById('s_location_id')?.value || 0);
+  const kodEl = document.getElementById('pk_proje');
+  if (!kodEl) return;
+  const lok = duzenleLokasyonlar.find(l => l.id === lokId);
+  kodEl.value = lok?.proje_kodu || '';
 }
 
 // Model değişince Kategori kutusu yeni modelin kategorisini gösterir
