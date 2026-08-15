@@ -227,6 +227,23 @@ tr.tikla:hover { background:var(--cizgi2); }
 
 .tag { display:inline-block; padding:2px 9px; border-radius:99px;
        font-size:11.5px; font-weight:600; }
+/* Parola alanı: giriş + göz/üret/kopyala düğmeleri yan yana */
+.parola-satir { display:flex; gap:4px; align-items:center; }
+.parola-satir input { flex:1; min-width:0; }
+.parola-satir .mini { padding:6px 8px; line-height:1; }
+/* Güç çubuğu: dolgu genişliği yüzdeye, rengi sınıfa göre */
+.parola-guc { display:block; margin-top:5px; }
+.parola-guc i { display:block; height:4px; width:0; border-radius:99px;
+                background:var(--cizgi); transition:width .18s, background .18s; }
+.parola-guc b { display:block; margin-top:3px; font-size:11.5px;
+                font-weight:600; color:var(--mut); }
+.parola-guc.zayif i { background:var(--err); }
+.parola-guc.zayif b { color:var(--err); }
+.parola-guc.orta  i { background:var(--warn); }
+.parola-guc.orta  b { color:var(--warn); }
+.parola-guc.guclu i { background:var(--ok); }
+.parola-guc.guclu b { color:var(--ok); }
+
 /* Lokasyon rengi: adın önünde küçük nokta */
 .renk-nokta { display:inline-block; width:10px; height:10px;
               border-radius:50%; margin-right:6px;

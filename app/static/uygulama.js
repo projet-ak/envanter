@@ -3808,6 +3808,107 @@ async function stokHareketSil(hareketId, tab, id) {
 }
 
 // ---------- Ayarlar: profil, parola, hesap yönetimi ----------
+// ---------- Parola araçları (üretici, güç ölçer, göster/kopyala) ----------
+// Karıştırılabilecek karakterler (O/0, l/1/I) bilerek dışarıda: parola elle
+// aktarılırken yanlış okunmasın.
+const PAROLA_HARF = 'abcdefghijkmnopqrstuvwxyz';
+const PAROLA_BUYUK = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const PAROLA_RAKAM = '23456789';
+const PAROLA_SIMGE = '!@#$%*?-_+=';
+
+function parolaUret(uzunluk = 16) {
+  const havuz = PAROLA_HARF + PAROLA_BUYUK + PAROLA_RAKAM + PAROLA_SIMGE;
+  const rast = (kume) => kume[crypto.getRandomValues(new Uint32Array(1))[0]
+    % kume.length];
+  // Her türden en az bir karakter garanti, kalanı havuzdan
+  const parcalar = [rast(PAROLA_HARF), rast(PAROLA_BUYUK),
+                    rast(PAROLA_RAKAM), rast(PAROLA_SIMGE)];
+  while (parcalar.length < uzunluk) parcalar.push(rast(havuz));
+  // Fisher-Yates: garanti karakterler hep baştaki sırada kalmasın
+  for (let i = parcalar.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [parcalar[i], parcalar[j]] = [parcalar[j], parcalar[i]];
+  }
+  return parcalar.join('');
+}
+
+// Kaba ama yeterli güç ölçüsü: uzunluk + karakter çeşitliliği
+function parolaGucu(p) {
+  if (!p) return { yuzde: 0, etiket: '', sinif: '' };
+  let puan = Math.min(p.length, 20) * 3;                     // en çok 60
+  if (/[a-z]/.test(p)) puan += 10;
+  if (/[A-Z]/.test(p)) puan += 10;
+  if (/[0-9]/.test(p)) puan += 10;
+  if (/[^A-Za-z0-9]/.test(p)) puan += 10;
+  if (p.length < 8) puan = Math.min(puan, 25);               // kısa = zayıf
+  const yuzde = Math.min(puan, 100);
+  if (yuzde < 40) return { yuzde, etiket: 'zayıf', sinif: 'zayif' };
+  if (yuzde < 70) return { yuzde, etiket: 'orta', sinif: 'orta' };
+  return { yuzde, etiket: 'güçlü', sinif: 'guclu' };
+}
+
+// Göz / üret / kopyala düğmeleriyle parola alanı
+function parolaKutusu(id, etiket, { uret = true, guc = true,
+                                    autocomplete = 'new-password' } = {}) {
+  return `<label>${etiket}
+    <span class="parola-satir">
+      <input id="${id}" type="password" autocomplete="${autocomplete}"
+             ${guc ? `oninput="parolaGucCiz('${id}')"` : ''} />
+      <button type="button" class="ghost mini" title="Göster / gizle"
+        onclick="parolaGoster('${id}')">👁</button>
+      ${uret ? `<button type="button" class="ghost mini" title="Güçlü parola üret"
+        onclick="parolaUretDoldur('${id}')">🎲</button>
+      <button type="button" class="ghost mini" title="Panoya kopyala"
+        onclick="parolaKopyala('${id}')">📋</button>` : ''}
+    </span>
+    ${guc ? `<span class="parola-guc" id="${id}_guc"><i></i><b></b></span>` : ''}
+  </label>`;
+}
+
+function parolaGoster(id) {
+  const el = document.getElementById(id);
+  if (el) el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function parolaUretDoldur(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = parolaUret();
+  el.type = 'text';                 // üretilen parola görünsün ki not alınabilsin
+  parolaGucCiz(id);
+  // Tekrar alanı varsa (parola değiştirme) onu da doldur
+  const tekrar = document.getElementById(id + '2');
+  if (tekrar) { tekrar.value = el.value; tekrar.type = 'text'; }
+  parolaKopyala(id, true);
+}
+
+async function parolaKopyala(id, sessiz = false) {
+  const el = document.getElementById(id);
+  if (!el?.value) return;
+  try {
+    await navigator.clipboard.writeText(el.value);
+    const g = document.getElementById(id + '_guc');
+    if (g) {
+      const eski = g.querySelector('b').textContent;
+      g.querySelector('b').textContent = '📋 kopyalandı';
+      setTimeout(() => { if (g.querySelector('b')) parolaGucCiz(id); }, 1800);
+      if (!eski && sessiz) return;
+    }
+  } catch { if (!sessiz) alert('Panoya kopyalanamadı, elle seçip kopyalayın.'); }
+}
+
+function parolaGucCiz(id) {
+  const el = document.getElementById(id);
+  const kutu = document.getElementById(id + '_guc');
+  if (!el || !kutu) return;
+  const { yuzde, etiket, sinif } = parolaGucu(el.value);
+  kutu.className = 'parola-guc ' + sinif;
+  kutu.querySelector('i').style.width = yuzde + '%';
+  kutu.querySelector('b').textContent = el.value
+    ? `${etiket}${el.value.length < 8 ? ' — en az 8 karakter' : ''}` : '';
+}
+
+// ---------- Ayarlar ----------
 let ayarBolum = 'profil';
 
 function renderAyarlarView() {
@@ -3897,13 +3998,16 @@ function ayarParola() {
     <div class="panel">
       <h2>Parola değiştir</h2>
       <div class="form-grid">
-        <label>Mevcut parola
-          <input id="paEski" type="password" autocomplete="current-password" /></label>
-        <label>Yeni parola (en az 8 karakter)
-          <input id="paYeni" type="password" autocomplete="new-password" /></label>
-        <label>Yeni parola (tekrar)
-          <input id="paYeni2" type="password" autocomplete="new-password" /></label>
+        ${parolaKutusu('paEski', 'Mevcut parola',
+                       { uret: false, guc: false,
+                         autocomplete: 'current-password' })}
+        ${parolaKutusu('paYeni', 'Yeni parola (en az 8 karakter)')}
+        ${parolaKutusu('paYeni2', 'Yeni parola (tekrar)',
+                       { uret: false, guc: false })}
       </div>
+      <div class="note">🎲 ile güçlü bir parola üretebilirsiniz — üretilen
+        parola panoya kopyalanır ve tekrar alanına da yazılır. Kaydetmeden
+        önce parola yöneticinize eklemeyi unutmayın.</div>
       <div class="row" style="margin-top:14px">
         <button class="primary" onclick="parolaKaydet()">Parolayı değiştir</button>
         <span id="paBilgi" class="note"></span>
@@ -4457,8 +4561,7 @@ function hesapYeniKisiFormu() {
       <div class="form-grid">
         <label>Kullanıcı adı <input id="ykKadi" autocomplete="off"
                placeholder="örn. mehmet" /></label>
-        <label>Parola (en az 8 karakter) <input id="ykParola" type="password"
-               autocomplete="new-password" /></label>
+        ${parolaKutusu('ykParola', 'Parola (en az 8 karakter)')}
         <label>Yetki
           <select id="ykRol">
             <option value="viewer">Görüntüleyici — yalnızca okur</option>
@@ -4568,9 +4671,7 @@ async function hesapDuzenle(kisiId) {
           <option value="editor"${k.role === 'editor' ? ' selected' : ''}>Düzenleyici</option>
           <option value="admin"${k.role === 'admin' ? ' selected' : ''}>Yönetici</option>
         </select></label>
-      <label>Yeni parola (boş bırakılırsa değişmez)
-        <input id="hsParola" type="password" autocomplete="new-password"
-               placeholder="en az 8 karakter" /></label>
+      ${parolaKutusu('hsParola', 'Yeni parola (boş bırakılırsa değişmez)')}
       <label>Hesap durumu
         <select id="hsAktif" ${benim ? 'disabled' : ''}>
           <option value="true"${k.active ? ' selected' : ''}>Etkin</option>
