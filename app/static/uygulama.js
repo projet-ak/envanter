@@ -3955,8 +3955,12 @@ function ayarProfil() {
       </div>
     </div>
     <div class="panel">
-      <h2>Hesap</h2>
-      <div class="alan-grid">
+      <div class="row" style="align-items:center">
+        <h2 style="margin:0; flex:1">Hesap</h2>
+        ${me.role === 'admin' ? `<button class="ghost"
+          onclick="hesapDuzenle(${me.id})">✏️ Kullanıcı adı / parola</button>` : ''}
+      </div>
+      <div class="alan-grid" style="margin-top:10px">
         <div class="alan"><span class="et">Kullanıcı adı</span>
           <span class="dg">${esc(me.username)}</span></div>
         <div class="alan"><span class="et">Yetki</span>
@@ -3964,9 +3968,32 @@ function ayarProfil() {
         <div class="alan"><span class="et">Departman</span>
           <span class="dg">${esc(me.department)}</span></div>
       </div>
-      <div class="note">Kullanıcı adı ve yetki yalnızca yönetici tarafından
-        değiştirilebilir.</div>
-    </div>`;
+      <div class="note">${me.role === 'admin'
+        ? `Kendi kullanıcı adınızı ve parolanızı yukarıdaki düğmeden
+           değiştirebilirsiniz; yetkinizi kendiniz düşüremezsiniz
+           (sistem yöneticisiz kalmasın diye).`
+        : 'Kullanıcı adı ve yetki yalnızca yönetici tarafından değiştirilebilir.'}
+      </div>
+    </div>
+    ${me.role === 'admin' ? `<div class="panel">
+      <h2>Başkasına giriş yetkisi vermek</h2>
+      <div class="note" style="margin-top:0">
+        <b>Kullanıcı hesapları</b> sekmesinden <b>+ Kullanıcı ekle</b> deyin:
+        kayıtlı bir personele yetki verebilir ya da yeni kişi oluşturabilirsiniz.
+        Açılan pencerede <b>kullanıcı adı</b>, <b>parola</b> (🎲 ile üretilir)
+        ve <b>yetki</b> belirlenir.
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" onclick="ayarSec('hesaplar')">
+          🛡️ Kullanıcı hesaplarına git</button>
+        <button class="ghost" onclick="ayarSec('hesaplar');
+          setTimeout(() => hesapAc('mevcut'), 250)">
+          ➕ Hemen kullanıcı ekle</button>
+      </div>
+      <div class="note">Yetkiler — <b>Yönetici:</b> her şey + kullanıcı
+        yönetimi ve yedekleme · <b>Düzenleyici:</b> kayıt ekler/değiştirir,
+        zimmet verir · <b>Görüntüleyici:</b> yalnızca okur (izleme yetkisi).</div>
+    </div>` : ''}`;
 }
 
 async function profilKaydet() {
@@ -4710,8 +4737,15 @@ async function hesapKaydet(kisiId) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(govde),
     });
+    // Kendi hesabımı düzenlediysem oturumdaki bilgiler tazelensin ve
+    // bulunduğum bölümde kalayım (Profilim'den açılmış olabilir).
+    if (me.id === kisiId) {
+      me = await api('/auth/me').catch(() => me);
+      localStorage.setItem('me', JSON.stringify(me));
+    } else {
+      ayarBolum = 'hesaplar';
+    }
     modalKapat();
-    ayarBolum = 'hesaplar';
     renderAyarlarView();
   } catch (e) {
     bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
