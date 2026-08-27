@@ -14,7 +14,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import arama, models, schemas
-from app.auth import get_current_user, hash_password, require_admin
+from app.auth import (get_current_user, hash_password,
+                      kilit_kalan_saniye, require_admin)
 from app.database import get_db
 
 router = APIRouter(prefix="/users", tags=["Personel"])
@@ -47,6 +48,9 @@ def _hesap(k: models.User) -> dict:
         "role": k.role,
         "active": k.active,
         "girebilir": bool(k.username and k.password_hash),
+        # Kaba kuvvet kilidi: hesap ekranında görünür, yönetici açabilir
+        "kilitli": kilit_kalan_saniye(k) > 0,
+        "kilit_kalan_dk": (kilit_kalan_saniye(k) + 59) // 60 or None,
     }
 
 
@@ -102,6 +106,12 @@ def hesap_ayarla(
         if not kisi.username:
             raise HTTPException(400, "Önce kullanıcı adı tanımlayın")
         kisi.password_hash = hash_password(veri["yeni_parola"])
+        # Yeni parola verildiyse kilidin sürmesi anlamsız
+        kisi.basarisiz_giris = 0
+        kisi.kilit_bitis = None
+    if veri.get("kilidi_ac"):
+        kisi.basarisiz_giris = 0
+        kisi.kilit_bitis = None
     if "role" in veri and veri["role"]:
         kisi.role = veri["role"]
     if "active" in veri and veri["active"] is not None:

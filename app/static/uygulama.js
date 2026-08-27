@@ -4101,10 +4101,14 @@ async function ayarHesaplar() {
           </select>
         </td>
         <td>${h.active
-              ? (h.girebilir ? '<span class="tag free">etkin</span>'
-                             : '<span class="tag used">parolasız</span>')
+              ? (h.kilitli
+                   ? `<span class="tag kilit">🔒 kilitli (${h.kilit_kalan_dk} dk)</span>`
+                   : h.girebilir ? '<span class="tag free">etkin</span>'
+                                 : '<span class="tag used">parolasız</span>')
               : '<span class="tag used">kapalı</span>'}</td>
-        <td><button class="ghost mini"
+        <td>${h.kilitli ? `<button class="ghost mini"
+              onclick="hesapKilidiAc(${h.id})">🔓 Kilidi aç</button> ` : ''}<button
+              class="ghost mini"
               onclick="hesapDuzenle(${h.id})">✏️ Düzenle</button></td>
       </tr>`).join('')}</tbody></table>
       <div class="note">Yetkiyi listeden doğrudan değiştirebilirsiniz —
@@ -4113,7 +4117,25 @@ async function ayarHesaplar() {
         <b>Yönetici</b>: her şey + kullanıcı yönetimi ve yedekleme ·
         <b>Düzenleyici</b>: kayıt ekler/değiştirir, zimmet verir ·
         <b>Görüntüleyici</b>: yalnızca okur.</div>
+      <div class="note">🔒 <b>Kilitli</b>: art arda hatalı parola girildiği için
+        hesap geçici olarak kapandı. Süre dolunca kendiliğinden açılır;
+        beklemek istemiyorsanız <b>Kilidi aç</b> deyin ya da yeni parola
+        belirleyin.</div>
     </div>`;
+}
+
+// Kilitli hesabı süre dolmadan açar (yönetici işlemi)
+async function hesapKilidiAc(kisiId) {
+  try {
+    await api(`/users/${kisiId}/hesap`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kilidi_ac: true }),
+    });
+  } catch (e) {
+    alert('⚠ ' + (e.detail || 'Kilit açılamadı'));
+  }
+  ayarBolum = 'hesaplar';
+  renderAyarlarView();
 }
 
 // Listeden tek adımda yetki değiştirme (yönetici yapma dahil)
@@ -4686,6 +4708,9 @@ async function hesapDuzenle(kisiId) {
   if (!k) return alert('⚠ Personel bulunamadı.');
   const ad = [k.first_name, k.last_name].filter(Boolean).join(' ');
   const benim = me.id === kisiId;
+  // Kilit bilgisi hesap listesinde taşınır (kişi kaydında değil)
+  const hesap = (await api('/users/hesaplar').catch(() => []))
+    .find(h => h.id === kisiId);
 
   modalAc(`Hesap — ${kacir(ad)}`, `
     <div class="form-grid">
@@ -4705,6 +4730,12 @@ async function hesapDuzenle(kisiId) {
           <option value="false"${!k.active ? ' selected' : ''}>Kapalı</option>
         </select></label>
     </div>
+    ${hesap && hesap.kilitli ? `<div class="note">
+       🔒 <b>Hesap kilitli</b> — art arda hatalı parola girildi, yaklaşık
+       ${hesap.kilit_kalan_dk} dakika sonra kendiliğinden açılır.
+       <button class="ghost mini" style="margin-left:6px"
+         onclick="modalKapat(); hesapKilidiAc(${kisiId})">🔓 Şimdi aç</button>
+       </div>` : ''}
     ${benim ? `<div class="note">Kendi yetkinizi ve hesap durumunuzu buradan
        değiştiremezsiniz — sistemin yöneticisiz kalmaması için.</div>` : ''}
     <div class="row" style="margin-top:14px">

@@ -7,12 +7,15 @@ from sqlalchemy.orm import Session
 
 from app import schemas
 from app.auth import (
-    authenticate,
+    GirisKilitli,
     create_access_token,
     get_current_user,
+    giris_dene,
+    giris_sifirla,
     hash_password,
     verify_password,
 )
+from app.config import settings
 from app.database import get_db
 from app.models import User
 
@@ -21,9 +24,26 @@ router = APIRouter(prefix="/auth", tags=["Kimlik Doğrulama"])
 
 @router.post("/login", response_model=schemas.TokenResponse)
 def login(payload: schemas.LoginRequest, db: Session = Depends(get_db)):
-    user = authenticate(db, payload.username, payload.password)
+    """Giriş. Art arda hatalı denemeler hesabı geçici olarak kilitler."""
+    try:
+        user = giris_dene(db, payload.username, payload.password)
+    except GirisKilitli as kilit:
+        dakika = max(1, round(kilit.kalan_saniye / 60))
+        raise HTTPException(
+            429,
+            f"Çok fazla hatalı deneme — hesap güvenlik için geçici olarak "
+            f"kilitlendi. {dakika} dakika sonra tekrar deneyin.",
+            headers={"Retry-After": str(kilit.kalan_saniye)},
+        ) from None
     if user is None:
-        raise HTTPException(401, "Kullanıcı adı veya parola hatalı")
+        # Kalan hak sayısı bilerek yazılmaz: yalnız var olan hesaplar için
+        # görünürdü ve kullanıcı adı avlamayı kolaylaştırırdı. Uyarı geneldir.
+        raise HTTPException(
+            401,
+            f"Kullanıcı adı veya parola hatalı — {settings.max_login_attempts} "
+            f"hatalı denemeden sonra hesap {settings.lockout_minutes} dakika "
+            f"kilitlenir.",
+        )
     return schemas.TokenResponse(
         access_token=create_access_token(user),
         user=schemas.AuthUser.model_validate(user),
@@ -63,3 +83,4 @@ def parola_degistir(
         raise HTTPException(400, "Yeni parola eskisiyle aynı olamaz")
     user.password_hash = hash_password(payload.yeni_parola)
     db.commit()
+    giris_sifirla(db, user)      # parolayı bilen kişi kilitli kalmasın

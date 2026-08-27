@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 480  # 8 saat
     jwt_algorithm: str = "HS256"
 
+    # Kaba kuvvet koruması: art arda bu kadar hatalı denemeden sonra hesap
+    # belirtilen süre boyunca kilitlenir (doğru parola da kabul edilmez).
+    max_login_attempts: int = 3
+    lockout_minutes: int = 15
+
     # Claude / Anthropic
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-opus-4-8"

@@ -51,11 +51,94 @@ def create_access_token(user: User) -> str:
 
 
 def authenticate(db: Session, username: str, password: str) -> User | None:
+    """Kullanıcı adı + parola doğrular (kilit denetimi YAPMAZ).
+
+    Kilit/sayaç yönetimi için `giris_dene` kullanılır; bu işlev geriye
+    dönük uyumluluk ve testler için sade doğrulamayı sürdürür.
+    """
     user = db.scalar(select(User).where(User.username == username))
     if user is None or not user.password_hash or not user.active:
         return None
     if not verify_password(password, user.password_hash):
         return None
+    return user
+
+
+# --------------------------------------------------------------------------- #
+# Kaba kuvvet koruması
+# --------------------------------------------------------------------------- #
+def kilit_kalan_saniye(user: User) -> int:
+    """Hesap kilitliyse kalan süre (saniye), değilse 0."""
+    if not user.kilit_bitis:
+        return 0
+    bitis = user.kilit_bitis
+    if bitis.tzinfo is None:                      # SQLite naive döndürür
+        bitis = bitis.replace(tzinfo=dt.timezone.utc)
+    kalan = (bitis - dt.datetime.now(dt.timezone.utc)).total_seconds()
+    return int(kalan) if kalan > 0 else 0
+
+
+def giris_sifirla(db: Session, user: User) -> None:
+    """Başarılı giriş / parola değişimi: sayaç ve kilit temizlenir."""
+    if user.basarisiz_giris or user.kilit_bitis:
+        user.basarisiz_giris = 0
+        user.kilit_bitis = None
+        db.commit()
+
+
+def _basarisiz_isle(db: Session, user: User) -> int:
+    """Hatalı denemeyi sayar, sınıra gelindiyse kilitler. Kalan hakkı döner."""
+    user.basarisiz_giris = (user.basarisiz_giris or 0) + 1
+    kalan_hak = settings.max_login_attempts - user.basarisiz_giris
+    if kalan_hak <= 0:
+        user.kilit_bitis = (dt.datetime.now(dt.timezone.utc)
+                            + dt.timedelta(minutes=settings.lockout_minutes))
+        user.basarisiz_giris = 0        # kilit bitince sıfırdan başlasın
+        kalan_hak = 0
+    db.commit()
+    return kalan_hak
+
+
+class GirisKilitli(Exception):
+    """Hesap geçici olarak kilitli — kalan süreyi taşır."""
+
+    def __init__(self, kalan_saniye: int):
+        self.kalan_saniye = kalan_saniye
+        super().__init__("Hesap geçici olarak kilitli")
+
+
+def giris_dene(db: Session, username: str, password: str) -> User | None:
+    """Kilit denetimli giriş.
+
+    - Hesap kilitliyse doğru parolayla bile `GirisKilitli` atar.
+    - Hatalı parola sayacı artırır; sınıra gelen deneme hesabı kilitler
+      ve aynı yanıtta `GirisKilitli` ile bildirilir.
+    - Başarılı girişte sayaç ve kilit sıfırlanır.
+
+    Kullanıcı adı hiç yoksa None döner (sayaç tutulacak kayıt da yok);
+    saldırgana hesabın var olup olmadığı sızmasın diye mesaj hep aynıdır.
+    """
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None or not user.password_hash or not user.active:
+        return None
+
+    kalan = kilit_kalan_saniye(user)
+    if kalan:
+        raise GirisKilitli(kalan)
+    # Süresi dolmuş kilit varsa temizle
+    if user.kilit_bitis:
+        user.kilit_bitis = None
+        user.basarisiz_giris = 0
+        db.commit()
+
+    if not verify_password(password, user.password_hash):
+        if _basarisiz_isle(db, user) <= 0:
+            # Sınıra bu denemeyle gelindi: kullanıcı bir sonraki denemeyi
+            # beklemesin, kilidi hemen bildirelim.
+            raise GirisKilitli(kilit_kalan_saniye(user))
+        return None
+
+    giris_sifirla(db, user)
     return user
 
 

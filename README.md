@@ -183,6 +183,29 @@ Hesap listesindeki **DURUM** sütunu KAPALI ise giriş "kullanıcı adı veya
 parola hatalı" der; `--parola … --admin` hesabı açar. Hiç hesap yoksa
 `create_admin.py` ile ilk yönetici açılır.
 
+### Giriş deneme sınırı (kaba kuvvet koruması)
+
+Art arda **3** hatalı parola girilen hesap **15 dakika** kilitlenir; bu süre
+içinde doğru parola da kabul edilmez (`429` + `Retry-After`). Giriş
+ekranında kalan süre geri sayar. Kilit veritabanında tutulur — servis
+yeniden başlasa da sürer.
+
+Sınırlar `.env` ile değiştirilebilir:
+
+```ini
+MAX_LOGIN_ATTEMPTS=3
+LOCKOUT_MINUTES=15
+```
+
+Süre dolmadan açmak için: Ayarlar → **Kullanıcı hesapları** → 🔓 *Kilidi aç*
+(hesap satırında rozet olarak görünür), ya da sunucudan:
+
+```bash
+./.venv/bin/python scripts/hesap-yonet.py --kilidi-ac tayyar
+```
+
+Yeni parola atamak (arayüzden ya da betikle) da kilidi kaldırır.
+
 ## Sunucuya kurulum (VPS / aaPanel)
 
 Uygulamayı kendi sunucunda yayınlamak için: **[deploy/KURULUM.md](deploy/KURULUM.md)**

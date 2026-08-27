@@ -214,6 +214,10 @@ class User(Base, TimestampMixin, ExternalMixin):
     # Kimlik doğrulama (giriş yapabilen kullanıcılar için)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.viewer)
+    # Kaba kuvvet koruması: art arda hatalı deneme sayısı ve kilidin bitişi.
+    # Sunucu yeniden başlasa da kilit sürsün diye bellekte değil burada tutulur.
+    basarisiz_giris: Mapped[int] = mapped_column(Integer, default=0)
+    kilit_bitis: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
 
     location: Mapped[Location | None] = relationship()
     manager: Mapped[User | None] = relationship(remote_side="User.id")

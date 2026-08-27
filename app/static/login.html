@@ -328,6 +328,30 @@
       hataKutu.classList.add('gorunur');
     }
 
+    // Kilit sayacı: hesap geçici olarak kilitlendiğinde giriş düğmesi
+    // kapatılır ve kalan süre saniye saniye geri sayılır.
+    let kilitSayac = null;
+    function kilitBaslat(saniye, metin) {
+      clearInterval(kilitSayac);
+      let kalan = Math.max(1, saniye | 0);
+      const ciz = () => {
+        const dk = Math.floor(kalan / 60);
+        const sn = kalan % 60;
+        hataGoster(`${metin} (kalan süre ${dk}:${String(sn).padStart(2, '0')})`);
+        btn.disabled = true;
+        btnYazi.textContent = 'Hesap kilitli';
+        if (kalan-- <= 0) {
+          clearInterval(kilitSayac);
+          kilitSayac = null;
+          btn.disabled = false;
+          btnYazi.textContent = 'Giriş Yap';
+          hataGoster('Kilit süresi doldu, tekrar deneyebilirsiniz.');
+        }
+      };
+      ciz();
+      kilitSayac = setInterval(ciz, 1000);
+    }
+
     document.getElementById('form').addEventListener('submit', async (e) => {
       e.preventDefault();
       hataKutu.classList.remove('gorunur');
@@ -352,10 +376,20 @@
           body: JSON.stringify({ username: kullanici, password: parola }),
         });
         if (!r.ok) {
+          // Sunucunun açıklamasını (detail) olduğu gibi göster: kalan
+          // deneme uyarısı ve kilit mesajı oradan gelir.
+          let detay = '';
+          try { detay = (await r.json()).detail || ''; } catch { /* boş */ }
+          if (r.status === 429) {
+            const sn = parseInt(r.headers.get('Retry-After') || '', 10);
+            const metin = detay || 'Çok fazla hatalı deneme — hesap kilitlendi.';
+            if (sn > 0) kilitBaslat(sn, metin); else hataGoster(metin);
+            return;
+          }
           // Durum kodu görünür: "ilk denemede olmuyor" tarzı sorunların
           // sebebi (422/502/504…) destek ekranında hemen anlaşılsın.
           hataGoster(r.status === 401
-            ? 'Kullanıcı adı veya şifre hatalı.'
+            ? (detay || 'Kullanıcı adı veya şifre hatalı.')
             : `Giriş yapılamadı (hata ${r.status}), lütfen tekrar deneyin.`);
           return;
         }
@@ -366,8 +400,10 @@
       } catch {
         hataGoster('Sunucuya ulaşılamadı.');
       } finally {
-        btn.disabled = false;
-        btnYazi.textContent = 'Giriş Yap';
+        if (!kilitSayac) {                 // kilit sayacı düğmeyi yönetiyor
+          btn.disabled = false;
+          btnYazi.textContent = 'Giriş Yap';
+        }
       }
     });
   </script>

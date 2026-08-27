@@ -8,9 +8,12 @@ okunamaz, yenisi atanır. Bu betik sunucuda çalıştırılır:
     ./.venv/bin/python scripts/hesap-yonet.py --parola tayyar # yeni parola üret ve ata
     ./.venv/bin/python scripts/hesap-yonet.py --parola tayyar --deger "Gizli.2026"
     ./.venv/bin/python scripts/hesap-yonet.py --parola tayyar --admin
+    ./.venv/bin/python scripts/hesap-yonet.py --kilidi-ac tayyar
 
-`--admin` hesabı yönetici yapar ve kapalıysa açar (kilitlenmiş hesap
-"Kullanıcı adı veya parola hatalı" der; listede DURUM sütununa bakın).
+`--admin` hesabı yönetici yapar ve kapalıysa açar. Art arda hatalı parola
+girilen hesap geçici olarak KİLİTLİ olur (listede DURUM sütununda görünür);
+süre dolunca kendiliğinden açılır, beklemek istemezseniz `--kilidi-ac`
+kullanın. Parola atamak da kilidi kaldırır.
 
 Üretilen parola yalnızca ekrana yazılır; kaydedip kullanıcıya güvenli bir
 yolla iletin, ilk girişten sonra Ayarlar → Parola'dan değiştirmesini
@@ -28,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy import select  # noqa: E402
 
-from app.auth import hash_password  # noqa: E402
+from app.auth import hash_password, kilit_kalan_saniye  # noqa: E402
 from app.models import User, UserRole  # noqa: E402
 
 M, Y, S, N = '\033[36m', '\033[32m', '\033[33m', '\033[0m'
@@ -67,6 +70,8 @@ def main() -> int:
                     help="atanacak parola (verilmezse güçlü bir tane üretilir)")
     ap.add_argument("--admin", action="store_true",
                     help="--parola ile birlikte: hesabı yönetici yap ve aç")
+    ap.add_argument("--kilidi-ac", metavar="KULLANICI", dest="kilidi_ac",
+                    help="hatalı denemeler yüzünden kilitlenen hesabı açar")
     args = ap.parse_args()
 
     from app.database import SessionLocal  # noqa: E402
@@ -76,6 +81,19 @@ def main() -> int:
     db = SessionLocal()
     try:
         hesaplar = hesaplari_listele(db)
+
+        if args.kilidi_ac:
+            kisi = db.scalar(select(User).where(User.username == args.kilidi_ac))
+            if kisi is None:
+                print(f"\n{S}'{args.kilidi_ac}' adında bir hesap yok.{N}")
+                return 1
+            kalan = kilit_kalan_saniye(kisi)
+            kisi.basarisiz_giris = 0
+            kisi.kilit_bitis = None
+            db.commit()
+            print(f"\n{Y}✓ {kisi.username} hesabının kilidi açıldı"
+                  f"{f' ({(kalan + 59) // 60} dk kalmıştı)' if kalan else ''}.{N}")
+            return 0
 
         if not args.parola:
             if not hesaplar:
@@ -88,7 +106,13 @@ def main() -> int:
             print(f"  {'KULLANICI ADI':<22}{'AD SOYAD':<28}{'YETKİ':<14}DURUM")
             for k in hesaplar:
                 ad = " ".join(filter(None, [k.first_name, k.last_name])) or "—"
-                durum = f"{Y}etkin{N}" if k.active else f"{S}KAPALI{N}"
+                kalan = kilit_kalan_saniye(k)
+                if not k.active:
+                    durum = f"{S}KAPALI{N}"
+                elif kalan:
+                    durum = f"{S}KİLİTLİ ({(kalan + 59) // 60} dk){N}"
+                else:
+                    durum = f"{Y}etkin{N}"
                 print(f"  {k.username:<22}{ad:<28}{k.role.value:<14}{durum}")
             print(f"\n  Parola atamak için: ./.venv/bin/python "
                   f"scripts/hesap-yonet.py --parola {hesaplar[0].username}")
@@ -108,6 +132,10 @@ def main() -> int:
             return 1
 
         kisi.password_hash = hash_password(yeni)
+        if kilit_kalan_saniye(kisi):
+            print(f"\n{S}Not: hesap kilitliydi, kilit kaldırıldı.{N}")
+        kisi.basarisiz_giris = 0     # yeni parolayla eski kilit sürmesin
+        kisi.kilit_bitis = None
         if args.admin:
             kisi.role = UserRole.admin
             kisi.active = True

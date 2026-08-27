@@ -251,6 +251,7 @@ tr.tikla:hover { background:var(--cizgi2); }
 .tag.free { background:rgba(5,150,105,.13); color:var(--ok); }
 .tag.used { background:rgba(217,119,6,.15); color:var(--warn); }
 .tag.role { background:rgba(37,99,235,.13); color:var(--bilgi); }
+.tag.kilit { background:rgba(220,38,38,.13); color:var(--err); }
 .pill { display:inline-block; padding:2px 9px; border-radius:99px; font-size:12px;
         background:var(--cizgi2); border:1px solid var(--cizgi); color:var(--mut); }
 

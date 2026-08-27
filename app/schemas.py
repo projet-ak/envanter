@@ -770,6 +770,8 @@ class HesapAyarla(BaseModel):
     role: UserRole | None = None
     active: bool | None = None
     yeni_parola: str | None = Field(None, min_length=8, max_length=200)
+    # Kaba kuvvet kilidini elle açmak için (parola değişince kendiliğinden açılır)
+    kilidi_ac: bool | None = None
 
 
 class HesapRead(ORMModel):
@@ -782,3 +784,5 @@ class HesapRead(ORMModel):
     role: UserRole
     active: bool
     girebilir: bool = False        # parolası var mı (giriş yapabilir mi)
+    kilitli: bool = False          # art arda hatalı denemeden kilitlendi mi
+    kilit_kalan_dk: int | None = None
