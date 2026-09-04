@@ -177,6 +177,10 @@ yenisi atanır:
 ./.venv/bin/python scripts/hesap-yonet.py                  # kullanıcı adları + durum
 ./.venv/bin/python scripts/hesap-yonet.py --parola tayyar  # güçlü parola üret ve ata
 ./.venv/bin/python scripts/hesap-yonet.py --parola tayyar --admin   # yönetici yap + aç
+
+# Kayıtlı personele ilk kez giriş yetkisi ver (yeni kişi kaydı açılmaz):
+./.venv/bin/python scripts/hesap-yonet.py --parola akbulut \
+    --kisi "Tayyar Akbulut" --admin
 ```
 
 Hesap listesindeki **DURUM** sütunu KAPALI ise giriş "kullanıcı adı veya

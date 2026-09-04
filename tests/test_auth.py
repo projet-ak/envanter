@@ -229,3 +229,28 @@ def test_betik_kilit_durumunu_gosterir(db_session):
     # --kilidi-ac seçeneği betikte tanımlı
     kaynak = pathlib.Path(hy.__file__).read_text()
     assert "--kilidi-ac" in kaynak
+
+
+# --------------------------------------------------------------------------- #
+# Kayıtlı personele giriş yetkisi verme (--kisi)
+# --------------------------------------------------------------------------- #
+def test_kisi_ara_turkce_duyarsiz(db_session):
+    from app import models
+
+    hy = _hy()
+    db_session.add_all([
+        models.User(first_name="TAYYAR", last_name="AKBULUT"),
+        models.User(first_name="MERVE", last_name="AKBULUTOĞLU"),
+    ])
+    db_session.commit()
+
+    # Türkçe karakterler ve büyük/küçük harf fark etmez
+    adlar = [f"{k.first_name} {k.last_name}"
+             for k in hy.kisi_ara(db_session, "akbulutoglu")]
+    assert adlar == ["MERVE AKBULUTOĞLU"]
+
+    # Tam eşleşme ilk sırada döner (birden çok aday varken seçileni odur)
+    coklu = hy.kisi_ara(db_session, "tayyar akbulut")
+    assert coklu[0].first_name == "TAYYAR"
+    assert len(hy.kisi_ara(db_session, "akbulut")) == 2
+    assert hy.kisi_ara(db_session, "") == []

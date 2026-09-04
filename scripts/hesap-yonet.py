@@ -9,6 +9,11 @@ okunamaz, yenisi atanır. Bu betik sunucuda çalıştırılır:
     ./.venv/bin/python scripts/hesap-yonet.py --parola tayyar --deger "Gizli.2026"
     ./.venv/bin/python scripts/hesap-yonet.py --parola tayyar --admin
     ./.venv/bin/python scripts/hesap-yonet.py --kilidi-ac tayyar
+    ./.venv/bin/python scripts/hesap-yonet.py --parola akbulut --kisi "Akbulut" --admin
+
+Kullanıcı adı henüz tanımlı değilse `--kisi` ile personel kaydını arayın:
+o kişiye kullanıcı adı verilir (yeni kişi kaydı AÇILMAZ — zimmetleri,
+geçmişi ve lokasyonu olduğu gibi kalır).
 
 `--admin` hesabı yönetici yapar ve kapalıysa açar. Art arda hatalı parola
 girilen hesap geçici olarak KİLİTLİ olur (listede DURUM sütununda görünür);
@@ -32,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sqlalchemy import select  # noqa: E402
 
 from app.auth import hash_password, kilit_kalan_saniye  # noqa: E402
+from app.excel.sema import _sadelestir  # noqa: E402
 from app.models import User, UserRole  # noqa: E402
 
 M, Y, S, N = '\033[36m', '\033[32m', '\033[33m', '\033[0m'
@@ -53,6 +59,23 @@ def parola_uret(uzunluk: int = 14) -> str:
     return "".join(parcalar)
 
 
+def kisi_ara(db, terim: str) -> list[User]:
+    """Ada/soyada göre personel arar (Türkçe karakter duyarsız).
+
+    Kullanıcı adı olanlar da dahildir; arayan zaten kime yetki vereceğini
+    biliyor. Eşleşme sıralı: önce tam ad, sonra parça içerenler.
+    """
+    sade = _sadelestir(terim)
+    if not sade:
+        return []
+    bulunan = []
+    for k in db.scalars(select(User)).all():
+        ad = _sadelestir(" ".join(filter(None, [k.first_name, k.last_name])))
+        if sade in ad:
+            bulunan.append((0 if ad == sade else 1, ad, k))
+    return [k for _, _, k in sorted(bulunan, key=lambda x: (x[0], x[1]))]
+
+
 def hesaplari_listele(db) -> list[User]:
     """Kullanıcı adı olan (yani giriş yapabilen) kayıtlar."""
     return db.scalars(
@@ -72,6 +95,8 @@ def main() -> int:
                     help="--parola ile birlikte: hesabı yönetici yap ve aç")
     ap.add_argument("--kilidi-ac", metavar="KULLANICI", dest="kilidi_ac",
                     help="hatalı denemeler yüzünden kilitlenen hesabı açar")
+    ap.add_argument("--kisi", metavar="AD",
+                    help="--parola ile: kullanıcı adı yoksa bu personele verilir")
     args = ap.parse_args()
 
     from app.database import SessionLocal  # noqa: E402
@@ -119,11 +144,38 @@ def main() -> int:
             return 0
 
         kisi = db.scalar(select(User).where(User.username == args.parola))
+        yeni_kadi = False
+        if kisi is None and args.kisi:
+            adaylar = kisi_ara(db, args.kisi)
+            if not adaylar:
+                print(f"\n{S}'{args.kisi}' aramasıyla personel bulunamadı.{N}")
+                return 1
+            if len(adaylar) > 1 and not any(
+                    _sadelestir(" ".join(filter(None, [a.first_name, a.last_name])))
+                    == _sadelestir(args.kisi) for a in adaylar):
+                print(f"\n{S}'{args.kisi}' birden çok kişiyle eşleşti — "
+                      f"daha belirgin yazın:{N}")
+                for a in adaylar[:15]:
+                    ad = " ".join(filter(None, [a.first_name, a.last_name]))
+                    print(f"  · {ad}"
+                          + (f"  (kullanıcı adı: {a.username})" if a.username else ""))
+                return 1
+            kisi = adaylar[0]
+            if kisi.username and kisi.username != args.parola:
+                print(f"\n{S}Bu kişinin kullanıcı adı zaten "
+                      f"'{kisi.username}'.{N}")
+                print(f"  Parolasını yenilemek için: --parola {kisi.username}")
+                return 1
+            kisi.username = args.parola
+            yeni_kadi = True
         if kisi is None:
             print(f"\n{S}'{args.parola}' adında bir hesap yok.{N}")
             if hesaplar:
                 print("  Mevcut kullanıcı adları: "
                       + ", ".join(k.username for k in hesaplar))
+            print(f"\n  Kayıtlı bir personele giriş yetkisi vermek için:")
+            print(f"  ./.venv/bin/python scripts/hesap-yonet.py "
+                  f"--parola {args.parola} --kisi \"Ad Soyad\" --admin")
             return 1
 
         yeni = args.deger or parola_uret()
@@ -145,7 +197,7 @@ def main() -> int:
         db.commit()
 
         ad = " ".join(filter(None, [kisi.first_name, kisi.last_name])) or "—"
-        print(f"\n{Y}✓ Parola atandı{N}")
+        print(f"\n{Y}✓ {'Giriş yetkisi verildi' if yeni_kadi else 'Parola atandı'}{N}")
         print(f"  Kullanıcı adı : {M}{kisi.username}{N}")
         print(f"  Parola        : {M}{yeni}{N}")
         print(f"  Ad Soyad      : {ad}")
