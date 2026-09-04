@@ -662,6 +662,35 @@ HPE Aruba   AP-615-RW   Patron Odası AP           3C:E8:6E:C7:AE:B6   MAKAM KAT
   eklenmez. Arayüzden eklerken de aynı denetim çalışır.
 Örnek dosya: `ornek-veri/ag-ap-y005.txt`
 
+### Telefon santrali ve dahili rehberi
+
+☎️ **IP Telefon** ve 🏢 **Telefon Santrali** ağ ürünü türleridir; dahili
+numara künyede tutulur (`Dahili No`), personel kartında da bir **Dahili No**
+alanı vardır. Ağ Ürünleri ekranındaki **📞 Telefon Rehberi** düğmesi ikisini
+birleştirip kata göre gruplar, arar ve yazdırır.
+
+Excel'den gelen santral listesi doğrudan aktarılabilir (`.xlsx` desteklenir):
+
+```bash
+./.venv/bin/python scripts/ag-urun-aktar.py rehber.xlsx --tur ip_telefon \
+    --marka Karel --lokasyon "ERN HOLDİNG İSTANBUL MERKEZ OFİSİ" \
+    --proje-kodu Y005 --zimmet "HOLDİNG BİNASI" --etiket-onek "TEL-Y005-" \
+    --kisiye-zimmetle --dahili-yaz --dry-run
+```
+
+Beklenen sütunlar: `TEL. NO · KAT · İSİM · SOYİSİM · MAC ADRESİ · İP ADRESİ ·
+TEL. MODEL` (adlarından tanınır, sıra önemsiz).
+
+- `--kisiye-zimmetle` İSİM+SOYİSİM'i personel kayıtlarıyla eşler ve telefonu
+  o kişiye zimmetler; kişi bulunamazsa (oda telefonları: "Bodrum Mutfak")
+  `--zimmet` ile verilen yere zimmetlenir.
+- `--dahili-yaz` eşleşen personelin künyesine dahili numarayı yazar —
+  rehber ve arama bundan beslenir ("1720" araması kişiyi bulur).
+- `MK / ZK / BK` kat kısaltmaları `MAKAM KATI / ZEMİN KAT / BODRUM KAT`
+  olarak açılır (AP listesiyle aynı yazım).
+- Aynı dahili numara ikinci kez eklenmez; MAC biçimi tanınmayan satırlar
+  (yazım hatası) uyarı olarak listelenir ama olduğu gibi kaydedilir.
+
 ## Şantiyeler ve proje kodları
 
 Her lokasyonun bir **proje kodu** (`proje_kodu`, örn. `U023`) olabilir.

@@ -1162,3 +1162,145 @@ def test_etiket_sirasi_kaldigi_yerden_devam():
     assert aktar._sonraki_sira({"AP-Y005-01", "AP-Y005-07"}, "AP-Y005-") == 8
     assert aktar._sonraki_sira(set(), "AP-Y005-") == 1
     assert aktar._sonraki_sira({"AP-Y005-01"}, None) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Telefon santrali, IP telefonlar ve dahili numara rehberi
+# --------------------------------------------------------------------------- #
+def test_telefon_turleri_ve_kategori_eslesmesi():
+    """Telefon türleri ağ ailesinde; cep telefonu ağ ürünü sayılmaz."""
+    turler = {s["tur"]: s for s in ag.sablon("ag")}
+    assert turler["ip_telefon"]["ad"] == "IP Telefon"
+    assert turler["santral"]["ad"] == "Telefon Santrali"
+    # Dahili numaralı türlerde künye bayrağı açık
+    assert turler["ip_telefon"]["dahili"] and turler["santral"]["dahili"]
+    assert not turler["switch"]["dahili"]
+
+    assert ag.tur_bul("IP Telefon") == "ip_telefon"
+    assert ag.tur_bul("DECT Telsiz") == "ip_telefon"
+    assert ag.tur_bul("Karel Sanal Telefon Santrali") == "santral"
+    # Yangın/alarm santralleri telefon santraline kaymamalı
+    assert ag.tur_bul("Yangın Alarm Santrali") == "yangin_panel"
+    assert ag.tur_bul("Alarm Santrali") == "alarm_panel"
+    # Kablosuz access point'i telefona kaptırmadık
+    assert ag.tur_bul("Kablosuz Access Point") == "access_point"
+    # Cep telefonu normal varlık olarak kalır
+    assert ag.tur_bul("Cep Telefonu") is None
+
+
+def test_telefon_rehberi_iki_kaynagi_birlestirir(client, db_session):
+    from app import models
+
+    kisi = client.post("/users", json={
+        "first_name": "Abdullah", "last_name": "BEKTAŞ",
+        "job_title": "BT Uzmanı", "dahili": "1720"}).json()
+    assert kisi["dahili"] == "1720"
+
+    # Aynı dahiliye ait IP telefon: satır birleşmeli
+    client.post("/ag/urunler", json={
+        "tur": "ip_telefon", "asset_tag": "TEL-1720", "marka": "Karel",
+        "model": "212G", "telefon_no": "1720", "ip_address": "10.45.10.124",
+        "mac_address": "0008D103FC17",
+        "ozellikler": {"Kat": "BODRUM KAT", "Telefon Tipi": "Masa Telefonu"}})
+    # Kişisi olmayan oda telefonu
+    client.post("/ag/urunler", json={
+        "tur": "ip_telefon", "asset_tag": "TEL-1717", "marka": "Karel",
+        "model": "TELSİZ", "telefon_no": "1717",
+        "ozellikler": {"Kat": "BODRUM KAT", "Kullanan": "Bodrum Mutfak"}})
+
+    rehber = client.get("/ag/telefon-rehberi").json()
+    kayitlar = {r["dahili"]: r for r in rehber}
+    assert len(rehber) == 2
+
+    bektas = kayitlar["1720"]
+    assert bektas["ad"] == "Abdullah BEKTAŞ" and bektas["unvan"] == "BT Uzmanı"
+    assert bektas["kisi_id"] == kisi["id"]         # kişi kartına gidebilsin
+    assert bektas["model"] == "212G" and bektas["ip"] == "10.45.10.124"
+    assert bektas["mac"] == "00:08:D1:03:FC:17"    # biçimlenmiş
+    assert bektas["kat"] == "BODRUM KAT"
+
+    mutfak = kayitlar["1717"]
+    assert mutfak["ad"] == "Bodrum Mutfak" and mutfak["kisi_id"] is None
+
+    # Sayısal sıralama: 1717 < 1720
+    assert [r["dahili"] for r in rehber] == ["1717", "1720"]
+
+
+def test_yere_zimmetli_telefonda_oda_adi_gorunur(client):
+    """Bina zimmeti rehberde 'kim' sorusunu yanıtlamaz — Kullanan öne geçer."""
+    bina = client.post("/locations", json={"name": "HOLDİNG BİNASI"}).json()
+    ekle = client.post("/ag/urunler", json={
+        "tur": "ip_telefon", "asset_tag": "TEL-1733", "marka": "Karel",
+        "telefon_no": "1733",
+        "ozellikler": {"Kullanan": "Kurumsal Top.Odası"}}).json()
+    client.post(f"/assets/{ekle['id']}/checkout",
+                json={"assigned_type": "location", "assigned_id": bina["id"]})
+
+    kayit = client.get("/ag/telefon-rehberi").json()[0]
+    assert kayit["ad"] == "Kurumsal Top.Odası"
+
+
+def test_dahili_aramada_bulunur(client):
+    client.post("/users", json={"first_name": "Emre", "last_name": "DOĞAN",
+                                "dahili": "1721"})
+    sonuc = client.get("/assets/ara", params={"q": "1721"}).json()
+    assert any(k["ad"] == "Emre DOĞAN" and k["dahili"] == "1721"
+               for k in sonuc["personel"])
+    # Zimmet ekranındaki personel aramasında da
+    assert any(k["dahili"] == "1721"
+               for k in client.get("/users/ara", params={"q": "1721"}).json())
+
+
+# --------------------------------------------------------------------------- #
+# Telefon listesi içe aktarımı
+# --------------------------------------------------------------------------- #
+REHBER_TABLO = (
+    "TEL. NO\tKAT\tİSİM\tSOYİSİM\tMAC ADRESİ\tİP ADRESİ\tTEL. MODEL\n"
+    "1720\tBK\tAbdullah \tBEKTAŞ\t0008D103FC17\t10.45.10.124\t212G\n"
+    "1717\tBK\tBodrum \tMutfak\t\t\tTELSİZ\n"
+)
+
+
+def test_telefon_tablosu_sutunlari_taninir():
+    aktar = _aktar()
+    satirlar = aktar.satirlari_coz(REHBER_TABLO)
+    harita = aktar.basliklari_coz(satirlar[0])
+    # MARKA sütunu olmayan tablo da başlık olarak tanınmalı
+    assert harita == {"dahili": 0, "kat": 1, "ad": 2, "soyad": 3,
+                      "mac": 4, "ip": 5, "model": 6}
+    # "TEL. MODEL" model sütunudur, "TEL. NO" dahili
+    assert aktar._hucre(satirlar[1], harita, "model") == "212G"
+    assert aktar._hucre(satirlar[1], harita, "dahili") == "1720"
+    assert aktar.basliklari_coz(satirlar[1]) is None
+
+
+def test_kat_kisaltmalari_acilir():
+    aktar = _aktar()
+    assert aktar.kat_ac("MK") == "MAKAM KATI"
+    assert aktar.kat_ac("zk") == "ZEMİN KAT"
+    assert aktar.kat_ac("BK") == "BODRUM KAT"
+    # Tanınmayan değer olduğu gibi kalır (AP listesindeki gibi)
+    assert aktar.kat_ac("ZEMİN KAT") == "ZEMİN KAT"
+    assert aktar.kat_ac("YEDEK") == "YEDEK"
+
+
+def test_excel_okuma(tmp_path):
+    """xlsx dosyası doğrudan verilebilmeli (boş hücreler korunur)."""
+    import openpyxl
+
+    aktar = _aktar()
+    yol = tmp_path / "rehber.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["TEL. NO", "KAT", "İSİM", "SOYİSİM", "MAC ADRESİ", "İP ADRESİ",
+               "TEL. MODEL"])
+    ws.append([1720, "BK", "Abdullah", "BEKTAŞ", "0008D103FC17",
+               "10.45.10.124", "212G"])
+    ws.append([1717, "BK", "Bodrum", "Mutfak", None, None, "TELSİZ"])
+    wb.save(yol)
+
+    satirlar = aktar.excel_satirlari(yol)
+    assert len(satirlar) == 3
+    harita = aktar.basliklari_coz(satirlar[0])
+    assert aktar._hucre(satirlar[1], harita, "dahili") == "1720"
+    assert aktar._hucre(satirlar[2], harita, "mac") == ""

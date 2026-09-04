@@ -53,6 +53,12 @@ def urunler(
                       proje_kodu=proje_kodu, durum_id=durum_id, q=q)
 
 
+@router.get("/telefon-rehberi", dependencies=READ)
+def telefon_rehberi(db: Session = Depends(get_db)):
+    """Dahili numara rehberi (personel künyesi + IP telefonlar birleşik)."""
+    return ag.telefon_rehberi(db)
+
+
 @router.get("/ozet", dependencies=READ)
 def ozet(aile: str | None = Query(None, description="ag | yangin | alarm"),
          db: Session = Depends(get_db)):

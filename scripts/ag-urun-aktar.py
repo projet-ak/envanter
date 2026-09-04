@@ -19,8 +19,15 @@ Kullanım:
         --lokasyon "ERN HOLDİNG İSTANBUL MERKEZ OFİSİ" --proje-kodu Y005 \
         --zimmet "HOLDİNG BİNASI" --etiket-onek "AP-Y005-"
 
+Telefon rehberi (Excel dosyası da doğrudan verilebilir):
+
+    ./.venv/bin/python scripts/ag-urun-aktar.py rehber.xlsx --tur ip_telefon \\
+        --marka Karel --lokasyon "ERN HOLDİNG İSTANBUL MERKEZ OFİSİ" \\
+        --proje-kodu Y005 --zimmet "HOLDİNG BİNASI" --etiket-onek "TEL-Y005-" \\
+        --kisiye-zimmetle --dahili-yaz
+
 Seçenekler:
-    --tur           sfp | switch | access_point | router | kabinet | diger …
+    --tur           sfp | switch | access_point | ip_telefon | santral …
     --lokasyon      Ürünlerin bulunduğu yer (yoksa oluşturulur)
     --proje-kodu    Lokasyonu proje koduyla eşler (mükerrer şantiye açılmasın)
     --zimmet        Kişi yerine bir yere zimmetle (örn. "HOLDİNG BİNASI");
@@ -40,6 +47,7 @@ import datetime as dt
 import re
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -50,6 +58,19 @@ from app.routers.ag_urunleri import mac_duzenle  # noqa: E402
 from app.database import SessionLocal  # noqa: E402
 from app.excel.sema import _sadelestir  # noqa: E402
 from app.ortam_uyari import uyar  # noqa: E402
+
+
+def excel_satirlari(yol: Path) -> list[list[str]]:
+    """xlsx dosyasını satır listesine çevirir (boş hücreler korunur)."""
+    import openpyxl
+
+    ws = openpyxl.load_workbook(yol, data_only=True).worksheets[0]
+    satirlar = []
+    for ham in ws.iter_rows(values_only=True):
+        hucreler = ["" if h is None else str(h).strip() for h in ham]
+        if sum(1 for h in hucreler if h) >= 2:
+            satirlar.append(hucreler)
+    return satirlar
 
 
 def satirlari_coz(metin: str) -> list[list[str]]:
@@ -75,13 +96,30 @@ def satirlari_coz(metin: str) -> list[list[str]]:
 # daha belirgin anahtarlar önce denenir.
 _BASLIK_ESLEME = [
     (("mac",), "mac"),
+    (("ip",), "ip"),
     (("seri",), "seri"),
     (("marka", "uretici"), "marka"),
+    # "TEL. MODEL" model sütunudur; "TEL. NO" dahili numaradır — model önce
+    # denenir, yoksa "tel" geçen her başlık dahili sanılırdı.
     (("model", "parca no", "tip"), "model"),
+    (("dahili", "tel no", "tel. no", "telefon", "numara"), "dahili"),
+    (("soyisim", "soyad"), "soyad"),
+    (("isim", "ad soyad", "kullanan", "kisi", "personel"), "ad"),
     (("kat",), "kat"),
-    (("lokasyon", "konum", "yer", "nokta", "bolge"), "konum"),
+    (("lokasyon", "konum", "yer", "nokta", "bolge", "oda"), "konum"),
     (("aciklama", "tanim", "not"), "tanim"),
 ]
+
+# Kat kısaltmaları: aynı bina için AP listesiyle aynı yazım kullanılsın
+_KAT_KISALTMA = {
+    "mk": "MAKAM KATI", "zk": "ZEMİN KAT", "bk": "BODRUM KAT",
+    "gk": "GİRİŞ KATI", "ck": "ÇATI KATI",
+}
+
+
+def kat_ac(ham: str) -> str:
+    """'MK' → 'MAKAM KATI'. Tanınmayan değer olduğu gibi kalır."""
+    return _KAT_KISALTMA.get(_sadelestir(ham), ham.strip())
 
 
 def basliklari_coz(parcalar: list[str]) -> dict[str, int] | None:
@@ -95,8 +133,10 @@ def basliklari_coz(parcalar: list[str]) -> dict[str, int] | None:
             if any(a in sade for a in anahtarlar):
                 harita.setdefault(alan, i)
                 break
-    # "marka" tek başına yeterli değil: veri satırında da geçebilir
-    if "marka" in harita and len(harita) >= 3:
+    # Başlık satırında hücrelerin ÇOĞU tanınır; veri satırında bir iki hücre
+    # tesadüfen eşleşebilir ("BODRUM KAT" → kat), bu yüzden oran da aranır.
+    dolu = sum(1 for h in parcalar if h.strip())
+    if len(harita) >= 3 and len(harita) >= 0.6 * dolu:
         return harita
     return None
 
@@ -124,6 +164,20 @@ def sfp_ozellikleri(tanim: str) -> dict[str, str]:
     return ozel
 
 
+class _Satir(NamedTuple):
+    """İçe aktarılacak tek ürün (rapor ve yazma adımı aynı yapıyı kullanır)."""
+
+    etiket: str
+    marka: str
+    model: str
+    seri: str
+    mac: str | None
+    ip: str
+    dahili: str
+    kisi: object | None          # eşleşen personel kaydı (varsa)
+    ozel: dict
+
+
 def _sonraki_sira(mevcut_etiket: set[str], onek: str | None) -> int:
     """Önekli etiketlerde kaldığı yerden devam etsin (AP-Y005-07 → 8)."""
     if not onek:
@@ -148,12 +202,22 @@ def main() -> int:
                     help="kişi yerine bir yere zimmetle (örn. 'HOLDİNG BİNASI')")
     ap.add_argument("--etiket-onek", dest="etiket_onek",
                     help="seri no olmayanlara sıralı cihaz no üret (AP-Y005-)")
+    ap.add_argument("--marka", help="Marka sütunu yoksa hepsine bu marka yazılır")
+    ap.add_argument("--kisiye-zimmetle", dest="kisiye_zimmetle",
+                    action="store_true",
+                    help="İSİM/SOYİSİM sütunundaki personele zimmetle; "
+                         "kişi bulunamazsa --zimmet yerine düşer")
+    ap.add_argument("--dahili-yaz", dest="dahili_yaz", action="store_true",
+                    help="Eşleşen personelin künyesine dahili numarayı yaz")
     ap.add_argument("--nereden", help="Geldiği lokasyon (geçmişe not düşülür)")
     ap.add_argument("--dry-run", action="store_true", help="Yazmadan raporla")
     args = ap.parse_args()
 
-    metin = sys.stdin.read() if args.dosya == "-" else Path(args.dosya).read_text()
-    ham_satirlar = satirlari_coz(metin)
+    if args.dosya != "-" and Path(args.dosya).suffix.lower() in (".xlsx", ".xlsm"):
+        ham_satirlar = excel_satirlari(Path(args.dosya))
+    else:
+        metin = sys.stdin.read() if args.dosya == "-" else Path(args.dosya).read_text()
+        ham_satirlar = satirlari_coz(metin)
     harita = None
     satirlar = []
     parca_no_yaz = True                      # başlıksız listelerde eski davranış
@@ -213,19 +277,42 @@ def main() -> int:
         mevcut_seriler = {s for s in db.scalars(select(models.Asset.serial)).all() if s}
         mevcut_etiket = {e for e in db.scalars(select(models.Asset.asset_tag)).all()}
         mevcut_mac = {m for m in db.scalars(select(models.Asset.mac_address)).all() if m}
+        # Dahili numara da tekildir: aynı numara iki telefona verilemez
+        mevcut_dahili = {t for t in db.scalars(select(models.Asset.telefon_no)).all() if t}
 
         sira = _sonraki_sira(mevcut_etiket, args.etiket_onek)
-        eklenecek, atlanan = [], []
+        # Kişi eşleştirmesi için ad dizini (Türkçe karakter duyarsız)
+        kisi_dizini: dict[str, list] = {}
+        if args.kisiye_zimmetle or args.dahili_yaz:
+            for k in db.scalars(select(models.User)).all():
+                ad = _sadelestir(" ".join(filter(None, [k.first_name, k.last_name])))
+                if ad:
+                    kisi_dizini.setdefault(ad, []).append(k)
+
+        eklenecek, atlanan, biçimsiz_mac = [], [], []
         for parcalar in satirlar:
-            marka = _hucre(parcalar, harita, "marka")
+            marka = _hucre(parcalar, harita, "marka") or (args.marka or "")
             model = _hucre(parcalar, harita, "model")
             seri = _hucre(parcalar, harita, "seri")
             tanim = _hucre(parcalar, harita, "tanim")
             mac = mac_duzenle(_hucre(parcalar, harita, "mac"))
-            kat = _hucre(parcalar, harita, "kat")
+            ip = _hucre(parcalar, harita, "ip")
+            dahili = _hucre(parcalar, harita, "dahili")
+            kat = kat_ac(_hucre(parcalar, harita, "kat"))
             konum = _hucre(parcalar, harita, "konum")
-            kimlik = konum or seri or mac or marka
+            kisi_adi = " ".join(filter(None, [_hucre(parcalar, harita, "ad"),
+                                              _hucre(parcalar, harita, "soyad")]))
+            kisi_adi = " ".join(kisi_adi.split())
+            kimlik = dahili or konum or kisi_adi or seri or mac or marka
 
+            # Kişi eşleşmesi: tam ad birebir tutmalı; birden çok kişi varsa
+            # hangisi olduğu belirsizdir, yere zimmetlenir.
+            adaylar = kisi_dizini.get(_sadelestir(kisi_adi), []) if kisi_adi else []
+            kisi = adaylar[0] if len(adaylar) == 1 else None
+
+            if dahili and dahili in mevcut_dahili:
+                atlanan.append((kimlik, f"dahili {dahili} zaten kayıtlı"))
+                continue
             if mac and mac in mevcut_mac:
                 atlanan.append((kimlik, f"MAC {mac} zaten kayıtlı"))
                 continue
@@ -236,6 +323,9 @@ def main() -> int:
             # Cihaz no: seri no varsa o, yoksa üretilen sıra no, o da yoksa MAC
             if seri:
                 etiket = seri
+            elif args.etiket_onek and dahili:
+                # Etikette boşluk/noktalama olmasın: "0216 266 64 96" → 02162666496
+                etiket = args.etiket_onek + re.sub(r"[^0-9A-Za-z]", "", dahili)
             elif args.etiket_onek:
                 etiket = f"{args.etiket_onek}{sira:02d}"
                 sira += 1
@@ -253,10 +343,17 @@ def main() -> int:
                 ozel["Kat"] = kat
             if konum:
                 ozel["Konum"] = konum
-            eklenecek.append((etiket, marka, model, seri, mac, ozel))
+            if kisi_adi:
+                ozel["Kullanan"] = kisi_adi
+            if mac and not re.fullmatch(r"([0-9A-F]{2}:){5}[0-9A-F]{2}", mac):
+                biçimsiz_mac.append((kimlik, mac))
+            eklenecek.append(_Satir(etiket, marka, model, seri, mac, ip,
+                                    dahili, kisi, ozel))
             mevcut_etiket.add(etiket)
             if mac:
                 mevcut_mac.add(mac)
+            if dahili:
+                mevcut_dahili.add(dahili)
 
         print(f"\n\033[1;36m→ {len(satirlar)} satır okundu\033[0m")
         print(f"  Eklenecek : {len(eklenecek)}")
@@ -268,11 +365,20 @@ def main() -> int:
         if zimmet_yeri is not None:
             print(f"  Zimmet    : {zimmet_yeri.name} (yere zimmet)")
         print()
-        for etiket, marka, model, seri, mac, ozel in eklenecek[:50]:
-            ek = ", ".join(f"{k}={v}" for k, v in ozel.items() if k != "Parça No")
-            print(f"  + {etiket:<16} {marka:<12} {model:<14} {mac or '':<19} {ek}")
+        for r in eklenecek[:50]:
+            ek = ", ".join(f"{k}={v}" for k, v in r.ozel.items() if k != "Parça No")
+            kime = f"→ {r.kisi.full_name}" if r.kisi else ""
+            print(f"  + {r.etiket:<16} {r.marka:<11} {r.model:<8} "
+                  f"{r.dahili:<7} {r.mac or '':<15} {ek} {kime}")
         for kimlik, sebep in atlanan[:20]:
             print(f"  - {kimlik:<24} ({sebep})")
+        if biçimsiz_mac:
+            # 12 haneli onaltılık olmayan değerler olduğu gibi saklanır;
+            # çoğu zaman listede yazım hatasıdır (harf O yerine sıfır gibi).
+            print(f"\n\033[33m⚠ MAC biçimi tanınmayan {len(biçimsiz_mac)} kayıt "
+                  f"(olduğu gibi yazılacak, listeyi kontrol edin):\033[0m")
+            for kimlik, mac in biçimsiz_mac[:10]:
+                print(f"    {kimlik:<24} {mac}")
 
         if args.dry_run:
             print("\n\033[33m⚠ KURU ÇALIŞTIRMA — hiçbir değişiklik yapılmadı.\033[0m")
@@ -283,25 +389,37 @@ def main() -> int:
             return 0
 
         simdi = dt.datetime.now(dt.timezone.utc)
-        for etiket, marka, model, seri, mac, ozel in eklenecek:
-            mdl = _model_bul(db, args.tur, marka, model)
+        for r in eklenecek:
+            mdl = _model_bul(db, args.tur, r.marka, r.model)
             # Ad künyede görünür: "HPE Aruba AP-615-RW — Sağ Koridor 1"
-            ad = " ".join(filter(None, [marka, model])) or None
-            if ad and ozel.get("Konum"):
-                ad = f"{ad} — {ozel['Konum']}"
+            ad = " ".join(filter(None, [r.marka, r.model])) or None
+            # Ad künyede görünür: telefonda kullanan kişi, AP'de montaj yeri
+            yer = r.ozel.get("Konum") or r.ozel.get("Kullanan") or (
+                r.kisi.full_name if r.kisi else None)
+            if ad and yer:
+                ad = f"{ad} — {yer}"
             varlik = models.Asset(
-                asset_tag=etiket,
+                asset_tag=r.etiket,
                 name=ad,
-                serial=seri or None,
-                mac_address=mac,
+                serial=r.seri or None,
+                mac_address=r.mac,
+                ip_address=r.ip or None,
+                telefon_no=r.dahili or None,
                 model_id=mdl.id,
                 location_id=lokasyon.id if lokasyon else None,
-                custom={ag.GRUP: ozel},
+                custom={ag.GRUP: r.ozel},
             )
-            if zimmet_yeri is not None:
+            # Zimmet: eşleşen kişi varsa ona, yoksa yere (bina)
+            if r.kisi is not None:
+                varlik.assigned_type = models.AssignedType.user
+                varlik.assigned_user_id = r.kisi.id
+                varlik.last_checkout = simdi
+            elif zimmet_yeri is not None:
                 varlik.assigned_type = models.AssignedType.location
                 varlik.assigned_location_id = zimmet_yeri.id
                 varlik.last_checkout = simdi
+            if args.dahili_yaz and r.kisi is not None and r.dahili:
+                r.kisi.dahili = r.dahili
             db.add(varlik)
             db.flush()
             db.add(models.ActivityLog(
@@ -315,7 +433,12 @@ def main() -> int:
                                           "yeni": str(lokasyon.id)}}
                          if kaynak_deger and lokasyon else None),
             ))
-            if zimmet_yeri is not None:
+            if r.kisi is not None:
+                db.add(models.ActivityLog(
+                    action=models.ActivityAction.checkout, item_type="asset",
+                    item_id=varlik.id, target_type="user", target_id=r.kisi.id,
+                    note=f"{r.kisi.full_name} üzerine zimmetlendi"))
+            elif zimmet_yeri is not None:
                 db.add(models.ActivityLog(
                     action=models.ActivityAction.checkout, item_type="asset",
                     item_id=varlik.id, target_type="location",

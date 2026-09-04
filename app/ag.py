@@ -54,6 +54,8 @@ def sablon(aile: str | None = None) -> list[dict]:
             "aciklama": bilgi["aciklama"],
             # Arayüz künye bölümüne hat alanlarını bu bayrağa bakarak ekler
             "hat": bool(bilgi.get("hat")),
+            # Dahili numaralı ürünler (telefon, santral): künyede "Dahili No"
+            "dahili": bool(bilgi.get("dahili")),
             # Yerleşim (Kat / Konum) her türde ve en başta: cihazı sahada
             # bulmak için önce yeri lazım, teknik özellikler sonra gelir.
             "alanlar": [a.sozluk() for a in YERLESIM + bilgi["alanlar"]],
@@ -159,6 +161,7 @@ def urunler(db: Session, *, aile: str | None = None, tur: str | None = None,
                          or (lokasyonlar[a.assigned_location_id].name
                              if a.assigned_location_id in lokasyonlar else None)),
             "zimmet_turu": a.assigned_type.value if a.assigned_type else None,
+            "zimmetli_id": a.assigned_user_id or a.assigned_location_id,
             "gorsel_id": gorseller.get(a.id),
             "ozellikler": _ozellikler(a),
         }
@@ -173,6 +176,61 @@ def urunler(db: Session, *, aile: str | None = None, tur: str | None = None,
                 continue
         sonuc.append(kayit)
     return sonuc
+
+
+def telefon_rehberi(db: Session) -> list[dict]:
+    """Dahili numara listesi: hem personel künyesinden hem IP telefonlardan.
+
+    Rehber iki kaynaktan beslenir; ikisi de aynı dahiliyi gösteriyorsa tek
+    satırda birleşir (kişi adı personelden, cihaz bilgisi telefondan).
+    """
+    satirlar: dict[str, dict] = {}
+
+    def kayit(dahili: str) -> dict:
+        return satirlar.setdefault(dahili, {
+            "dahili": dahili, "ad": None, "kisi_id": None, "unvan": None,
+            "departman": None, "kat": None, "konum": None, "model": None,
+            "marka": None, "ip": None, "mac": None, "asset_id": None,
+            "asset_tag": None, "lokasyon": None,
+        })
+
+    for k in db.scalars(select(models.User).where(
+            models.User.dahili.is_not(None),
+            models.User.active.is_(True))).all():
+        s = kayit(str(k.dahili).strip())
+        s["ad"] = " ".join(filter(None, [k.first_name, k.last_name])) or None
+        s["kisi_id"] = k.id
+        s["unvan"] = k.job_title
+        s["departman"] = k.department
+
+    for u in urunler(db, tur="ip_telefon") + urunler(db, tur="santral"):
+        if not u["telefon_no"]:
+            continue
+        s = kayit(str(u["telefon_no"]).strip())
+        s["asset_id"] = u["id"]
+        s["asset_tag"] = u["asset_tag"]
+        s["marka"] = u["marka"]
+        s["model"] = u["model"]
+        s["ip"] = u["ip_address"]
+        s["mac"] = u["mac_address"]
+        s["lokasyon"] = u["lokasyon"]
+        s["kat"] = u["ozellikler"].get("Kat")
+        s["konum"] = u["ozellikler"].get("Konum")
+        # Ad kaynağı sırayla: zimmetli KİŞİ → listedeki "Kullanan" (oda adı
+        # da olabilir) → zimmetli yer. Yer en sonda: "HOLDİNG BİNASI" rehberde
+        # kimin telefonu olduğunu anlatmaz.
+        if not s["ad"]:
+            kisi = u["zimmetli"] if u["zimmet_turu"] == "user" else None
+            if kisi and not s["kisi_id"]:
+                s["kisi_id"] = u["zimmetli_id"]
+            s["ad"] = kisi or u["ozellikler"].get("Kullanan") or u["zimmetli"]
+
+    # Dahililer sayı gibi sıralansın: 1702 < 1720 < 2611, harfliler sonda
+    def anahtar(s: dict):
+        d = s["dahili"]
+        return (0, int(d), "") if d.isdigit() else (1, 0, d)
+
+    return sorted(satirlar.values(), key=anahtar)
 
 
 def ozet(db: Session, *, aile: str | None = None) -> dict:

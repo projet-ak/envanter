@@ -111,7 +111,7 @@ def personel_ara(db: Session, q: str, *, limit: int = 20) -> list[dict]:
         kisiler = [
             k for k in kisiler
             if _eslesir(terim, _kisi_adi(k), k.employee_num, k.department,
-                        k.sube, k.email)
+                        k.sube, k.email, k.dahili)
         ]
         kisiler.sort(key=lambda k: normalle(_kisi_adi(k)))
     else:
@@ -124,6 +124,7 @@ def personel_ara(db: Session, q: str, *, limit: int = 20) -> list[dict]:
             "employee_num": k.employee_num,
             "department": k.department,
             "sube": k.sube,
+            "dahili": k.dahili,
             "cihaz_sayisi": sayilar.get(k.id, 0),
         }
         for k in kisiler[:limit]
@@ -144,7 +145,9 @@ def hizli_ara(db: Session, q: str, *, limit: int = 10) -> dict:
     kisiler = db.scalars(select(models.User).limit(ARAMA_TAVANI)).all()
     kisi_bulunan = [
         k for k in kisiler
-        if _eslesir(terim, _kisi_adi(k), k.employee_num, k.department, k.email)
+        # Dahili no da aranır: "1720" yazınca kimin telefonu olduğu çıksın
+        if _eslesir(terim, _kisi_adi(k), k.employee_num, k.department, k.email,
+                    k.dahili)
     ]
     # Ada göre sırala (Türkçe indirgenmiş hâliyle)
     kisi_bulunan.sort(key=lambda k: normalle(_kisi_adi(k)))
@@ -208,6 +211,7 @@ def hizli_ara(db: Session, q: str, *, limit: int = 10) -> dict:
                 "ad": _kisi_adi(k),
                 "employee_num": k.employee_num,
                 "department": k.department,
+                "dahili": k.dahili,
             }
             for k in kisi_bulunan[:limit]
         ],

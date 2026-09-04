@@ -303,7 +303,7 @@ async function renderPersonelView() {
           <option value="yok">Zimmeti olmayanlar</option>
         </select>
         <input id="pAra" class="grow"
-               placeholder="Ada, sicile, unvana veya lokasyona göre ara…"
+               placeholder="Ad, sicil, unvan, lokasyon veya dahili no…"
                oninput="loadPersonel()" />
         <button class="ghost" onclick="personelFiltreTemizle()">Temizle</button>
       </div>
@@ -311,7 +311,7 @@ async function renderPersonelView() {
         <th class="dar"></th><th>Ad Soyad</th>
         <th class="gizle-mobil">Sicil</th><th>Unvan</th>
         <th class="gizle-mobil">Lokasyon</th><th class="gizle-mobil">E-posta</th>
-        <th class="gizle-mobil">Telefon</th>
+        <th>Dahili</th><th class="gizle-mobil">Telefon</th>
         <th>Zimmet</th><th></th></tr></thead>
         <tbody id="pRows"></tbody></table>
     </div>`;
@@ -334,6 +334,7 @@ async function personelEkleAc() {
     ['employee_num','Sicil No','text'],['department','Departman','text'],
     ['job_title','Unvan','text'],['sube','Şube','text'],
     ['email','E-posta','text'],['telefon','Telefon','text'],
+    ['dahili','Dahili No','text'],
     ['tckn','TCKN','text'],['ise_giris','İşe Giriş','date'],
   ];
   modalAc('👤 Yeni personel', `
@@ -496,7 +497,8 @@ async function loadPersonel() {
     if (zimmetSecili === 'yok' && adet) return false;
     return !q ||
       [k.first_name, k.last_name, k.employee_num, k.job_title,
-       lokAd[k.location_id], k.department, k.sube, k.email, k.telefon]
+       lokAd[k.location_id], k.department, k.sube, k.email, k.telefon,
+       k.dahili]
         .filter(Boolean).join(' ').toLocaleLowerCase('tr').includes(q);
   });
   personelListe = liste;
@@ -521,6 +523,7 @@ async function loadPersonel() {
       <td class="muted gizle-mobil">${renkNokta(refLokasyonRenk[k.location_id])}${
         esc(lokAd[k.location_id])}</td>
       <td class="muted gizle-mobil">${esc(k.email)}</td>
+      <td>${k.dahili ? `<b>${kacir(k.dahili)}</b>` : '<span class="muted">—</span>'}</td>
       <td class="muted gizle-mobil">${esc(k.telefon)}</td>
       <td>${adet ? `<span class="tag used">${adet} cihaz</span>`
                  : '<span class="muted">—</span>'}</td>
@@ -1823,7 +1826,8 @@ async function hizliCalistir(q) {
     parcalar.push('<div class="baslik">Personel</div>');
     parcalar.push(d.personel.map(k => `
       <div class="satir" onclick="hizliSec('kisi', ${k.id})">
-        <span>👤 ${kacir(k.ad)}</span>
+        <span>👤 ${kacir(k.ad)}${k.dahili
+          ? ` <span class="pill">☎ ${kacir(k.dahili)}</span>` : ''}</span>
         <span class="ikincil">${kacir([k.employee_num, k.department]
           .filter(Boolean).join(' · '))}</span>
       </div>`).join(''));
@@ -2084,7 +2088,7 @@ async function kisiDetay(id) {
       ['ise_giris','İşe Giriş'],['isten_cikis','İşten Çıkış'],['durum','Durum'],
     ])}</div>
     <div class="bolum"><h4>İletişim</h4>${alanlar(k, [
-      ['email','E-posta'],['telefon','Telefon'],
+      ['email','E-posta'],['telefon','Telefon'],['dahili','Dahili No'],
     ])}</div>
     ${k.notes ? `<div class="bolum"><h4>Notlar</h4>
       <div class="note" style="margin-top:0">${kacir(k.notes)}</div></div>` : ''}`;
@@ -2369,6 +2373,7 @@ async function kisiDuzenle(id) {
     ['employee_num','Sicil No','text'],['department','Departman','text'],
     ['job_title','Unvan','text'],['sube','Şube','text'],
     ['email','E-posta','text'],['telefon','Telefon','text'],
+    ['dahili','Dahili No','text'],
     ['tckn','TCKN','text'],['ise_giris','İşe Giriş','date'],
     ['isten_cikis','İşten Çıkış','date'],
     // Kullanıcı adı burada değil, Ayarlar → Hesaplar'da yönetilir: personel
@@ -4230,6 +4235,8 @@ async function renderAgView(aile = agAile) {
         ${canWrite() ? `<button class="primary" onclick="agUrunEkleAc()">
           + ${bilgi.ekle || 'Ağ ürünü'} ekle</button>` : ''}
         <button class="ghost" onclick="agTransferler()">🔄 Transferler</button>
+        ${agAile === 'ag' ? `<button class="ghost"
+          onclick="telefonRehberi()">📞 Telefon Rehberi</button>` : ''}
       </div>
       <div class="row">${sekmeler.map(([k, l]) =>
         `<button class="ghost ${k === agTur ? 'sec' : ''}"
@@ -4296,7 +4303,8 @@ async function agListele() {
   const sutunlar = s ? s.alanlar.slice(0, 5).map(a => a.ad) : [];
   // SIM'li cihazlarda hat künyesi özellik değil, kaydın kendi alanı
   const hatSutun = s?.hat ? [['Operatör', 'operator'], ['Hat No', 'telefon_no']]
-                          : [];
+                 : s?.dahili ? [['Dahili', 'telefon_no']]
+                             : [];
 
   kutu.innerHTML = `<div class="panel">
     <h2>${liste.length} ürün</h2>
@@ -4329,6 +4337,95 @@ async function agListele() {
             : esc(u.durum)}</td>
     </tr>`).join('')}</tbody></table></div>`;
   gorselleriYukle();
+}
+
+// Dahili numara rehberi: personel künyesi + IP telefonlar birleşik.
+// Santral yönetimi için günlük kullanılan liste; yazdırılabilir.
+let rehberVeri = [];
+
+async function telefonRehberi() {
+  let liste;
+  try { liste = await api('/ag/telefon-rehberi'); }
+  catch (e) { return alert('⚠ ' + (e.detail || 'Rehber alınamadı')); }
+  rehberVeri = liste;
+
+  if (!liste.length) {
+    return modalAc('📞 Telefon Rehberi', `<div class="note" style="margin-top:0">
+      Henüz dahili numara girilmemiş. Personel kartındaki <b>Dahili No</b>
+      alanını doldurun ya da IP telefonları Ağ Ürünleri → ☎️ IP Telefon
+      altında dahili numarasıyla ekleyin.</div>`);
+  }
+
+  modalAc(`📞 Telefon Rehberi (${liste.length})`, `
+    <div class="row" style="margin-top:0">
+      <input id="rehberAra" class="grow" autocomplete="off"
+             placeholder="Dahili, isim, kat, oda ara…" oninput="rehberCiz()" />
+      <button class="ghost" onclick="rehberYazdir()">🖨️ Yazdır</button>
+    </div>
+    <div id="rehberGovde"></div>`);
+  rehberCiz();
+  setTimeout(() => document.getElementById('rehberAra')?.focus(), 60);
+}
+
+function rehberSatirlari() {
+  const q = (document.getElementById('rehberAra')?.value || '')
+    .trim().toLocaleLowerCase('tr');
+  if (!q) return rehberVeri;
+  return rehberVeri.filter(r => [r.dahili, r.ad, r.unvan, r.departman,
+    r.kat, r.konum, r.model, r.ip, r.asset_tag]
+    .filter(Boolean).join(' ').toLocaleLowerCase('tr').includes(q));
+}
+
+function rehberCiz() {
+  const kutu = document.getElementById('rehberGovde');
+  if (!kutu) return;
+  const liste = rehberSatirlari();
+  if (!liste.length) {
+    kutu.innerHTML = '<div class="muted">Eşleşen kayıt yok.</div>';
+    return;
+  }
+  // Kata göre grupla: rehber sahada kat kat kullanılıyor
+  const gruplar = {};
+  liste.forEach(r => { (gruplar[r.kat || 'Kat belirtilmemiş'] ??= []).push(r); });
+
+  kutu.innerHTML = Object.entries(gruplar).map(([kat, satirlar]) => `
+    <div class="bolum"><h4>${kacir(kat)} (${satirlar.length})</h4>
+    <table><thead><tr>
+      <th>Dahili</th><th>Kişi / Oda</th><th class="gizle-mobil">Unvan</th>
+      <th class="gizle-mobil">Yeri</th><th class="gizle-mobil">Telefon</th>
+      <th class="gizle-mobil">IP</th></tr></thead><tbody>
+    ${satirlar.map(r => `<tr${r.kisi_id || r.asset_id ? ' class="tikla"' : ''}
+        onclick="${r.kisi_id ? `modalKapat(); kisiDetay(${r.kisi_id})`
+                 : r.asset_id ? `modalKapat(); cihazDetay(${r.asset_id})` : ''}">
+      <td><b>${kacir(r.dahili)}</b></td>
+      <td>${r.ad ? kacir(r.ad) : '<span class="muted">—</span>'}</td>
+      <td class="muted gizle-mobil">${esc(r.unvan || r.departman)}</td>
+      <td class="muted gizle-mobil">${esc(r.konum)}</td>
+      <td class="muted gizle-mobil">${esc([r.marka, r.model]
+        .filter(Boolean).join(' '))}</td>
+      <td class="muted gizle-mobil">${esc(r.ip)}</td>
+    </tr>`).join('')}</tbody></table></div>`).join('');
+}
+
+function rehberYazdir() {
+  const liste = rehberSatirlari();
+  const p = window.open('', '_blank');
+  if (!p) return alert('⚠ Açılır pencere engellendi.');
+  p.document.write(`<html><head><title>Telefon Rehberi</title>
+    <style>body{font-family:system-ui,sans-serif;font-size:12px;padding:18px}
+      h1{font-size:16px} table{border-collapse:collapse;width:100%}
+      th,td{border:1px solid #ccc;padding:4px 6px;text-align:left}
+      th{background:#eee}</style></head><body>
+    <h1>Telefon Rehberi — ${liste.length} dahili</h1>
+    <table><thead><tr><th>Dahili</th><th>Kişi / Oda</th><th>Kat</th>
+      <th>Yeri</th><th>Telefon</th><th>IP</th></tr></thead><tbody>
+    ${liste.map(r => `<tr><td>${kacir(r.dahili)}</td><td>${kacir(r.ad || '')}</td>
+      <td>${kacir(r.kat || '')}</td><td>${kacir(r.konum || '')}</td>
+      <td>${kacir([r.marka, r.model].filter(Boolean).join(' '))}</td>
+      <td>${kacir(r.ip || '')}</td></tr>`).join('')}
+    </tbody></table></body></html>`);
+  p.document.close();
+  p.print();
 }
 
 async function agTransferler() {
@@ -4391,6 +4488,9 @@ function agUrunEkleAc(tur = agTur || AILE_BILGI[agAile].ilk || 'switch') {
         <label>Yönetim IP <input id="auIp" placeholder="örn. 10.0.0.2" /></label>
         <label>Lokasyon <select id="auLokasyon"></select></label>
         <label>Durum <select id="auDurum"></select></label>
+        ${s.dahili ? `
+        <label>Dahili No <input id="auTelefon" placeholder="örn. 1720" /></label>`
+        : ''}
         ${s.hat ? `
         <label>Operatör <select id="auOperator">
           <option value="">— seçilmedi —</option>

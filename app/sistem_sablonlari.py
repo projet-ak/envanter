@@ -285,6 +285,41 @@ TURLER: dict[str, dict] = {
             Alan("Derinlik (cm)", "Derinlik (cm)", "number"),
         ],
     },
+    "santral": {
+        "aile": "ag",
+        "ad": "Telefon Santrali",
+        "ikon": "🏢",
+        "aciklama": "IP/sanal telefon santralleri (Karel, 3CX, Asterisk) ve kartları",
+        # Santralin kendi numarası (merkez / operatör) künyede tutulur
+        "dahili": True,
+        "alanlar": [
+            Alan("Santral Tipi", "Santral Tipi", "secim",
+                 ["Sanal (bulut)", "IP Santral", "Hibrit", "Analog"]),
+            Alan("Dahili Kapasitesi", "Dahili Kapasitesi", "number",
+                 ipucu="örn. 120"),
+            Alan("Harici Hat", "Harici Hat Tipi", "secim",
+                 ["SIP Trunk", "PRI (30 kanal)", "BRI", "Analog (PSTN)", "GSM Gateway"]),
+            Alan("Kanal Sayısı", "Eşzamanlı Görüşme (kanal)", "number"),
+            Alan("Sürüm", "Yazılım Sürümü"),
+        ],
+    },
+    "ip_telefon": {
+        "aile": "ag",
+        "ad": "IP Telefon",
+        "ikon": "☎️",
+        "aciklama": "Masa telefonları, DECT telsizler ve konferans telefonları",
+        # Dahili numara teknik özellik değil künye bilgisidir
+        "dahili": True,
+        "alanlar": [
+            Alan("Telefon Tipi", "Telefon Tipi", "secim",
+                 ["Masa Telefonu", "DECT / Telsiz", "Konferans", "Kapı Telefonu",
+                  "Softphone"]),
+            Alan("Kullanan", "Kullanan / Oda"),
+            Alan("Bağlı Santral", "Bağlı Santral", ipucu="örn. KAREL Sanal Santral"),
+            Alan("Hat Sayısı", "Hat (hesap) Sayısı", "number"),
+            Alan("PoE", "PoE ile Beslenir mi", "secim", POE_SECENEKLERI),
+        ],
+    },
     "diger": {
         "aile": "ag",
         "ad": "Diğer Ağ Ürünü",
@@ -808,6 +843,14 @@ _KATEGORI_IPUCU: list[tuple[tuple[str, ...], str]] = [
     (("arac kantar", "kopru kantar", "tartim platform", "kantar platform",
       "kantar", "bascul", "tarti platform"), "kantar_platform"),
 
+    # Telefon santrali: "yangın santrali" ve "alarm santrali" yukarıda çoktan
+    # eşleşti, buraya yalnız telefon santralleri düşer.
+    (("telefon santral", "ip santral", "sanal santral", "voip santral",
+      "pbx", "ip pbx", "ippbx", "telefon sistemi"), "santral"),
+    # "Telefon" tek başına YETMEZ: cep telefonu bir ağ ürünü değildir.
+    (("ip telefon", "voip telefon", "sip telefon", "masa telefonu",
+      "dect", "telsiz telefon", "kablosuz telefon", "konferans telefon",
+      "kapi telefon", "diafon", "ip phone"), "ip_telefon"),
     # "Kablosuz Link" access_point değildir: ptp önce gelir
     (("noktadan noktaya", "point to point", "ptp", "ptmp", "kablosuz link",
       "radyo link", "airfiber", "airmax", "nanostation",

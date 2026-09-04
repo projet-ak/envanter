@@ -189,6 +189,7 @@ class UserCreate(BaseModel):
     tckn: str | None = None
     sube: str | None = None
     telefon: str | None = None
+    dahili: str | None = None
     ise_giris: dt.date | None = None
     isten_cikis: dt.date | None = None
     active: bool = True
@@ -208,6 +209,7 @@ class UserUpdate(BaseModel):
     tckn: str | None = None
     sube: str | None = None
     telefon: str | None = None
+    dahili: str | None = None
     ise_giris: dt.date | None = None
     isten_cikis: dt.date | None = None
     active: bool | None = None
@@ -226,6 +228,7 @@ class UserRead(ORMModel):
     tckn: str | None = None
     sube: str | None = None
     telefon: str | None = None
+    dahili: str | None = None
     ise_giris: dt.date | None = None
     isten_cikis: dt.date | None = None
     role: UserRole
@@ -739,6 +742,7 @@ class AuthUser(ORMModel):
     department: str | None = None
     job_title: str | None = None
     telefon: str | None = None
+    dahili: str | None = None
     role: UserRole
 
 
@@ -758,6 +762,7 @@ class ProfilGuncelle(BaseModel):
     last_name: str | None = None
     email: str | None = None
     telefon: str | None = None
+    dahili: str | None = None
 
 
 class ParolaDegistir(BaseModel):

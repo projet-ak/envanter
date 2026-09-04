@@ -208,6 +208,8 @@ class User(Base, TimestampMixin, ExternalMixin):
     tckn: Mapped[str | None] = mapped_column(String(11), index=True)
     sube: Mapped[str | None] = mapped_column(String(120))
     telefon: Mapped[str | None] = mapped_column(String(40))
+    # Santral dahili numarası (telefon rehberi) — cep/sabit hattan ayrıdır
+    dahili: Mapped[str | None] = mapped_column(String(20), index=True)
     ise_giris: Mapped[dt.date | None] = mapped_column(Date)
     isten_cikis: Mapped[dt.date | None] = mapped_column(Date)
 
