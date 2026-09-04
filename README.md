@@ -743,6 +743,26 @@ açar (kategori adından belirlenir; ağ/kamera gibi sistem ürünleri doğru
 bölüme düşer), `--tumu` teknik verisi olmayan nesneleri (mobilya,
 konteyner…) de alır, `--sinif` uzun biçimde teknik sınıf süzer.
 
+### Cihaz numarasından kategori
+
+Numaralandırma cihaz tipini söylüyorsa (N245 dizüstü, M229 monitör) kategori
+tek komutla düzeltilir:
+
+```bash
+./.venv/bin/python scripts/kod-kategori.py            # yalnızca rapor
+./.venv/bin/python scripts/kod-kategori.py --uygula   # yaz
+./.venv/bin/python scripts/kod-kategori.py --kural "B=Masaüstü Bilgisayar"
+```
+
+Varsayılan kurallar `N…` → **Dizüstü Bilgisayar**, `M…` → **Monitör**.
+Önek harften sonra **rakam** arar: `N245` eşleşir, `NVR-01` eşleşmez.
+
+Kategori cihazda değil modelde tutulduğu için betik modeli korur: modeli tek
+o cihaz kullanıyorsa modelin kategorisi taşınır, model paylaşımlıysa hedef
+kategoride aynı adlı model açılıp yalnız o cihaz bağlanır (diğer cihazlar
+etkilenmez), modelsiz cihaza kategori adıyla model açılır. Her değişiklik
+cihazın işlem geçmişine yazılır; betik idempotenttir.
+
 ### Mükerrer varlık kayıtları
 
 Aynı cihazın birden çok kaydı (eski aktarımların `B002` / `B002-2` etiketleri,
