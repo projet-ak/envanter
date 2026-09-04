@@ -32,6 +32,8 @@ Seçenekler:
     --proje-kodu    Lokasyonu proje koduyla eşler (mükerrer şantiye açılmasın)
     --zimmet        Kişi yerine bir yere zimmetle (örn. "HOLDİNG BİNASI");
                     kayıt yoksa lokasyonun altında açılır
+    --marka         Marka sütunu yoksa hepsine bu markayı yazar
+    --marka-esle    Marka yazımını düzeltir (örn. "SİMENS=Siemens")
     --etiket-onek   Seri no olmayanlara sıralı cihaz no üretir (AP-Y005-01…)
     --nereden       Geldiği lokasyon (yalnızca geçmişe transfer notu düşer)
     --dry-run       Yazmadan raporla
@@ -164,6 +166,26 @@ def sfp_ozellikleri(tanim: str) -> dict[str, str]:
     return ozel
 
 
+def yeni_marka_uyarisi(db, markalar: set[str]) -> list[tuple[str, str | None]]:
+    """Listede geçen ama kayıtlı olmayan markalar ve benzerleri.
+
+    "SİMENS" ile "Siemens" ayrı iki marka açar; içe aktarmadan ÖNCE
+    söylenmezse mükerrer marka kaçınılmaz olur.
+    """
+    import difflib
+
+    mevcut = {_sadelestir(m.name): m.name
+              for m in db.scalars(select(models.Manufacturer)).all() if m.name}
+    uyari = []
+    for marka in sorted(markalar):
+        sade = _sadelestir(marka)
+        if not sade or sade in mevcut:
+            continue
+        yakin = difflib.get_close_matches(sade, list(mevcut), n=1, cutoff=0.75)
+        uyari.append((marka, mevcut[yakin[0]] if yakin else None))
+    return uyari
+
+
 class _Satir(NamedTuple):
     """İçe aktarılacak tek ürün (rapor ve yazma adımı aynı yapıyı kullanır)."""
 
@@ -203,6 +225,10 @@ def main() -> int:
     ap.add_argument("--etiket-onek", dest="etiket_onek",
                     help="seri no olmayanlara sıralı cihaz no üret (AP-Y005-)")
     ap.add_argument("--marka", help="Marka sütunu yoksa hepsine bu marka yazılır")
+    ap.add_argument("--marka-esle", dest="marka_esle", action="append",
+                    metavar="LISTEDEKI=DOGRUSU",
+                    help="listedeki marka yazımını düzeltir "
+                         "(örn. --marka-esle 'SİMENS=Siemens'), tekrarlanabilir")
     ap.add_argument("--kisiye-zimmetle", dest="kisiye_zimmetle",
                     action="store_true",
                     help="İSİM/SOYİSİM sütunundaki personele zimmetle; "
@@ -280,6 +306,16 @@ def main() -> int:
         # Dahili numara da tekildir: aynı numara iki telefona verilemez
         mevcut_dahili = {t for t in db.scalars(select(models.Asset.telefon_no)).all() if t}
 
+        # Marka yazım düzeltmeleri: "SİMENS=Siemens" → mükerrer marka açılmaz
+        marka_haritasi = {}
+        for cift in args.marka_esle or []:
+            if "=" not in cift:
+                print(f"\n{S}--marka-esle 'LISTEDEKI=DOGRUSU' biçiminde "
+                      f"olmalı: {cift}{N}")
+                return 1
+            ham, dogru = cift.split("=", 1)
+            marka_haritasi[_sadelestir(ham)] = dogru.strip()
+
         sira = _sonraki_sira(mevcut_etiket, args.etiket_onek)
         # Kişi eşleştirmesi için ad dizini (Türkçe karakter duyarsız)
         kisi_dizini: dict[str, list] = {}
@@ -292,6 +328,7 @@ def main() -> int:
         eklenecek, atlanan, biçimsiz_mac = [], [], []
         for parcalar in satirlar:
             marka = _hucre(parcalar, harita, "marka") or (args.marka or "")
+            marka = marka_haritasi.get(_sadelestir(marka), marka)
             model = _hucre(parcalar, harita, "model")
             seri = _hucre(parcalar, harita, "seri")
             tanim = _hucre(parcalar, harita, "tanim")
@@ -372,6 +409,13 @@ def main() -> int:
                   f"{r.dahili:<7} {r.mac or '':<15} {ek} {kime}")
         for kimlik, sebep in atlanan[:20]:
             print(f"  - {kimlik:<24} ({sebep})")
+        yeni_markalar = yeni_marka_uyarisi(db, {r.marka for r in eklenecek if r.marka})
+        if yeni_markalar:
+            print(f"\n\033[33m⚠ Kayıtlı olmayan {len(yeni_markalar)} marka "
+                  f"açılacak:\033[0m")
+            for marka, benzer in yeni_markalar:
+                ek = f"  ← mevcut '{benzer}' ile aynı olabilir!" if benzer else ""
+                print(f"    {marka}{ek}")
         if biçimsiz_mac:
             # 12 haneli onaltılık olmayan değerler olduğu gibi saklanır;
             # çoğu zaman listede yazım hatasıdır (harf O yerine sıfır gibi).

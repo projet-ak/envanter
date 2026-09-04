@@ -679,7 +679,7 @@ Excel'den gelen santral listesi doğrudan aktarılabilir (`.xlsx` desteklenir):
 ```
 
 Beklenen sütunlar: `TEL. NO · KAT · İSİM · SOYİSİM · MAC ADRESİ · İP ADRESİ ·
-TEL. MODEL` (adlarından tanınır, sıra önemsiz).
+MODEL · MARKA` (adlarından tanınır, sıra önemsiz; MARKA yoksa `--marka`).
 
 - `--kisiye-zimmetle` İSİM+SOYİSİM'i personel kayıtlarıyla eşler ve telefonu
   o kişiye zimmetler; kişi bulunamazsa (oda telefonları: "Bodrum Mutfak")
@@ -690,6 +690,10 @@ TEL. MODEL` (adlarından tanınır, sıra önemsiz).
   olarak açılır (AP listesiyle aynı yazım).
 - Aynı dahili numara ikinci kez eklenmez; MAC biçimi tanınmayan satırlar
   (yazım hatası) uyarı olarak listelenir ama olduğu gibi kaydedilir.
+- Listede geçen ama kayıtlı olmayan markalar içe aktarmadan önce uyarı
+  olarak yazılır; benzeri varsa gösterilir ("SİMENS ← mevcut 'Siemens' ile
+  aynı olabilir"). Yazımı düzeltmek için Excel'e dokunmadan:
+  `--marka-esle "SİMENS=Siemens"` (tekrarlanabilir).
 
 ## Şantiyeler ve proje kodları
 

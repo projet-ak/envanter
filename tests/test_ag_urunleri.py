@@ -1304,3 +1304,29 @@ def test_excel_okuma(tmp_path):
     harita = aktar.basliklari_coz(satirlar[0])
     assert aktar._hucre(satirlar[1], harita, "dahili") == "1720"
     assert aktar._hucre(satirlar[2], harita, "mac") == ""
+
+
+def test_marka_sutunu_ve_yazim_duzeltme(db_session):
+    """MARKA sütunu tanınır; bilinmeyen marka uyarılır, eşleme düzeltir."""
+    from app import models
+
+    aktar = _aktar()
+    tablo = (
+        "TEL. NO NUMARASI\tKAT\tİSİM\tSOYİSİM\tMAC ADRESİ\tİP ADRESİ\t"
+        "MODEL\tMARKA\n"
+        "2616\tZEMİN KAT\tDilek\tÖZDEMİR\t\t10.45.10.150\tTELSİZ\tSİMENS\n"
+    )
+    satirlar = aktar.satirlari_coz(tablo)
+    harita = aktar.basliklari_coz(satirlar[0])
+    assert harita["marka"] == 7 and harita["model"] == 6
+    assert aktar._hucre(satirlar[1], harita, "marka") == "SİMENS"
+    assert aktar._hucre(satirlar[1], harita, "dahili") == "2616"
+
+    # Kayıtlı "Siemens" varken "SİMENS" mükerrer marka açardı — uyarı çıkar
+    db_session.add(models.Manufacturer(name="Siemens"))
+    db_session.commit()
+    uyari = dict(aktar.yeni_marka_uyarisi(db_session, {"SİMENS", "Karel"}))
+    assert uyari["SİMENS"] == "Siemens"      # benzeri gösterilir
+    assert uyari["Karel"] is None            # benzeri yok, sadece yeni
+    # Kayıtlı marka hiç uyarı vermez
+    assert aktar.yeni_marka_uyarisi(db_session, {"Siemens"}) == []
