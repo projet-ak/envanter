@@ -6,6 +6,8 @@ Ağ ürünleri normal varlıklardır (bkz. app/ag.py); bu router yalnızca türe
 
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -105,17 +107,39 @@ def _model_bul(db: Session, tur: str, marka_adi: str | None, model_adi: str | No
     return m
 
 
+def mac_duzenle(ham: str | None) -> str | None:
+    """MAC'i tek biçime getirir: büyük harf, iki haneli gruplar, iki nokta.
+
+    'd4-19-72-c5-4b-46', 'D41972C54B46' ve 'd4:19:72:c5:4b:46' aynı cihazdır;
+    tek biçime indirgenmezse mükerrer kayıt kaçınılmaz olur.
+    """
+    if not ham:
+        return None
+    temiz = re.sub(r"[^0-9A-Fa-f]", "", ham).upper()
+    if len(temiz) != 12:
+        return ham.strip() or None          # tanımadığımız biçim: olduğu gibi
+    return ":".join(temiz[i:i + 2] for i in range(0, 12, 2))
+
+
 @router.post("/urunler", status_code=201, dependencies=WRITE)
 def urun_ekle(payload: schemas.AgUrunEkle, db: Session = Depends(get_db)):
     """Ağ ürünü ekler: kategori, marka ve model gerekirse kendiliğinden açılır."""
     if payload.tur not in ag.TURLER:
         raise HTTPException(400, f"Bilinmeyen tür: {payload.tur}")
 
-    etiket = (payload.asset_tag or "").strip() or (payload.serial or "").strip()
+    mac = mac_duzenle(payload.mac_address)
+    etiket = ((payload.asset_tag or "").strip() or (payload.serial or "").strip()
+              or (mac or ""))
     if not etiket:
-        raise HTTPException(400, "Cihaz no ya da seri no zorunlu")
+        raise HTTPException(400, "Cihaz no, seri no ya da MAC adresi zorunlu")
     if db.scalar(select(models.Asset).where(models.Asset.asset_tag == etiket)):
         raise HTTPException(409, f"'{etiket}' etiketi zaten kullanımda")
+    # MAC cihazın parmak izi: aynı MAC ikinci kez girilemesin
+    if mac:
+        ayni = db.scalar(select(models.Asset).where(models.Asset.mac_address == mac))
+        if ayni is not None:
+            raise HTTPException(
+                409, f"'{mac}' MAC adresi zaten kayıtlı ({ayni.asset_tag})")
 
     mdl = _model_bul(db, payload.tur, payload.marka, payload.model)
     varlik = models.Asset(
@@ -124,6 +148,7 @@ def urun_ekle(payload: schemas.AgUrunEkle, db: Session = Depends(get_db)):
         serial=payload.serial or None,
         demirbas_no=payload.demirbas_no or None,
         ip_address=payload.ip_address or None,
+        mac_address=mac,
         operator=payload.operator or None,
         telefon_no=payload.telefon_no or None,
         sim_no=payload.sim_no or None,

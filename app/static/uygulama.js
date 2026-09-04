@@ -1717,7 +1717,8 @@ async function cihazDetay(id) {
     ${k.purchase_cost != null ? `<div class="alan" style="margin-top:6px">
       <span class="et">Alım Bedeli</span><span class="dg">${tl(k.purchase_cost)}</span></div>` : ''}
     </div>
-    <div class="bolum"><h4>Zimmet</h4>${z.kisi || z.lokasyon ? alanlar(z, [
+    <div class="bolum"><h4>Zimmet</h4>${z.kisi || z.lokasyon ? alanlar(
+      { ...z, tarih: trTarih(z.tarih, true) }, [
       ['kisi','Kişi'],['departman','Departman'],['unvan','Unvan'],
       ['lokasyon','Lokasyon'],['tarih','Zimmet Tarihi'],
     ]) + (disi ? `<div class="note" style="margin-top:8px">
@@ -4301,7 +4302,7 @@ async function agListele() {
     <h2>${liste.length} ürün</h2>
     <table><thead><tr>
       <th></th><th>Cihaz No</th><th>Marka / Model</th>
-      <th class="gizle-mobil">Seri No</th>
+      <th class="gizle-mobil">Seri No</th><th class="gizle-mobil">MAC</th>
       ${hatSutun.map(([b]) => `<th>${b}</th>`).join('')}
       ${sutunlar.map(a => `<th>${kacir(a)}</th>`).join('')}
       <th>Lokasyon</th><th>Durum</th></tr></thead><tbody>
@@ -4316,12 +4317,16 @@ async function agListele() {
           ${u.ozellikler['Parça No'] ? `<div class="muted" style="font-size:11.5px">${
             kacir(u.ozellikler['Parça No'])}</div>` : ''}</td>
       <td class="muted gizle-mobil">${esc(u.serial)}</td>
+      <td class="muted gizle-mobil" style="font-family:ui-monospace,monospace">${
+        esc(u.mac_address)}</td>
       ${hatSutun.map(([, k]) => `<td class="muted">${esc(u[k])}</td>`).join('')}
       ${sutunlar.map(a => `<td class="muted">${esc(u.ozellikler[a])}</td>`).join('')}
       <td>${esc(u.lokasyon)}${u.proje_kodu
             ? ` <span class="pill">${kacir(u.proje_kodu)}</span>` : ''}</td>
-      <td>${u.zimmetli ? `<span class="tag used">${kacir(u.zimmetli)}</span>`
-                       : esc(u.durum)}</td>
+      <td>${u.zimmetli
+            ? `<span class="tag used">${u.zimmet_turu === 'location' ? '🏢' : '👤'} ${
+                kacir(u.zimmetli)}</span>`
+            : esc(u.durum)}</td>
     </tr>`).join('')}</tbody></table></div>`;
   gorselleriYukle();
 }
@@ -4381,6 +4386,8 @@ function agUrunEkleAc(tur = agTur || AILE_BILGI[agAile].ilk || 'switch') {
         <label>Model <input id="auModel"
                placeholder="örn. ${AILE_BILGI[agAile].model}" /></label>
         <label>Demirbaş No <input id="auDemirbas" /></label>
+        <label>MAC Adresi <input id="auMac"
+               placeholder="örn. 3C:E8:6E:C7:A0:16" /></label>
         <label>Yönetim IP <input id="auIp" placeholder="örn. 10.0.0.2" /></label>
         <label>Lokasyon <select id="auLokasyon"></select></label>
         <label>Durum <select id="auDurum"></select></label>
@@ -4433,6 +4440,7 @@ async function agUrunKaydet(tur) {
     marka: deger('auMarka') || null,
     model: deger('auModel') || null,
     demirbas_no: deger('auDemirbas') || null,
+    mac_address: deger('auMac') || null,
     ip_address: deger('auIp') || null,
     location_id: Number(deger('auLokasyon')) || null,
     status_id: Number(deger('auDurum')) || null,

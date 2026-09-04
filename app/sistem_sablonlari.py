@@ -45,6 +45,14 @@ ORTAK = [
     Alan("Firmware", "Firmware / Yazılım Sürümü"),
 ]
 
+# Sistem ürünleri binaya monte edilir: hangi katta, tam olarak nerede?
+# Her türün alan listesinin BAŞINA eklenir (bkz. ag.sablon) — arayüzde ilk
+# sütunlar bunlar olur, çünkü sahada cihazı bulmak için önce yeri gerekir.
+YERLESIM = [
+    Alan("Kat", "Kat", ipucu="örn. Zemin Kat, Bodrum Kat, 3. Kat"),
+    Alan("Konum", "Cihazın Yeri", ipucu="örn. Sağ Koridor 1, Kabinet, Toplantı Odası"),
+]
+
 # Ürün aileleri — menüde ayrı bölüm olarak görünür
 AILELER = {
     "ag": {"ad": "Ağ Ürünleri", "ikon": "🌐",

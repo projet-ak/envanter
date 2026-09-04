@@ -634,6 +634,34 @@ Hız `1.25G`, Dalga Boyu `1310nm`, Mod `Multi-Mode`. Seri no zaten kayıtlıysa
 satır atlanır — script tekrar çalıştırılabilir.
 Örnek dosya: `ornek-veri/ag-sfp-u025-u030.txt`
 
+**Başlıklı tablolar** (Excel'den kopyala-yapıştır) sütun adlarından tanınır,
+sıra önemli değil — `MARKA · MODEL · LOKASYON · SERİ NO · MAC ADRESİ · KAT`:
+
+```
+ERN HOLDİNG İSTANBUL MERKEZ OFİSİ - Y005
+MARKA       MODEL       LOKASYON        SERİ NO   MAC ADRESİ          KAT
+HPE Aruba   AP-615-RW   Sağ Koridor 1             3C:E8:6E:C7:9F:52   BODRUM KAT
+HPE Aruba   AP-615-RW   Patron Odası AP           3C:E8:6E:C7:AE:B6   MAKAM KATI
+```
+
+```bash
+./.venv/bin/python scripts/ag-urun-aktar.py liste.txt --tur access_point \
+    --lokasyon "ERN HOLDİNG İSTANBUL MERKEZ OFİSİ" --proje-kodu Y005 \
+    --zimmet "HOLDİNG BİNASI" --etiket-onek "AP-Y005-"
+```
+
+- `LOKASYON` sütunu cihazın **binadaki yeri**dir (Kat/Konum olarak kaydedilir),
+  şantiye değil; şantiye `--lokasyon` ile verilir.
+- `--proje-kodu` lokasyonu koddan bulur — aynı şantiye ikinci kez açılmaz.
+- `--zimmet` kişi yerine bir **yere** zimmetler (örn. bina); kayıt yoksa
+  `--lokasyon` altında açılır. Zimmet sütununda 🏢 ile görünür.
+- `--etiket-onek` seri numarası olmayanlara sıralı cihaz no üretir
+  (`AP-Y005-01`, `-02`…) ve tekrar çalıştırıldığında kaldığı yerden devam eder.
+- **MAC adresi cihazın parmak izidir**: biçimi ne olursa olsun
+  (`d4-19-72-…`, `D41972…`) tek biçime indirgenir, aynı MAC ikinci kez
+  eklenmez. Arayüzden eklerken de aynı denetim çalışır.
+Örnek dosya: `ornek-veri/ag-ap-y005.txt`
+
 ## Şantiyeler ve proje kodları
 
 Her lokasyonun bir **proje kodu** (`proje_kodu`, örn. `U023`) olabilir.

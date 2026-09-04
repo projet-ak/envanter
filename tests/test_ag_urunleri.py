@@ -1035,3 +1035,130 @@ def test_kamera_sablonu_ve_ekleme(client):
                         client.get("/ag/ozet", params={"aile": "ag"}).json()["tur_dagilimi"]}
     assert "KAM-01" not in {a["asset_tag"] for a in
                             client.get("/assets", params={"sistem": "false"}).json()}
+
+
+# --------------------------------------------------------------------------- #
+# MAC künyesi, yerleşim (Kat/Konum) ve yere zimmet
+# --------------------------------------------------------------------------- #
+def test_yerlesim_alanlari_her_turde_var():
+    """Kat ve Konum her sistem ürününde ve ilk sıralarda olmalı."""
+    for s in ag.sablon():
+        adlar = [a["ad"] for a in s["alanlar"]]
+        assert adlar[:2] == ["Kat", "Konum"], s["tur"]
+
+
+def test_mac_duzenle():
+    from app.routers.ag_urunleri import mac_duzenle
+
+    assert mac_duzenle("d4-19-72-c5-4b-46") == "D4:19:72:C5:4B:46"
+    assert mac_duzenle("D41972C54B46") == "D4:19:72:C5:4B:46"
+    assert mac_duzenle(" 3c:e8:6e:c7:a0:16 ") == "3C:E8:6E:C7:A0:16"
+    assert mac_duzenle("") is None and mac_duzenle(None) is None
+    # Tanımadığımız biçim bozulmadan saklanır
+    assert mac_duzenle("bilinmiyor") == "bilinmiyor"
+
+
+def test_access_point_mac_ile_eklenir_ve_mukerrer_engellenir(client):
+    lok = client.post("/locations", json={"name": "HOLDİNG BİNASI"}).json()
+    r = client.post("/ag/urunler", json={
+        "tur": "access_point", "asset_tag": "AP-Y005-01", "marka": "HPE Aruba",
+        "model": "AP-615-RW", "mac_address": "3c:e8:6e:c7:a0:16",
+        "location_id": lok["id"],
+        "ozellikler": {"Kat": "BODRUM KAT", "Konum": "Kabinet AP"}})
+    assert r.status_code == 201, r.text
+
+    urun = client.get("/ag/urunler", params={"tur": "access_point"}).json()[0]
+    assert urun["mac_address"] == "3C:E8:6E:C7:A0:16"
+    assert urun["ozellikler"]["Konum"] == "Kabinet AP"
+    # MAC ile arama
+    assert client.get("/ag/urunler", params={"q": "c7:a0:16"}).json()
+    # Aynı MAC başka etiketle bile ikinci kez girilemez (biçimi farklı olsa da)
+    ikinci = client.post("/ag/urunler", json={
+        "tur": "access_point", "asset_tag": "AP-Y005-02",
+        "mac_address": "3C-E8-6E-C7-A0-16"})
+    assert ikinci.status_code == 409 and "zaten kayıtlı" in ikinci.json()["detail"]
+    # MAC varsa cihaz no verilmese de eklenebilir (etiket MAC olur)
+    ucuncu = client.post("/ag/urunler", json={
+        "tur": "access_point", "mac_address": "D4:19:72:C5:4B:46"})
+    assert ucuncu.status_code == 201
+    assert ucuncu.json()["asset_tag"] == "D4:19:72:C5:4B:46"
+
+
+def test_yere_zimmetli_urun_listede_gorunur(client):
+    bina = client.post("/locations", json={"name": "HOLDİNG BİNASI"}).json()
+    ekle = client.post("/ag/urunler", json={
+        "tur": "access_point", "asset_tag": "AP-Z-01", "marka": "HPE Aruba",
+        "mac_address": "3C:E8:6E:C7:AE:B6"})
+    assert ekle.status_code == 201
+    asset_id = ekle.json()["id"]
+
+    client.post(f"/assets/{asset_id}/checkout",
+                json={"assigned_type": "location", "assigned_id": bina["id"]})
+    urun = next(u for u in client.get("/ag/urunler").json()
+                if u["asset_tag"] == "AP-Z-01")
+    assert urun["zimmetli"] == "HOLDİNG BİNASI"
+    assert urun["zimmet_turu"] == "location"
+    # Zimmetlendiği yer aramada da bulunur
+    assert client.get("/ag/urunler", params={"q": "holding binasi"}).json()
+
+
+# --------------------------------------------------------------------------- #
+# İçe aktarım betiği — başlıklı tablo (MARKA MODEL LOKASYON SERİ MAC KAT)
+# --------------------------------------------------------------------------- #
+def _aktar():
+    import importlib.util
+    from pathlib import Path
+
+    yol = Path(__file__).resolve().parent.parent / "scripts" / "ag-urun-aktar.py"
+    spec = importlib.util.spec_from_file_location("ag_urun_aktar", yol)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+AP_TABLO = (
+    "ERN HOLDİNG İSTANBUL MERKEZ OFİSİ - Y005\t\t\t\t\n"
+    "MARKA\tMODEL\tLOKASYON\tSERİ NO\tMAC ADRESİ\tKAT\n"
+    "HPE Aruba\tAP-615-RW\tKabinet AP \t\t3C:E8:6E:C7:A0:16\tBODRUM KAT\n"
+    "HPE Aruba\tAP-615-RW\t\tVNTSKZD0SD\tD4:19:72:C5:4D:94\tYEDEK\n"
+)
+
+
+def test_bos_hucreler_korunur():
+    """Seri no boşken MAC, seri no sanılmamalı."""
+    aktar = _aktar()
+    satirlar = aktar.satirlari_coz(AP_TABLO)
+    # Başlık ve iki veri satırı; tek dolu hücreli başlık satırı elenir
+    assert len(satirlar) == 3
+    assert satirlar[1][3] == "" and satirlar[1][4] == "3C:E8:6E:C7:A0:16"
+
+
+def test_basliklar_sutunlari_tanir():
+    aktar = _aktar()
+    satirlar = aktar.satirlari_coz(AP_TABLO)
+    harita = aktar.basliklari_coz(satirlar[0])
+    assert harita == {"marka": 0, "model": 1, "konum": 2, "seri": 3,
+                      "mac": 4, "kat": 5}
+    # Veri satırı başlık sanılmaz
+    assert aktar.basliklari_coz(satirlar[1]) is None
+
+    veri = satirlar[1]
+    assert aktar._hucre(veri, harita, "konum") == "Kabinet AP"
+    assert aktar._hucre(veri, harita, "kat") == "BODRUM KAT"
+    assert aktar._hucre(veri, harita, "seri") == ""
+
+
+def test_eski_sirali_liste_hala_okunur():
+    """Başlıksız SFP listesi eski sırayla çalışmaya devam eder."""
+    aktar = _aktar()
+    satirlar = aktar.satirlari_coz(
+        "HIKVISION  HK-SFP-1.25G  30004735548  1.25G / 1310nm / Multi-Mode\n")
+    assert aktar.basliklari_coz(satirlar[0]) is None
+    assert satirlar[0][2] == "30004735548"
+
+
+def test_etiket_sirasi_kaldigi_yerden_devam():
+    aktar = _aktar()
+    assert aktar._sonraki_sira({"AP-Y005-01", "AP-Y005-07"}, "AP-Y005-") == 8
+    assert aktar._sonraki_sira(set(), "AP-Y005-") == 1
+    assert aktar._sonraki_sira({"AP-Y005-01"}, None) == 1

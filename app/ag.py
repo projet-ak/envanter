@@ -31,7 +31,8 @@ from app.sistem_sablonlari import (  # noqa: F401
     ADRESLI_SECENEKLERI, AILELER, Alan, BAGLANTI_SECENEKLERI,
     FREKANS_SECENEKLERI, GRUP, IP_SINIFI, KART_TEKNOLOJISI,
     KATMAN_SECENEKLERI, ORTAK, PIL_SECENEKLERI, POE_SECENEKLERI, TURLER,
-    _KATEGORI_IPUCU, _PARCA_KELIMELERI, _PARCA_MUAF, _parca_mi, tur_bul,
+    YERLESIM, _KATEGORI_IPUCU, _PARCA_KELIMELERI, _PARCA_MUAF, _parca_mi,
+    tur_bul,
 )
 
 def kategori_adi(tur: str) -> str:
@@ -53,7 +54,9 @@ def sablon(aile: str | None = None) -> list[dict]:
             "aciklama": bilgi["aciklama"],
             # Arayüz künye bölümüne hat alanlarını bu bayrağa bakarak ekler
             "hat": bool(bilgi.get("hat")),
-            "alanlar": [a.sozluk() for a in bilgi["alanlar"]],
+            # Yerleşim (Kat / Konum) her türde ve en başta: cihazı sahada
+            # bulmak için önce yeri lazım, teknik özellikler sonra gelir.
+            "alanlar": [a.sozluk() for a in YERLESIM + bilgi["alanlar"]],
             "ortak": [a.sozluk() for a in ORTAK],
         }
         for anahtar, bilgi in TURLER.items()
@@ -145,11 +148,17 @@ def urunler(db: Session, *, aile: str | None = None, tur: str | None = None,
             "telefon_no": a.telefon_no,
             "sim_no": a.sim_no,
             "imei": a.imei,
+            # Access point / kamera gibi ürünlerde seri no yerine MAC künyedir
+            "mac_address": a.mac_address,
             "lokasyon": lok.name if lok else None,
             "lokasyon_id": a.location_id,
             "proje_kodu": lok.proje_kodu if lok else None,
             "durum": durumlar.get(a.status_id),
-            "zimmetli": kisiler.get(a.assigned_user_id),
+            # Zimmet kişiye ya da bir yere (bina, şantiye) verilebilir
+            "zimmetli": (kisiler.get(a.assigned_user_id)
+                         or (lokasyonlar[a.assigned_location_id].name
+                             if a.assigned_location_id in lokasyonlar else None)),
+            "zimmet_turu": a.assigned_type.value if a.assigned_type else None,
             "gorsel_id": gorseller.get(a.id),
             "ozellikler": _ozellikler(a),
         }
@@ -158,7 +167,8 @@ def urunler(db: Session, *, aile: str | None = None, tur: str | None = None,
                 kayit["asset_tag"], kayit["marka"], kayit["model"], kayit["serial"],
                 kayit["demirbas_no"], kayit["lokasyon"], kayit["ip_address"],
                 kayit["operator"], kayit["telefon_no"], kayit["sim_no"],
-                kayit["imei"], *kayit["ozellikler"].values()] if v)
+                kayit["imei"], kayit["mac_address"], kayit["zimmetli"],
+                *kayit["ozellikler"].values()] if v)
             if terim not in _sadelestir(havuz):
                 continue
         sonuc.append(kayit)

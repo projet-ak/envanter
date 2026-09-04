@@ -340,6 +340,8 @@ class AgUrunEkle(BaseModel):
     ad: str | None = None
     demirbas_no: str | None = None
     ip_address: str | None = None
+    # Access point / kamera gibi ürünlerde seri no yerine MAC künyedir
+    mac_address: str | None = None
     location_id: int | None = None
     status_id: int | None = None
     notes: str | None = None
