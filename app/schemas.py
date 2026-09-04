@@ -357,6 +357,34 @@ class AgUrunEkle(BaseModel):
     ozellikler: dict[str, str] = Field(default_factory=dict)
 
 
+class RehberKayit(BaseModel):
+    """Telefon rehberinde bir satır: dahili + (kişi ve/veya telefon cihazı).
+
+    Satır iki kaynaktan beslenir; hangisi doluysa oraya yazılır. Kişi
+    seçilirse dahili kişinin künyesine işlenir ve telefon o kişiye
+    zimmetlenir; cihaz alanları doluysa telefon kaydı da güncellenir
+    (yoksa yeni IP telefon açılır).
+    """
+
+    dahili: str = Field(min_length=1, max_length=20)
+    kisi_id: int | None = None
+    # Satırdaki kişi değiştiyse eskisinin dahilisi temizlensin; numara da
+    # değişmiş olabileceği için satırın önceki dahilisi ayrıca taşınır
+    eski_kisi_id: int | None = None
+    eski_dahili: str | None = None
+    asset_id: int | None = None
+    kat: str | None = None
+    konum: str | None = None
+    kullanan: str | None = None
+    marka: str | None = None
+    model: str | None = None
+    ip_address: str | None = None
+    mac_address: str | None = None
+    location_id: int | None = None
+    # Cihaz kaydı istenmiyorsa (yalnız kişi dahilisi) bu alan False bırakılır
+    cihaz_olustur: bool = False
+
+
 class OzellikYaz(BaseModel):
     """Tek bir teknik özellik: hangi grupta, hangi alan, hangi değer."""
 

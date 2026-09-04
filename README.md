@@ -668,7 +668,16 @@ HPE Aruba   AP-615-RW   Patron Odası AP           3C:E8:6E:C7:AE:B6   MAKAM KAT
 ☎️ **IP Telefon** ve 🏢 **Telefon Santrali** ağ ürünü türleridir; dahili
 numara künyede tutulur (`Dahili No`), personel kartında da bir **Dahili No**
 alanı vardır. Ağ Ürünleri ekranındaki **📞 Telefon Rehberi** düğmesi ikisini
-birleştirip kata göre gruplar, arar ve yazdırır.
+birleştirip kata göre gruplar, arar ve yazdırır. Rehber düzenlenebilir:
+**+ Yeni dahili** ile satır eklenir, satır sonundaki ✏️ ile düzenlenir.
+
+- **Kişi** seçilirse dahili o kişinin künyesine yazılır ve telefon ona
+  zimmetlenir (içe aktarımda eşleşmeyen isimleri burada bağlarsınız).
+- Kişi seçilmezse **yer / oda adı** yazılır (Bodrum Mutfak, S.Ofisi Kafe).
+- Marka/model/MAC/IP alanlarından biri doldurulursa telefon kaydı da açılır;
+  hiçbiri doldurulmazsa yalnız kişinin dahilisi tutulur.
+- Aynı dahili iki kişiye ya da iki telefona verilemez (uyarı çıkar).
+- **Rehberden çıkar** numarayı boşaltır, telefon envanterde kalır.
 
 Excel'den gelen santral listesi doğrudan aktarılabilir (`.xlsx` desteklenir):
 

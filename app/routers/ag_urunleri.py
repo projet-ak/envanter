@@ -6,6 +6,7 @@ Ağ ürünleri normal varlıklardır (bkz. app/ag.py); bu router yalnızca türe
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -57,6 +58,164 @@ def urunler(
 def telefon_rehberi(db: Session = Depends(get_db)):
     """Dahili numara rehberi (personel künyesi + IP telefonlar birleşik)."""
     return ag.telefon_rehberi(db)
+
+
+def _rehber_cakisma(db: Session, dahili: str, *, kisi_id: int | None,
+                    asset_id: int | None) -> None:
+    """Aynı dahili başka kişide ya da başka telefonda olmasın."""
+    kisi = db.scalar(select(models.User).where(models.User.dahili == dahili,
+                                               models.User.id != (kisi_id or 0)))
+    if kisi is not None:
+        raise HTTPException(
+            409, f"{dahili} dahilisi zaten {kisi.full_name} üzerinde kayıtlı")
+    cihaz = db.scalar(select(models.Asset).where(
+        models.Asset.telefon_no == dahili, models.Asset.id != (asset_id or 0)))
+    if cihaz is not None:
+        raise HTTPException(
+            409, f"{dahili} dahilisi zaten {cihaz.asset_tag} telefonunda kayıtlı")
+
+
+def _rehber_etiket(db: Session, dahili: str) -> str:
+    """Yeni telefon için cihaz no üretir: TEL-1720, çakışırsa TEL-1720-2…"""
+    kok = "TEL-" + re.sub(r"[^0-9A-Za-z]", "", dahili)
+    etiket, n = kok, 1
+    while db.scalar(select(models.Asset).where(models.Asset.asset_tag == etiket)):
+        n += 1
+        etiket = f"{kok}-{n}"
+    return etiket
+
+
+def _rehber_yaz(db: Session, payload: schemas.RehberKayit) -> dict:
+    """Rehber satırını yazar: kişi künyesi ve/veya telefon kaydı."""
+    dahili = payload.dahili.strip()
+    if not dahili:
+        raise HTTPException(400, "Dahili numara zorunlu")
+
+    kisi = db.get(models.User, payload.kisi_id) if payload.kisi_id else None
+    if payload.kisi_id and kisi is None:
+        raise HTTPException(404, "Personel bulunamadı")
+    varlik = db.get(models.Asset, payload.asset_id) if payload.asset_id else None
+    if payload.asset_id and varlik is None:
+        raise HTTPException(404, "Telefon kaydı bulunamadı")
+
+    _rehber_cakisma(db, dahili, kisi_id=payload.kisi_id, asset_id=payload.asset_id)
+
+    # Satırdaki kişi değiştiyse eskisinin dahilisi boşalsın
+    if payload.eski_kisi_id and payload.eski_kisi_id != payload.kisi_id:
+        eski = db.get(models.User, payload.eski_kisi_id)
+        # Numara da değişmiş olabilir: satırın eski numarası da temizlenir,
+        # ama kişinin ilgisiz başka bir dahilisi varsa ona dokunulmaz.
+        if eski is not None and eski.dahili in {dahili, payload.eski_dahili}:
+            eski.dahili = None
+
+    if kisi is not None:
+        kisi.dahili = dahili
+
+    cihaz_alanlari = any([payload.marka, payload.model, payload.mac_address,
+                          payload.ip_address, payload.kat, payload.konum,
+                          payload.kullanan])
+    if varlik is None and (payload.cihaz_olustur or cihaz_alanlari):
+        varlik = models.Asset(asset_tag=_rehber_etiket(db, dahili),
+                              location_id=payload.location_id)
+        db.add(varlik)
+        db.flush()
+        db.add(models.ActivityLog(action=models.ActivityAction.create,
+                                  item_type="asset", item_id=varlik.id,
+                                  note="Telefon rehberinden eklendi"))
+
+    if varlik is not None:
+        mac = mac_duzenle(payload.mac_address)
+        if mac:
+            ayni = db.scalar(select(models.Asset).where(
+                models.Asset.mac_address == mac, models.Asset.id != varlik.id))
+            if ayni is not None:
+                raise HTTPException(
+                    409, f"'{mac}' MAC adresi zaten kayıtlı ({ayni.asset_tag})")
+        varlik.telefon_no = dahili
+        varlik.mac_address = mac
+        varlik.ip_address = payload.ip_address or None
+        if payload.location_id is not None:
+            varlik.location_id = payload.location_id
+        mdl = _model_bul(db, "ip_telefon", payload.marka, payload.model)
+        varlik.model_id = mdl.id
+        ozel = {g: dict(v) for g, v in (varlik.custom or {}).items()
+                if isinstance(v, dict)}
+        grup = dict(ozel.get(ag.GRUP) or {})
+        for alan, deger in (("Kat", payload.kat), ("Konum", payload.konum),
+                            ("Kullanan", payload.kullanan)):
+            if deger:
+                grup[alan] = deger
+            else:
+                grup.pop(alan, None)
+        ozel[ag.GRUP] = grup
+        varlik.custom = ozel
+        yer = payload.konum or payload.kullanan or (kisi.full_name if kisi else None)
+        varlik.name = " ".join(filter(None, [payload.marka, payload.model])) or None
+        if varlik.name and yer:
+            varlik.name = f"{varlik.name} — {yer}"
+
+        # Telefon, dahilinin sahibine zimmetli olsun
+        if kisi is not None and varlik.assigned_user_id != kisi.id:
+            varlik.assigned_type = models.AssignedType.user
+            varlik.assigned_user_id = kisi.id
+            varlik.assigned_location_id = None
+            varlik.last_checkout = dt.datetime.now(dt.timezone.utc)
+            db.add(models.ActivityLog(
+                action=models.ActivityAction.checkout, item_type="asset",
+                item_id=varlik.id, target_type="user", target_id=kisi.id,
+                note=f"{kisi.full_name} üzerine zimmetlendi (telefon rehberi)"))
+
+    if kisi is None and varlik is None:
+        raise HTTPException(400, "Kişi ya da telefon bilgisi verin")
+
+    db.commit()
+    return {"dahili": dahili,
+            "kisi_id": kisi.id if kisi else None,
+            "asset_id": varlik.id if varlik else None}
+
+
+@router.post("/telefon-rehberi", status_code=201, dependencies=WRITE)
+def rehber_ekle(payload: schemas.RehberKayit, db: Session = Depends(get_db)):
+    """Rehbere yeni dahili ekler (kişiye ve/veya telefona)."""
+    return _rehber_yaz(db, payload)
+
+
+@router.put("/telefon-rehberi", dependencies=WRITE)
+def rehber_guncelle(payload: schemas.RehberKayit, db: Session = Depends(get_db)):
+    """Rehber satırını günceller."""
+    return _rehber_yaz(db, payload)
+
+
+@router.delete("/telefon-rehberi", status_code=204, dependencies=WRITE)
+def rehber_sil(
+    kisi_id: int | None = None,
+    asset_id: int | None = None,
+    cihazi_sil: bool = Query(False, description="Telefon kaydını da sil"),
+    db: Session = Depends(get_db),
+):
+    """Dahiliyi rehberden kaldırır.
+
+    Varsayılan davranış numarayı boşaltmaktır; telefon envanterde kalır.
+    `cihazi_sil` verilirse telefon kaydı da silinir.
+    """
+    if not kisi_id and not asset_id:
+        raise HTTPException(400, "kisi_id ya da asset_id gerekli")
+    if kisi_id:
+        kisi = db.get(models.User, kisi_id)
+        if kisi is not None:
+            kisi.dahili = None
+    if asset_id:
+        varlik = db.get(models.Asset, asset_id)
+        if varlik is not None:
+            if cihazi_sil:
+                db.add(models.ActivityLog(action=models.ActivityAction.delete,
+                                          item_type="asset", item_id=varlik.id,
+                                          note=f"{varlik.asset_tag} silindi "
+                                               f"(telefon rehberi)"))
+                db.delete(varlik)
+            else:
+                varlik.telefon_no = None
+    db.commit()
 
 
 @router.get("/ozet", dependencies=READ)

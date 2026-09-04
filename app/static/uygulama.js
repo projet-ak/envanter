@@ -4351,15 +4351,19 @@ async function telefonRehberi() {
 
   if (!liste.length) {
     return modalAc('📞 Telefon Rehberi', `<div class="note" style="margin-top:0">
-      Henüz dahili numara girilmemiş. Personel kartındaki <b>Dahili No</b>
-      alanını doldurun ya da IP telefonları Ağ Ürünleri → ☎️ IP Telefon
-      altında dahili numarasıyla ekleyin.</div>`);
+      Henüz dahili numara girilmemiş. Aşağıdan tek tek ekleyebilir, personel
+      kartındaki <b>Dahili No</b> alanını doldurabilir ya da santral listesini
+      toplu aktarabilirsiniz (<code>scripts/ag-urun-aktar.py</code>).</div>
+      ${canWrite() ? `<div class="row"><button class="primary"
+        onclick="rehberDuzenle()">+ Yeni dahili</button></div>` : ''}`);
   }
 
   modalAc(`📞 Telefon Rehberi (${liste.length})`, `
     <div class="row" style="margin-top:0">
       <input id="rehberAra" class="grow" autocomplete="off"
              placeholder="Dahili, isim, kat, oda ara…" oninput="rehberCiz()" />
+      ${canWrite() ? `<button class="primary"
+        onclick="rehberDuzenle()">+ Yeni dahili</button>` : ''}
       <button class="ghost" onclick="rehberYazdir()">🖨️ Yazdır</button>
     </div>
     <div id="rehberGovde"></div>`);
@@ -4393,7 +4397,7 @@ function rehberCiz() {
     <table><thead><tr>
       <th>Dahili</th><th>Kişi / Oda</th><th class="gizle-mobil">Unvan</th>
       <th class="gizle-mobil">Yeri</th><th class="gizle-mobil">Telefon</th>
-      <th class="gizle-mobil">IP</th></tr></thead><tbody>
+      <th class="gizle-mobil">IP</th><th></th></tr></thead><tbody>
     ${satirlar.map(r => `<tr${r.kisi_id || r.asset_id ? ' class="tikla"' : ''}
         onclick="${r.kisi_id ? `modalKapat(); kisiDetay(${r.kisi_id})`
                  : r.asset_id ? `modalKapat(); cihazDetay(${r.asset_id})` : ''}">
@@ -4404,7 +4408,111 @@ function rehberCiz() {
       <td class="muted gizle-mobil">${esc([r.marka, r.model]
         .filter(Boolean).join(' '))}</td>
       <td class="muted gizle-mobil">${esc(r.ip)}</td>
+      <td>${canWrite() ? `<button class="ghost mini"
+            onclick="event.stopPropagation(); rehberDuzenle('${
+              encodeURIComponent(r.dahili)}')">✏️</button>` : ''}</td>
     </tr>`).join('')}</tbody></table></div>`).join('');
+}
+
+// Rehber satırı ekleme / düzenleme. Dahili numara kişinin künyesine,
+// cihaz bilgileri telefon kaydına yazılır; ikisi de aynı pencereden.
+async function rehberDuzenle(dahiliKodlu = '') {
+  const dahili = dahiliKodlu ? decodeURIComponent(dahiliKodlu) : '';
+  const r = rehberVeri.find(x => x.dahili === dahili) || {};
+  const kisiler = await api('/users?limit=1000').catch(() => []);
+  const sirali = kisiler.filter(k => k.active !== false).sort((a, b) =>
+    [a.first_name, a.last_name].join(' ').localeCompare(
+      [b.first_name, b.last_name].join(' '), 'tr'));
+
+  modalAc(dahili ? `☎️ Dahili ${kacir(dahili)}` : '☎️ Yeni dahili', `
+    <input type="hidden" id="rdEski" value="${kacir(dahili)}" />
+    <div class="form-grid">
+      <label>Dahili No *
+        <input id="rdDahili" value="${kacir(dahili)}" placeholder="örn. 1720" /></label>
+      <label>Kişi
+        <select id="rdKisi">
+          <option value="">— kişi bağlı değil (oda / ortak alan) —</option>
+          ${sirali.map(k => `<option value="${k.id}"${
+            k.id === r.kisi_id ? ' selected' : ''}>${kacir(
+              [k.first_name, k.last_name].filter(Boolean).join(' '))}</option>`).join('')}
+        </select></label>
+      <label>Kişi yoksa: yer / oda adı
+        <input id="rdKullanan" value="${kacir(r.kisi_id ? '' : (r.ad || ''))}"
+               placeholder="örn. Bodrum Mutfak" /></label>
+      <label>Kat
+        <input id="rdKat" value="${kacir(r.kat || '')}" placeholder="örn. ZEMİN KAT" /></label>
+      <label>Cihazın yeri
+        <input id="rdKonum" value="${kacir(r.konum || '')}"
+               placeholder="örn. Sağ Koridor" /></label>
+      <label>Marka
+        <input id="rdMarka" value="${kacir(r.marka || '')}" placeholder="örn. Karel" /></label>
+      <label>Model
+        <input id="rdModel" value="${kacir(r.model || '')}" placeholder="örn. 212G" /></label>
+      <label>IP Adresi
+        <input id="rdIp" value="${kacir(r.ip || '')}" placeholder="örn. 10.45.10.124" /></label>
+      <label>MAC Adresi
+        <input id="rdMac" value="${kacir(r.mac || '')}"
+               placeholder="örn. 00:08:D1:03:FC:17" /></label>
+    </div>
+    <div class="note">Kişi seçilirse dahili o kişinin künyesine yazılır ve
+      telefon ona zimmetlenir. Marka/model/MAC gibi alanlardan biri
+      doldurulursa telefon kaydı da açılır (yoksa yalnız dahili tutulur).</div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" onclick="rehberKaydet(${r.asset_id ?? 'null'},
+        ${r.kisi_id ?? 'null'})">Kaydet</button>
+      <button class="ghost" onclick="modalKapat(); telefonRehberi()">
+        ← Rehbere dön</button>
+      ${dahili && canWrite() ? `<button class="ghost" style="color:var(--err)"
+        onclick="rehberSil(${r.kisi_id ?? 'null'}, ${r.asset_id ?? 'null'},
+                 '${encodeURIComponent(dahili)}')">🗑 Rehberden çıkar</button>` : ''}
+      <span id="rdBilgi" class="note"></span>
+    </div>`);
+  setTimeout(() => document.getElementById('rdDahili')?.focus(), 60);
+}
+
+async function rehberKaydet(assetId, eskiKisiId) {
+  const bilgi = document.getElementById('rdBilgi');
+  const d = (id) => document.getElementById(id)?.value.trim() || '';
+  const dahili = d('rdDahili');
+  if (!dahili) {
+    bilgi.innerHTML = '<span style="color:var(--err)">⚠ Dahili no zorunlu.</span>';
+    return;
+  }
+  const kisiId = Number(d('rdKisi')) || null;
+  const govde = {
+    dahili, kisi_id: kisiId, eski_kisi_id: eskiKisiId, asset_id: assetId,
+    eski_dahili: d('rdEski') || null,
+    kat: d('rdKat') || null, konum: d('rdKonum') || null,
+    kullanan: kisiId ? null : (d('rdKullanan') || null),
+    marka: d('rdMarka') || null, model: d('rdModel') || null,
+    ip_address: d('rdIp') || null, mac_address: d('rdMac') || null,
+  };
+  const yeni = !d('rdEski');
+  try {
+    await api('/ag/telefon-rehberi', {
+      method: yeni ? 'POST' : 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(govde),
+    });
+    modalKapat();
+    telefonRehberi();
+  } catch (e) {
+    bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${e.detail || 'Kaydedilemedi'}</span>`;
+  }
+}
+
+async function rehberSil(kisiId, assetId, dahiliKodlu) {
+  const dahili = decodeURIComponent(dahiliKodlu);
+  if (!confirm(`${dahili} dahilisi rehberden çıkarılsın mı?\n` +
+      'Telefon kaydı envanterde kalır, yalnız numara boşalır.')) return;
+  const p = new URLSearchParams();
+  if (kisiId) p.set('kisi_id', kisiId);
+  if (assetId) p.set('asset_id', assetId);
+  try {
+    await api('/ag/telefon-rehberi?' + p.toString(), { method: 'DELETE' });
+    modalKapat();
+    telefonRehberi();
+  } catch (e) { alert('⚠ ' + (e.detail || 'Silinemedi')); }
 }
 
 function rehberYazdir() {

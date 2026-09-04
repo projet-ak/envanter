@@ -1349,3 +1349,117 @@ def test_boru_ayracli_liste_okunur():
     assert aktar._hucre(satirlar[1], harita, "model") == "138G"
     assert aktar._hucre(satirlar[1], harita, "marka") == "KAREL"
     assert aktar._hucre(satirlar[2], harita, "soyad") == "Mutfak"
+
+
+# --------------------------------------------------------------------------- #
+# Rehberi arayüzden düzenleme (ekle / güncelle / çıkar)
+# --------------------------------------------------------------------------- #
+def test_rehbere_kisi_dahilisi_eklenir(client):
+    kisi = client.post("/users", json={"first_name": "Kadriye",
+                                       "last_name": "DEMİRCİ"}).json()
+    r = client.post("/ag/telefon-rehberi",
+                    json={"dahili": "1711", "kisi_id": kisi["id"]})
+    assert r.status_code == 201, r.text
+    assert r.json()["asset_id"] is None        # cihaz alanı verilmedi
+
+    assert client.get(f"/users/{kisi['id']}").json()["dahili"] == "1711"
+    rehber = client.get("/ag/telefon-rehberi").json()
+    assert rehber[0]["dahili"] == "1711" and rehber[0]["ad"] == "Kadriye DEMİRCİ"
+
+
+def test_rehberden_telefon_kaydi_acilir_ve_zimmetlenir(client):
+    kisi = client.post("/users", json={"first_name": "İbrahim",
+                                       "last_name": "ANIK"}).json()
+    r = client.post("/ag/telefon-rehberi", json={
+        "dahili": "1702", "kisi_id": kisi["id"], "marka": "Karel",
+        "model": "212G", "mac_address": "0008D104DC2E",
+        "ip_address": "10.45.10.141", "kat": "BODRUM KAT"})
+    assert r.status_code == 201, r.text
+    asset_id = r.json()["asset_id"]
+    assert asset_id is not None
+
+    cihaz = client.get(f"/detay/asset/{asset_id}").json()
+    assert cihaz["kunye"]["mac_address"] == "00:08:D1:04:DC:2E"
+    assert cihaz["kunye"]["kategori"] == "IP Telefon"
+    # Telefon dahilinin sahibine zimmetlendi
+    assert cihaz["zimmet"]["kisi"] == "İbrahim ANIK"
+
+    kayit = client.get("/ag/telefon-rehberi").json()[0]
+    assert kayit["kisi_id"] == kisi["id"] and kayit["asset_id"] == asset_id
+
+
+def test_rehber_satiri_guncellenir_ve_kisi_degisir(client):
+    eski = client.post("/users", json={"first_name": "Eski",
+                                       "last_name": "Sahip"}).json()
+    yeni = client.post("/users", json={"first_name": "Yeni",
+                                       "last_name": "Sahip"}).json()
+    kayit = client.post("/ag/telefon-rehberi", json={
+        "dahili": "1720", "kisi_id": eski["id"], "marka": "Karel",
+        "model": "212G", "kat": "BODRUM KAT"}).json()
+
+    r = client.put("/ag/telefon-rehberi", json={
+        "dahili": "1725", "kisi_id": yeni["id"], "eski_kisi_id": eski["id"],
+        "eski_dahili": "1720",
+        "asset_id": kayit["asset_id"], "marka": "Karel", "model": "213G",
+        "kat": "ZEMİN KAT", "konum": "Sağ Koridor"})
+    assert r.status_code == 200, r.text
+
+    # Eski sahibin dahilisi boşaldı, yenisine geçti
+    assert client.get(f"/users/{eski['id']}").json()["dahili"] is None
+    assert client.get(f"/users/{yeni['id']}").json()["dahili"] == "1725"
+
+    satir = client.get("/ag/telefon-rehberi").json()
+    assert len(satir) == 1
+    assert satir[0]["dahili"] == "1725" and satir[0]["ad"] == "Yeni Sahip"
+    assert satir[0]["kat"] == "ZEMİN KAT" and satir[0]["konum"] == "Sağ Koridor"
+    assert satir[0]["model"] == "213G"
+
+
+def test_ayni_dahili_iki_kisiye_verilemez(client):
+    a = client.post("/users", json={"first_name": "A", "last_name": "Kişi"}).json()
+    b = client.post("/users", json={"first_name": "B", "last_name": "Kişi"}).json()
+    client.post("/ag/telefon-rehberi", json={"dahili": "1700", "kisi_id": a["id"]})
+
+    r = client.post("/ag/telefon-rehberi", json={"dahili": "1700",
+                                                 "kisi_id": b["id"]})
+    assert r.status_code == 409 and "zaten" in r.json()["detail"]
+    # Telefon kaydındaki dahili de tekildir
+    client.post("/ag/urunler", json={"tur": "ip_telefon", "asset_tag": "TEL-X",
+                                     "telefon_no": "1701"})
+    cakisma = client.post("/ag/telefon-rehberi", json={"dahili": "1701",
+                                                       "kisi_id": b["id"]})
+    assert cakisma.status_code == 409
+
+
+def test_rehberden_cikarmak_cihazi_silmez(client):
+    kisi = client.post("/users", json={"first_name": "Berna",
+                                       "last_name": "ONAÇ"}).json()
+    kayit = client.post("/ag/telefon-rehberi", json={
+        "dahili": "2611", "kisi_id": kisi["id"], "marka": "Siemens",
+        "model": "TELSİZ"}).json()
+
+    r = client.delete("/ag/telefon-rehberi",
+                      params={"kisi_id": kisi["id"],
+                              "asset_id": kayit["asset_id"]})
+    assert r.status_code == 204
+    assert client.get("/ag/telefon-rehberi").json() == []
+    assert client.get(f"/users/{kisi['id']}").json()["dahili"] is None
+    # Telefon envanterde duruyor, yalnız numarası boş
+    urun = client.get("/ag/urunler", params={"tur": "ip_telefon"}).json()[0]
+    assert urun["id"] == kayit["asset_id"] and not urun["telefon_no"]
+
+    # İstenirse cihaz da silinir
+    client.delete("/ag/telefon-rehberi", params={"asset_id": kayit["asset_id"],
+                                                 "cihazi_sil": True})
+    assert client.get("/ag/urunler", params={"tur": "ip_telefon"}).json() == []
+
+
+def test_bos_dahili_reddedilir(client):
+    kisi = client.post("/users", json={"first_name": "Boş",
+                                       "last_name": "Dahili"}).json()
+    r = client.post("/ag/telefon-rehberi", json={"dahili": "   ",
+                                                 "kisi_id": kisi["id"]})
+    assert r.status_code == 400
+    # Ne kişi ne cihaz verilirse de kayıt açılmaz
+    assert client.post("/ag/telefon-rehberi",
+                       json={"dahili": "1999"}).status_code == 400
