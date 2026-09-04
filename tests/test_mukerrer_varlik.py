@@ -202,3 +202,99 @@ def test_ayni_demirbas_ve_ifs_kodu_ikinci_kez_girilemez(client):
                       json={"demirbas_no": "DMR-4"}).status_code == 200
     assert client.put(f"/assets/{kayit['id']}",
                       json={"demirbas_no": "DMR-4", "notes": "x"}).status_code == 200
+
+
+def test_karsilastirma_alanlari_ozette_gelir(db_session):
+    from app import models
+
+    kat = models.Category(name="Dizüstü Bilgisayar")
+    marka = models.Manufacturer(name="LENOVO")
+    db_session.add_all([kat, marka])
+    db_session.flush()
+    mdl = models.AssetModel(name="Z50-70", category_id=kat.id,
+                            manufacturer_id=marka.id)
+    lok = models.Location(name="KARTAL PROJESİ")
+    db_session.add_all([mdl, lok])
+    db_session.commit()
+
+    _varlik(db_session, asset_tag="B002", serial="S1", model_id=mdl.id,
+            location_id=lok.id,
+            custom={"İşlemci": {"İşlemci Markası": "İntel i5"}})
+    _varlik(db_session, asset_tag="B002-2", serial="S1", notes="ikinci kayıt")
+
+    grup = mukerrer.gruplar(db_session)[0]
+    ilk = next(k for k in grup["kayitlar"] if k["asset_tag"] == "B002")
+    # Kimlik alanları ada çevrilmiş olarak gelir (karşılaştırma okunabilsin)
+    assert ilk["alanlar"]["model_id"] == "LENOVO Z50-70"
+    assert ilk["alanlar"]["location_id"] == "KARTAL PROJESİ"
+    assert ilk["alanlar"]["serial"] == "S1"
+    assert ilk["ozellikler"] == {"İşlemci / İşlemci Markası": "İntel i5"}
+    ikinci = next(k for k in grup["kayitlar"] if k["asset_tag"] == "B002-2")
+    assert ikinci["alanlar"]["notes"] == "ikinci kayıt"
+    assert ikinci["alanlar"]["model_id"] == ""
+
+
+def test_secimle_birlestirme_celiskiyi_cozer(db_session):
+    """Çakışan alanda kullanıcının seçtiği değer kazanır."""
+    hedef = _varlik(db_session, asset_tag="B002", serial="YANLIS",
+                    notes="hedef notu")
+    kaynak = _varlik(db_session, asset_tag="B002-2", serial="DOGRU",
+                     notes="kaynak notu")
+
+    mukerrer.birlestir(db_session, hedef.id, [kaynak.id],
+                       secimler={"serial": kaynak.id, "notes": hedef.id})
+    assert hedef.serial == "DOGRU"          # seçilen kaynak değeri
+    assert hedef.notes == "hedef notu"      # hedefin değeri seçilmişti
+
+
+def test_zimmet_secilen_kayittan_devralinir(db_session):
+    from app import models
+
+    ali = models.User(first_name="ALİ", last_name="VELİ")
+    ayse = models.User(first_name="AYŞE", last_name="YILMAZ")
+    db_session.add_all([ali, ayse])
+    db_session.commit()
+
+    hedef = _varlik(db_session, asset_tag="B003",
+                    assigned_type=models.AssignedType.user,
+                    assigned_user_id=ali.id)
+    kaynak = _varlik(db_session, asset_tag="B003-2",
+                     assigned_type=models.AssignedType.user,
+                     assigned_user_id=ayse.id)
+
+    # Seçim yoksa hedefin zimmeti korunur (dolu veriye dokunulmaz)
+    sonuc = mukerrer.birlestir(db_session, hedef.id, [kaynak.id])
+    assert hedef.assigned_user_id == ali.id
+    assert "B003-2" in sonuc["silinen"]
+
+
+def test_zimmet_secimi_kaynaktan_alinir(db_session):
+    from app import models
+
+    ali = models.User(first_name="ALİ", last_name="VELİ")
+    ayse = models.User(first_name="AYŞE", last_name="YILMAZ")
+    db_session.add_all([ali, ayse])
+    db_session.commit()
+    hedef = _varlik(db_session, asset_tag="B003",
+                    assigned_type=models.AssignedType.user,
+                    assigned_user_id=ali.id)
+    kaynak = _varlik(db_session, asset_tag="B003-2",
+                     assigned_type=models.AssignedType.user,
+                     assigned_user_id=ayse.id)
+
+    mukerrer.birlestir(db_session, hedef.id, [kaynak.id],
+                       secimler={"zimmet": kaynak.id})
+    assert hedef.assigned_user_id == ayse.id
+    assert hedef.assigned_type == models.AssignedType.user
+
+
+def test_api_secimlerle_birlestirir(client):
+    a = client.post("/assets", json={"asset_tag": "B005", "serial": "ESKI"}).json()
+    b = client.post("/assets", json={"asset_tag": "B005-2",
+                                     "demirbas_no": "D5"}).json()
+    r = client.post("/assets/mukerrer/birlestir",
+                    json={"hedef_id": a["id"], "kaynak_idler": [b["id"]],
+                          "secimler": {"demirbas_no": b["id"]}})
+    assert r.status_code == 200, r.text
+    kalan = client.get(f"/assets/{a['id']}").json()
+    assert kalan["serial"] == "ESKI" and kalan["demirbas_no"] == "D5"

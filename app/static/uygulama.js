@@ -2981,71 +2981,144 @@ async function mukerrerAc() {
       da IFS kodu ikinci bir cihaza girilmek istendiğinde sistem zaten
       uyarıyor.</div>`);
   }
+  modalAc(`🔀 Mükerrer kayıtlar (${gruplar.length})`, `
+    <div class="note" style="margin-top:0">Her grup aynı cihaza ait görünüyor.
+      Kayıtlar <b>yan yana karşılaştırılır</b>: farklı olan satırlar
+      işaretlidir, hangi değerin kalacağını seçersiniz. Boş alanlar diğer
+      kayıttan dolar, dosya ve geçmiş taşınır, işlem geçmişe yazılır.</div>
+    <div class="row" style="margin-bottom:10px">
+      ${gruplar.map((g, i) => `<button class="ghost ${i === 0 ? 'sec' : ''}"
+        id="mkSekme${i}" onclick="mukerrerGrupCiz(${i})">${kacir(g.anahtar)}${
+        g.kayitlar.length > 2 ? ` (${g.kayitlar.length})` : ''}</button>`).join('')}
+    </div>
+    <div id="mkGovde"></div>`);
+  mukerrerGrupCiz(0);
+}
+
+// Tek grubun karşılaştırma tablosu: satırlar alanlar, sütunlar kayıtlar.
+// Değerler farklıysa satır işaretlenir ve her sütunun başındaki radyo ile
+// hangi kaydın değerinin kalacağı seçilir.
+function mukerrerGrupCiz(gi) {
+  const g = mukerrerGruplar[gi];
+  const kutu = document.getElementById('mkGovde');
+  if (!g || !kutu) return;
+  mukerrerGruplar.forEach((_, i) => document.getElementById('mkSekme' + i)
+    ?.classList.toggle('sec', i === gi));
 
   const KANIT = { seri: 'aynı seri no', demirbas: 'aynı demirbaş no',
                   ifs: 'aynı IFS kodu', etiket: 'aynı etiket kökü' };
-  modalAc(`🔀 Mükerrer kayıtlar (${gruplar.length})`, `
-    <div class="note" style="margin-top:0">Her grup aynı cihaza ait görünüyor.
-      <b>Kalacak kaydı</b> seçin: diğerleri silinir, <b>boş alanları</b> onlardan
-      doldurulur (seri no, demirbaş, IFS kodu, teknik özellikler, zimmet),
-      dosya ve geçmiş kayıtları kalan kayda taşınır. İşlem geçmişe yazılır.</div>
-    ${gruplar.map((g, gi) => `
-      <div class="bolum">
-        <h4>${kacir(g.anahtar)} <span class="pill">${
-          g.kanit.map(k => KANIT[k] || k).join(' · ')}</span></h4>
-        <table><thead><tr>
-          <th>Kalsın</th><th>Etiket</th><th>Ad</th>
-          <th class="gizle-mobil">Seri</th><th class="gizle-mobil">Demirbaş</th>
-          <th class="gizle-mobil">IFS</th><th class="gizle-mobil">Lokasyon</th>
-          <th>Zimmet</th><th class="gizle-mobil">Dolu</th>
-        </tr></thead><tbody>
-        ${g.kayitlar.map(k => `<tr>
-          <td><input type="radio" name="mk${gi}" value="${k.id}"
-                ${k.id === g.onerilen_hedef ? 'checked' : ''} /></td>
-          <td><b class="tikla" onclick="modalKapat(); cihazDetay(${k.id})">${
-            kacir(k.asset_tag)}</b></td>
-          <td>${esc(k.name || k.model)}</td>
-          <td class="muted gizle-mobil">${esc(k.serial)}</td>
-          <td class="muted gizle-mobil">${esc(k.demirbas_no)}</td>
-          <td class="muted gizle-mobil">${esc(k.muhasebe_kodu)}</td>
-          <td class="muted gizle-mobil">${esc(k.lokasyon)}</td>
-          <td>${k.zimmetli ? `<span class="tag used">${kacir(k.zimmetli)}</span>`
-                           : '<span class="muted">boşta</span>'}</td>
-          <td class="muted gizle-mobil">${k.dolu_alan} alan${
-            k.ozellik_grubu ? ` · ${k.ozellik_grubu} özellik` : ''}${
-            k.dosya ? ` · ${k.dosya} dosya` : ''}</td>
-        </tr>`).join('')}</tbody></table>
-        <div class="row" style="margin-top:8px">
-          <button class="primary" onclick="mukerrerBirlestir(${gi})">
-            🔀 Bu grubu birleştir</button>
-          <span id="mkBilgi${gi}" class="note"></span>
-        </div>
-      </div>`).join('')}`);
+  const kayitlar = g.kayitlar;
+  const hedef = g.onerilen_hedef;
+
+  // Karşılaştırılacak satırlar: künye alanları + zimmet + teknik özellikler.
+  // Hiçbir kayıtta değeri olmayan alan gösterilmez.
+  const ALANLAR = [
+    ['name', 'Ad'], ['serial', 'Seri No'], ['demirbas_no', 'Demirbaş No'],
+    ['muhasebe_kodu', 'IFS/Muhasebe Kodu'], ['model_id', 'Marka / Model'],
+    ['status_id', 'Durum'], ['location_id', 'Lokasyon'],
+    ['supplier_id', 'Tedarikçi'], ['purchase_date', 'Alım Tarihi'],
+    ['purchase_cost', 'Alım Bedeli'], ['warranty_end', 'Garanti Bitiş'],
+    ['fatura_no', 'Fatura No'], ['barkod', 'Barkod'], ['imei', 'IMEI'],
+    ['mac_address', 'MAC'], ['ip_address', 'IP'], ['hostname', 'Hostname'],
+    ['telefon_no', 'Telefon / Dahili'], ['sim_no', 'SIM'],
+    ['operator', 'Operatör'], ['order_number', 'Sipariş No'],
+    ['warranty_months', 'Garanti (ay)'], ['notes', 'Açıklama'],
+  ];
+  const ozellikAdlari = [...new Set(kayitlar.flatMap(
+    k => Object.keys(k.ozellikler || {})))].sort();
+
+  const satirlar = [];
+  const deger = (k, alan) => alan === 'zimmet'
+    ? (k.zimmetli ? `${k.zimmet_turu === 'location' ? '🏢' : '👤'} ${k.zimmetli}` : '')
+    : (k.alanlar?.[alan] ?? '');
+  for (const [alan, baslik] of ALANLAR) {
+    if (kayitlar.some(k => deger(k, alan))) satirlar.push([alan, baslik]);
+  }
+  if (kayitlar.some(k => k.zimmetli)) satirlar.push(['zimmet', 'Zimmet']);
+  for (const ad of ozellikAdlari) satirlar.push(['oz:' + ad, ad]);
+
+  const ozDeger = (k, ad) => (k.ozellikler || {})[ad] || '';
+  const satirDeger = (k, alan) => alan.startsWith('oz:')
+    ? ozDeger(k, alan.slice(3)) : deger(k, alan);
+
+  kutu.innerHTML = `
+    <div class="bolum">
+      <h4>${kacir(g.anahtar)} <span class="pill">${
+        g.kanit.map(k => KANIT[k] || k).join(' · ')}</span></h4>
+      <table class="mk-karsilastir"><thead><tr>
+        <th>Alan</th>
+        ${kayitlar.map(k => `<th>
+          <label style="display:block; cursor:pointer">
+            <input type="radio" name="mkHedef" value="${k.id}"
+              onchange="mukerrerGrupCiz(${gi})" ${k.id === hedef ? 'checked' : ''} />
+            <b class="tikla" onclick="event.stopPropagation(); modalKapat(); cihazDetay(${k.id})">${
+              kacir(k.asset_tag)}</b>
+          </label>
+          <span class="muted" style="font-size:11.5px">${k.dolu_alan} alan${
+            k.dosya ? ` · ${k.dosya} dosya` : ''}${
+            k.gecmis ? ` · ${k.gecmis} kayıt` : ''}</span>
+        </th>`).join('')}
+      </tr></thead><tbody>
+      ${satirlar.map(([alan, baslik]) => {
+        const degerler = kayitlar.map(k => satirDeger(k, alan));
+        const dolu = degerler.filter(Boolean);
+        const farkli = new Set(dolu).size > 1;
+        return `<tr class="${farkli ? 'mk-fark' : ''}">
+          <td class="muted">${kacir(baslik)}${farkli ? ' ⚠' : ''}</td>
+          ${degerler.map((v, i) => `<td>
+            ${farkli && v ? `<label style="cursor:pointer">
+              <input type="radio" name="mkAlan_${alan}"
+                value="${kayitlar[i].id}"
+                ${kayitlar[i].id === hedef ? 'checked' : ''} /> ${kacir(v)}</label>`
+              : (v ? kacir(v) : '<span class="muted">—</span>')}
+          </td>`).join('')}
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+      <div class="note">⚠ işaretli satırlarda kayıtlar çelişiyor — hangi
+        değerin kalacağını seçin. Diğer alanlarda boş olanlar dolu olandan
+        tamamlanır. <b>Zimmet</b> de seçtiğiniz kayıttan devralınır.</div>
+      <div class="row" style="margin-top:10px">
+        <button class="primary" onclick="mukerrerBirlestir(${gi})">
+          🔀 Birleştir (${kayitlar.length} kayıt → 1)</button>
+        <span id="mkBilgi" class="note"></span>
+      </div>
+    </div>`;
 }
 
 async function mukerrerBirlestir(gi) {
   const grup = mukerrerGruplar[gi];
-  const bilgi = document.getElementById('mkBilgi' + gi);
-  const secili = document.querySelector(`input[name="mk${gi}"]:checked`);
-  if (!grup || !secili) return;
-  const hedef = Number(secili.value);
+  const bilgi = document.getElementById('mkBilgi');
+  const hedefSecim = document.querySelector('input[name="mkHedef"]:checked');
+  if (!grup || !hedefSecim) return;
+  const hedef = Number(hedefSecim.value);
   const kaynaklar = grup.kayitlar.map(k => k.id).filter(id => id !== hedef);
+
+  // Çakışan alanlarda seçilen kayıtlar (teknik özellikler hariç: onlar
+  // zaten hedefte boşsa doluyor, çelişende hedefinki kalır)
+  const secimler = {};
+  document.querySelectorAll('#mkGovde input[name^="mkAlan_"]:checked')
+    .forEach(el => {
+      const alan = el.name.slice('mkAlan_'.length);
+      if (!alan.startsWith('oz:')) secimler[alan] = Number(el.value);
+    });
+
   const etiketler = grup.kayitlar.filter(k => kaynaklar.includes(k.id))
     .map(k => k.asset_tag).join(', ');
-  if (!confirm(`${etiketler} kayıtları silinecek, bilgileri ${
-    grup.kayitlar.find(k => k.id === hedef).asset_tag} üzerine taşınacak.\n` +
-    'Devam edilsin mi?')) return;
+  const kalan = grup.kayitlar.find(k => k.id === hedef).asset_tag;
+  if (!confirm(`${etiketler} kayıtları silinecek, bilgileri ${kalan} üzerine ` +
+      'taşınacak.\nDevam edilsin mi?')) return;
 
   try {
     const s = await api('/assets/mukerrer/birlestir', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hedef_id: hedef, kaynak_idler: kaynaklar }) });
+      body: JSON.stringify({ hedef_id: hedef, kaynak_idler: kaynaklar,
+                             secimler }) });
     const alan = Object.keys(s.doldurulan || {});
-    bilgi.innerHTML = `<span style="color:var(--ok)">✓ ${
-      s.silinen.join(', ')} birleştirildi${alan.length
-        ? ` — ${alan.length} alan dolduruldu` : ''}${
-        s.dosya ? `, ${s.dosya} dosya taşındı` : ''}.</span>`;
-    loadAssets();                          // liste sayfayı korur
+    bilgi.innerHTML = `<span style="color:var(--ok)">✓ ${s.silinen.join(', ')}
+      → ${kacir(s.hedef_etiket)}${alan.length ? ` · ${alan.length} alan` : ''}${
+        s.dosya ? ` · ${s.dosya} dosya` : ''} taşındı.</span>`;
+    loadAssets();
     setTimeout(mukerrerAc, 900);            // kalan grupları tazele
   } catch (e) {
     bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${

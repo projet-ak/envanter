@@ -343,6 +343,8 @@ def mukerrer_listesi(db: Session = Depends(get_db)):
 class MukerrerBirlestir(BaseModel):
     hedef_id: int                 # kalacak kayıt
     kaynak_idler: list[int]       # silinecek mükerrerler
+    # Çakışan alanlarda hangi kaydın değeri kalsın: {"serial": 12, "zimmet": 12}
+    secimler: dict[str, int] | None = None
 
 
 @router.post("/mukerrer/birlestir")
@@ -351,6 +353,7 @@ def mukerrer_birlestir(govde: MukerrerBirlestir, db: Session = Depends(get_db),
     """Seçilen mükerrer kayıtları hedefte birleştirir (bilgi kaybı olmadan)."""
     try:
         return mukerrer.birlestir(db, govde.hedef_id, govde.kaynak_idler,
+                                  secimler=govde.secimler,
                                   aktor=_aktor_adi(aktor))
     except ValueError as hata:
         raise HTTPException(400, str(hata)) from None

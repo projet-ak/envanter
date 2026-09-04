@@ -65,6 +65,43 @@ def _anahtarlar(a: models.Asset) -> list[tuple[str, str]]:
     return anahtar
 
 
+# Karşılaştırma tablosunda gösterilecek alanlar: (alan, başlık)
+KARSILASTIRMA = (
+    ("name", "Ad"), ("serial", "Seri No"), ("demirbas_no", "Demirbaş No"),
+    ("muhasebe_kodu", "IFS/Muhasebe Kodu"), ("model_id", "Marka / Model"),
+    ("status_id", "Durum"), ("location_id", "Lokasyon"),
+    ("supplier_id", "Tedarikçi"), ("purchase_date", "Alım Tarihi"),
+    ("purchase_cost", "Alım Bedeli"), ("warranty_end", "Garanti Bitiş"),
+    ("fatura_no", "Fatura No"), ("barkod", "Barkod"), ("imei", "IMEI"),
+    ("mac_address", "MAC"), ("ip_address", "IP"), ("hostname", "Hostname"),
+    ("telefon_no", "Telefon / Dahili"), ("sim_no", "SIM"),
+    ("operator", "Operatör"), ("order_number", "Sipariş No"),
+    ("warranty_months", "Garanti (ay)"), ("notes", "Açıklama"),
+)
+
+
+def _gosterim(a: models.Asset, alan: str, adlar: dict) -> str:
+    """Alanın insan okur hâli (kimlik alanları ada çevrilir)."""
+    deger = getattr(a, alan, None)
+    if deger in (None, ""):
+        return ""
+    if alan == "model_id":
+        mdl = adlar["modeller"].get(deger)
+        if mdl is None:
+            return ""
+        marka = adlar["markalar"].get(mdl.manufacturer_id)
+        return " ".join(filter(None, [marka, mdl.name]))
+    if alan == "location_id":
+        return adlar["lokasyonlar"].get(deger, "")
+    if alan == "status_id":
+        return adlar["durumlar"].get(deger, "")
+    if alan == "supplier_id":
+        return adlar["tedarikciler"].get(deger, "")
+    if isinstance(deger, dt.date):
+        return deger.strftime("%d.%m.%Y")
+    return str(deger)
+
+
 def _ozet(a: models.Asset, adlar: dict) -> dict:
     kategori = marka = model = None
     mdl = adlar["modeller"].get(a.model_id)
@@ -93,6 +130,13 @@ def _ozet(a: models.Asset, adlar: dict) -> dict:
         "gecmis": adlar["gecmis"].get(a.id, 0),
         "dolu_alan": _dolu_alan_sayisi(a),
         "eklendi": a.created_at.isoformat() if a.created_at else None,
+        # Karşılaştırma tablosu bu sözlükten çizilir
+        "alanlar": {alan: _gosterim(a, alan, adlar)
+                    for alan, _baslik in KARSILASTIRMA},
+        "ozellikler": {f"{grup} / {alan}": str(deger)
+                       for grup, alanlar in (a.custom or {}).items()
+                       if isinstance(alanlar, dict)
+                       for alan, deger in alanlar.items() if deger},
     }
 
 
@@ -150,6 +194,8 @@ def gruplar(db: Session) -> list[dict]:
         "markalar": {m.id: m.name for m in db.scalars(select(models.Manufacturer)).all()},
         "lokasyonlar": {l.id: l.name for l in db.scalars(select(models.Location)).all()},
         "durumlar": {s.id: s.name for s in db.scalars(select(models.StatusLabel)).all()},
+        "tedarikciler": {t.id: t.name
+                         for t in db.scalars(select(models.Supplier)).all()},
         "kisiler": {k.id: " ".join(filter(None, [k.first_name, k.last_name]))
                     for k in db.scalars(select(models.User)).all()},
         "dosyalar": dict(db.execute(
@@ -186,12 +232,17 @@ def gruplar(db: Session) -> list[dict]:
 
 
 def birlestir(db: Session, hedef_id: int, kaynak_idler: list[int],
-              *, aktor: str | None = None) -> dict:
+              *, secimler: dict[str, int] | None = None,
+              aktor: str | None = None) -> dict:
     """Mükerrer varlıkları hedefte toplar; kaynaklar silinir.
 
     Hedefte BOŞ olan alanlar kaynaklardan doldurulur (dolu veriye
     dokunulmaz), teknik özellikler birleşir, dosya ve geçmiş kayıtları
     hedefe taşınır. Silinen kayıtların künyesi geçmişe not düşülür.
+
+    `secimler` verilirse ({alan: hangi kaydın değeri}) çakışan alanlarda
+    kullanıcının seçimi kazanır — "zimmet" anahtarı zimmet bloğunu
+    (kişi/yer/tarih) o kayıttan alır.
     """
     hedef = db.get(models.Asset, hedef_id)
     if hedef is None:
@@ -268,7 +319,25 @@ def birlestir(db: Session, hedef_id: int, kaynak_idler: list[int],
             "name": kaynak.name,
         })
 
-    # 5) Kayıt: neyin nereden geldiği geçmişte kalsın
+    # 5) Kullanıcı seçimleri: çakışan alanlarda hangi kaydın değeri kalacak
+    for alan, kaynak_id in (secimler or {}).items():
+        kaynak = next((k for k in kaynaklar if k.id == kaynak_id), None)
+        if kaynak is None:                    # hedefin kendi değeri seçilmiş
+            continue
+        if alan == "zimmet":
+            hedef.assigned_type = kaynak.assigned_type
+            hedef.assigned_user_id = kaynak.assigned_user_id
+            hedef.assigned_location_id = kaynak.assigned_location_id
+            hedef.assigned_asset_id = kaynak.assigned_asset_id
+            hedef.last_checkout = kaynak.last_checkout
+            doldurulan["zimmet"] = f"{kaynak.asset_tag} → seçildi"
+        elif alan in TASINACAK_ALANLAR:
+            deger = getattr(kaynak, alan, None)
+            if deger not in (None, "") and getattr(hedef, alan, None) != deger:
+                setattr(hedef, alan, deger)
+                doldurulan[alan] = f"{kaynak.asset_tag} → {deger} (seçildi)"
+
+    # 6) Kayıt: neyin nereden geldiği geçmişte kalsın
     db.add(models.ActivityLog(
         action=models.ActivityAction.update, item_type="asset", item_id=hedef.id,
         actor=aktor,

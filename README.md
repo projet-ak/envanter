@@ -756,14 +756,20 @@ düğmesinde toplanır. Şüphe ölçütleri, güçlüden zayıfa:
 | aynı demirbaş no | aynı demirbaş |
 | aynı etiket kökü | `B002` ile `B002-2` — aktarım kopyası olabilir |
 
-Bir kayıt birden çok ölçütle eşleşse de **tek grupta** görünür. Grupta
-*kalacak kaydı* seçersiniz (varsayılan öneri: zimmetli olan, o da yoksa en
-dolu kayıt); diğerleri silinir ve:
+Bir kayıt birden çok ölçütle eşleşse de **tek grupta** görünür. Grup
+**yan yana karşılaştırma** olarak açılır: satırlar alanlar, sütunlar
+kayıtlardır. Değerlerin çeliştiği satırlar ⚠ ile işaretlenir ve o satırda
+hangi kaydın değerinin kalacağını seçersiniz — **zimmet de bu satırlardan
+biridir**, yani cihaz kimde kalacaksa o seçilir.
+
+Sütun başlığındaki radyo *kalacak kaydı* belirler (varsayılan öneri:
+zimmetli olan, o da yoksa en dolu kayıt); diğerleri silinir ve:
 
 - hedefin **boş** alanları onlardan doldurulur (seri, demirbaş, IFS kodu,
   marka/model, lokasyon, satın alma, teknik özellikler) — **dolu veriye
   dokunulmaz**,
-- hedef boştaysa **zimmet** devralınır,
+- **zimmet** seçilen kayıttan devralınır (seçim yoksa hedefinki kalır,
+  hedef boştaysa diğerinden alınır),
 - **dosyalar ve işlem geçmişi** hedefe taşınır,
 - silinen kayıtların künyesi ve hangi alanın nereden geldiği **geçmişe
   yazılır** (cihaz kartındaki İşlem Geçmişi'nde görünür).
