@@ -705,6 +705,44 @@ MODEL · MARKA` (adlarından tanınır, sıra önemsiz; MARKA yoksa `--marka`).
   aynı olabilir"). Yazımı düzeltmek için Excel'e dokunmadan:
   `--marka-esle "SİMENS=Siemens"` (tekrarlanabilir).
 
+### IFS dökümünü işleme (seri no, donanım, zimmet)
+
+IFS'ten alınan iki rapor da `scripts/ifs-aktar.py` ile işlenir; biçim
+başlıktan anlaşılır:
+
+| Rapor | Biçim | İçerik |
+|---|---|---|
+| Zimmet Edilen Demirbaş Listesi | her satır bir cihaz | Cihaz Kodu · IFS no · **Kişi** · marka/model · şasi/seri · işlemci · ram · ekran kartı · hdd |
+| Seri Nesne Özellikleri | her satır bir özellik | Nesne No · özellik adı · değer · bilgi |
+
+```bash
+# Ne olacağını gör (hiçbir şey yazılmaz):
+./.venv/bin/python scripts/ifs-aktar.py zimmet.xlsx --dry-run
+
+# Uygula: eksik künye + teknik özellikler + zimmetler
+./.venv/bin/python scripts/ifs-aktar.py zimmet.xlsx
+```
+
+Eşleştirme sırası: **Cihaz Kodu → Seri No → daha önce yazılmış IFS kodu**.
+Eşleşen cihazın yalnızca **boş alanları** doldurulur; elle girilmiş veriye
+dokunulmaz (`--uzerine-yaz` bunu değiştirir).
+
+Doldurulan alanlar: seri no, IFS/muhasebe kodu, marka/model, lokasyon
+(proje kodundan), satın alma tarihi/bedeli, tedarikçi ve teknik özellikler
+(İşlemci · Bellek · Depolama · Anakart / Ekran Kartı · Ekran gruplarına
+dağıtılır). Şasi no gerçek seri numarası sayılır, `MTM:`/`MO:`/`P/N:` gibi
+ek kodlar "IFS Şasi / Seri Notu" olarak saklanır.
+
+**Zimmet**: kişi sütunu varsa cihaz o kişiye zimmetlenir. Cihaz **başka
+birinin** üzerindeyse dokunulmaz, raporda listelenir (`--zimmet-degistir`
+ile IFS kazanır). Personel kaydı bulunamayan isimler atlanır ve raporlanır
+(`--kisi-olustur` ile açılır). `--zimmet-yok` zimmetleri hiç işlemez.
+
+Diğer seçenekler: `--yeni-ekle` envanterde olmayan IFS nesneleri için kayıt
+açar (kategori adından belirlenir; ağ/kamera gibi sistem ürünleri doğru
+bölüme düşer), `--tumu` teknik verisi olmayan nesneleri (mobilya,
+konteyner…) de alır, `--sinif` uzun biçimde teknik sınıf süzer.
+
 ## Şantiyeler ve proje kodları
 
 Her lokasyonun bir **proje kodu** (`proje_kodu`, örn. `U023`) olabilir.
