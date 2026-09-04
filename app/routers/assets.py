@@ -5,10 +5,11 @@ from __future__ import annotations
 import datetime as dt
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import arama, models, schemas
+from app import arama, models, mukerrer, schemas
 from app.auth import get_current_user, require_editor
 from app.database import get_db
 
@@ -310,12 +311,58 @@ def _seri_mukerrer(db: Session, seri: str | None,
                  "mükerrer kayıt açmak yerine o kaydı güncelleyin.")
 
 
+# Seri no gibi tekil olması gereken künye alanları: aynı değer iki cihazda
+# olamaz. Mükerrer kaydın ikinci kaynağı bunlardı (aynı cihaz bir kez
+# demirbaş, bir kez IFS numarasıyla açılıyordu).
+_TEKIL_ALANLAR = (("demirbas_no", "demirbaş numarası"),
+                  ("muhasebe_kodu", "IFS/muhasebe kodu"))
+
+
+def _kunye_mukerrer(db: Session, veri: dict, haric_id: int | None = None) -> None:
+    for alan, etiket in _TEKIL_ALANLAR:
+        deger = (veri.get(alan) or "").strip() if isinstance(veri.get(alan), str) \
+            else veri.get(alan)
+        if not deger:
+            continue
+        stmt = select(models.Asset).where(getattr(models.Asset, alan) == deger)
+        if haric_id is not None:
+            stmt = stmt.where(models.Asset.id != haric_id)
+        ayni = db.scalar(stmt)
+        if ayni:
+            raise HTTPException(
+                409, f"Bu {etiket} zaten {ayni.asset_tag} cihazında kayıtlı — "
+                     "mükerrer kayıt açmak yerine o kaydı güncelleyin.")
+
+
+@router.get("/mukerrer", dependencies=READ)
+def mukerrer_listesi(db: Session = Depends(get_db)):
+    """Mükerrer olabilecek varlık grupları (seri/demirbaş/IFS/etiket kökü)."""
+    return mukerrer.gruplar(db)
+
+
+class MukerrerBirlestir(BaseModel):
+    hedef_id: int                 # kalacak kayıt
+    kaynak_idler: list[int]       # silinecek mükerrerler
+
+
+@router.post("/mukerrer/birlestir")
+def mukerrer_birlestir(govde: MukerrerBirlestir, db: Session = Depends(get_db),
+                       aktor: models.User = Depends(require_editor)):
+    """Seçilen mükerrer kayıtları hedefte birleştirir (bilgi kaybı olmadan)."""
+    try:
+        return mukerrer.birlestir(db, govde.hedef_id, govde.kaynak_idler,
+                                  aktor=_aktor_adi(aktor))
+    except ValueError as hata:
+        raise HTTPException(400, str(hata)) from None
+
+
 @router.post("", response_model=schemas.AssetRead, status_code=201)
 def create_asset(payload: schemas.AssetCreate, db: Session = Depends(get_db),
                  aktor: models.User = Depends(require_editor)):
     if db.scalar(select(models.Asset).where(models.Asset.asset_tag == payload.asset_tag)):
         raise HTTPException(409, f"'{payload.asset_tag}' etiketi zaten kullanımda")
     _seri_mukerrer(db, payload.serial)
+    _kunye_mukerrer(db, payload.model_dump())
     asset = models.Asset(**payload.model_dump())
     db.add(asset)
     db.flush()
@@ -345,6 +392,7 @@ def update_asset(
     veri = payload.model_dump(exclude_unset=True)
     if "serial" in veri:
         _seri_mukerrer(db, veri["serial"], haric_id=asset_id)
+    _kunye_mukerrer(db, veri, haric_id=asset_id)
     changes: dict = {}
     for key, value in veri.items():
         old = getattr(asset, key)

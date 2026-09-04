@@ -743,6 +743,36 @@ açar (kategori adından belirlenir; ağ/kamera gibi sistem ürünleri doğru
 bölüme düşer), `--tumu` teknik verisi olmayan nesneleri (mobilya,
 konteyner…) de alır, `--sinif` uzun biçimde teknik sınıf süzer.
 
+### Mükerrer varlık kayıtları
+
+Aynı cihazın birden çok kaydı (eski aktarımların `B002` / `B002-2` etiketleri,
+aynı seri numarasıyla ikinci kez açılmış kayıtlar) **Varlıklar → 🔀 Mükerrer**
+düğmesinde toplanır. Şüphe ölçütleri, güçlüden zayıfa:
+
+| Kanıt | Ne demek |
+|---|---|
+| aynı seri no | neredeyse kesin aynı cihaz |
+| aynı IFS kodu | aynı sabit kıymet kaydı |
+| aynı demirbaş no | aynı demirbaş |
+| aynı etiket kökü | `B002` ile `B002-2` — aktarım kopyası olabilir |
+
+Bir kayıt birden çok ölçütle eşleşse de **tek grupta** görünür. Grupta
+*kalacak kaydı* seçersiniz (varsayılan öneri: zimmetli olan, o da yoksa en
+dolu kayıt); diğerleri silinir ve:
+
+- hedefin **boş** alanları onlardan doldurulur (seri, demirbaş, IFS kodu,
+  marka/model, lokasyon, satın alma, teknik özellikler) — **dolu veriye
+  dokunulmaz**,
+- hedef boştaysa **zimmet** devralınır,
+- **dosyalar ve işlem geçmişi** hedefe taşınır,
+- silinen kayıtların künyesi ve hangi alanın nereden geldiği **geçmişe
+  yazılır** (cihaz kartındaki İşlem Geçmişi'nde görünür).
+
+**Önleme:** seri no, demirbaş no ve IFS/muhasebe kodu tekildir — aynı değer
+ikinci bir cihaza girilmek istendiğinde uygulama hangi cihazda kayıtlı
+olduğunu söyleyip reddeder (`409`). Excel ve IFS aktarımları da önce seri
+no / cihaz kodu ile eşleşme arar, bulamazsa yeni kayıt açar.
+
 ## Şantiyeler ve proje kodları
 
 Her lokasyonun bir **proje kodu** (`proje_kodu`, örn. `U023`) olabilir.

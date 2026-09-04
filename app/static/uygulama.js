@@ -2585,6 +2585,9 @@ function varlikSistemDegis() {
 
 // Arşiv görünümü: tedavülden kalkan cihazlar ayrı listede yaşar
 let varlikArsiv = false;
+// Mükerrer kayıt sayısı: liste her çizildiğinde arka planda tazelenir
+let mukerrerSayisi = 0;
+let mukerrerGruplar = [];
 
 function varlikArsivDegis() {
   varlikArsiv = !varlikArsiv;
@@ -2690,11 +2693,15 @@ function varlikTabloCiz() {
       <button class="ghost" ${varlikListe.length ? '' : 'disabled'}
         onclick="varlikHepsiniSec()">${tumu
           ? '✖ Seçimi bırak' : `☑ Tümünü seç (${varlikListe.length})`}</button>
+      ${canWrite() && !varlikArsiv ? `<button class="ghost"
+        onclick="mukerrerAc()" title="Aynı cihazın birden çok kaydı">
+        🔀 Mükerrer${mukerrerSayisi ? ` (${mukerrerSayisi})` : ''}</button>` : ''}
       ${canWrite() && !varlikArsiv ? `<button class="primary"
         ${varlikSecim.size ? '' : 'disabled'}
         onclick="varlikSecilenleriTasi()">📍 Başka lokasyona taşı (${varlikSecim.size})</button>` : ''}`;
   }
 
+  mukerrerSayac();
   const sirali = _varlikSirali();
   const toplamSayfa = Math.max(1, Math.ceil(sirali.length / varlikLimit));
   varlikSayfa = Math.min(varlikSayfa, toplamSayfa);
@@ -2939,6 +2946,113 @@ function lokasyonSecUygula(id) {
 // Toplu lokasyon değiştirme: seçili cihazlar tek seferde başka şantiyeye
 // taşınır. Her taşıma cihazın işlem geçmişine ve Transferler listesine düşer
 // (lokasyon değişikliği zaten logda eski → yeni olarak tutuluyor).
+// ---------- Mükerrer varlık birleştirme ----------
+// Aynı cihazın birden çok kaydı: eski aktarımların "-2/-3" etiketleri, aynı
+// seri/demirbaş/IFS numarasıyla ikinci kez açılmış kayıtlar. Birleştirmede
+// hedefin BOŞ alanları diğerlerinden dolar, dosya ve geçmiş taşınır.
+let mukerrerSayacZaman = null;
+
+function mukerrerSayac() {
+  clearTimeout(mukerrerSayacZaman);
+  mukerrerSayacZaman = setTimeout(async () => {
+    if (!canWrite()) return;
+    const gruplar = await api('/assets/mukerrer').catch(() => null);
+    if (!gruplar) return;
+    mukerrerGruplar = gruplar;
+    const yeni = gruplar.length;
+    if (yeni !== mukerrerSayisi) {
+      mukerrerSayisi = yeni;
+      const dugme = document.querySelector('#varlikUstIslem button[onclick="mukerrerAc()"]');
+      if (dugme) dugme.innerHTML = `🔀 Mükerrer${yeni ? ` (${yeni})` : ''}`;
+    }
+  }, 300);
+}
+
+async function mukerrerAc() {
+  let gruplar;
+  try { gruplar = await api('/assets/mukerrer'); }
+  catch (e) { return alert('⚠ ' + (e.detail || 'Alınamadı')); }
+  mukerrerGruplar = gruplar;
+  mukerrerSayisi = gruplar.length;
+
+  if (!gruplar.length) {
+    return modalAc('🔀 Mükerrer kayıtlar', `<div class="note" style="margin-top:0">
+      ✓ Mükerrer görünen kayıt yok. Aynı seri numarası, demirbaş numarası ya
+      da IFS kodu ikinci bir cihaza girilmek istendiğinde sistem zaten
+      uyarıyor.</div>`);
+  }
+
+  const KANIT = { seri: 'aynı seri no', demirbas: 'aynı demirbaş no',
+                  ifs: 'aynı IFS kodu', etiket: 'aynı etiket kökü' };
+  modalAc(`🔀 Mükerrer kayıtlar (${gruplar.length})`, `
+    <div class="note" style="margin-top:0">Her grup aynı cihaza ait görünüyor.
+      <b>Kalacak kaydı</b> seçin: diğerleri silinir, <b>boş alanları</b> onlardan
+      doldurulur (seri no, demirbaş, IFS kodu, teknik özellikler, zimmet),
+      dosya ve geçmiş kayıtları kalan kayda taşınır. İşlem geçmişe yazılır.</div>
+    ${gruplar.map((g, gi) => `
+      <div class="bolum">
+        <h4>${kacir(g.anahtar)} <span class="pill">${
+          g.kanit.map(k => KANIT[k] || k).join(' · ')}</span></h4>
+        <table><thead><tr>
+          <th>Kalsın</th><th>Etiket</th><th>Ad</th>
+          <th class="gizle-mobil">Seri</th><th class="gizle-mobil">Demirbaş</th>
+          <th class="gizle-mobil">IFS</th><th class="gizle-mobil">Lokasyon</th>
+          <th>Zimmet</th><th class="gizle-mobil">Dolu</th>
+        </tr></thead><tbody>
+        ${g.kayitlar.map(k => `<tr>
+          <td><input type="radio" name="mk${gi}" value="${k.id}"
+                ${k.id === g.onerilen_hedef ? 'checked' : ''} /></td>
+          <td><b class="tikla" onclick="modalKapat(); cihazDetay(${k.id})">${
+            kacir(k.asset_tag)}</b></td>
+          <td>${esc(k.name || k.model)}</td>
+          <td class="muted gizle-mobil">${esc(k.serial)}</td>
+          <td class="muted gizle-mobil">${esc(k.demirbas_no)}</td>
+          <td class="muted gizle-mobil">${esc(k.muhasebe_kodu)}</td>
+          <td class="muted gizle-mobil">${esc(k.lokasyon)}</td>
+          <td>${k.zimmetli ? `<span class="tag used">${kacir(k.zimmetli)}</span>`
+                           : '<span class="muted">boşta</span>'}</td>
+          <td class="muted gizle-mobil">${k.dolu_alan} alan${
+            k.ozellik_grubu ? ` · ${k.ozellik_grubu} özellik` : ''}${
+            k.dosya ? ` · ${k.dosya} dosya` : ''}</td>
+        </tr>`).join('')}</tbody></table>
+        <div class="row" style="margin-top:8px">
+          <button class="primary" onclick="mukerrerBirlestir(${gi})">
+            🔀 Bu grubu birleştir</button>
+          <span id="mkBilgi${gi}" class="note"></span>
+        </div>
+      </div>`).join('')}`);
+}
+
+async function mukerrerBirlestir(gi) {
+  const grup = mukerrerGruplar[gi];
+  const bilgi = document.getElementById('mkBilgi' + gi);
+  const secili = document.querySelector(`input[name="mk${gi}"]:checked`);
+  if (!grup || !secili) return;
+  const hedef = Number(secili.value);
+  const kaynaklar = grup.kayitlar.map(k => k.id).filter(id => id !== hedef);
+  const etiketler = grup.kayitlar.filter(k => kaynaklar.includes(k.id))
+    .map(k => k.asset_tag).join(', ');
+  if (!confirm(`${etiketler} kayıtları silinecek, bilgileri ${
+    grup.kayitlar.find(k => k.id === hedef).asset_tag} üzerine taşınacak.\n` +
+    'Devam edilsin mi?')) return;
+
+  try {
+    const s = await api('/assets/mukerrer/birlestir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hedef_id: hedef, kaynak_idler: kaynaklar }) });
+    const alan = Object.keys(s.doldurulan || {});
+    bilgi.innerHTML = `<span style="color:var(--ok)">✓ ${
+      s.silinen.join(', ')} birleştirildi${alan.length
+        ? ` — ${alan.length} alan dolduruldu` : ''}${
+        s.dosya ? `, ${s.dosya} dosya taşındı` : ''}.</span>`;
+    loadAssets();                          // liste sayfayı korur
+    setTimeout(mukerrerAc, 900);            // kalan grupları tazele
+  } catch (e) {
+    bilgi.innerHTML = `<span style="color:var(--err)">⚠ ${
+      e.detail || 'Birleştirilemedi'}</span>`;
+  }
+}
+
 async function varlikSecilenleriTasi() {
   const adet = varlikSecim.size;
   if (!adet) return;
