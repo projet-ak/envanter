@@ -611,8 +611,9 @@ değişikliğinden okunur; ayrıca bir kayıt tutulmaz.
 
 ### Listeden toplu ekleme
 
-Elinizdeki tabloyu doğrudan içe aktarabilirsiniz (sekme ya da 2+ boşlukla
-ayrılmış sütunlar):
+Elinizdeki tabloyu doğrudan içe aktarabilirsiniz. Sütun ayracı **sekme**,
+**`|`** ya da **2+ boşluk** olabilir — SSH ile yapıştırırken sekmeler
+bozulduğundan `|` tercih edilir:
 
 ```
 Marka       Model / Parça No           Seri Numarası     Hız / Mesafe / Mod

@@ -1330,3 +1330,22 @@ def test_marka_sutunu_ve_yazim_duzeltme(db_session):
     assert uyari["Karel"] is None            # benzeri yok, sadece yeni
     # Kayıtlı marka hiç uyarı vermez
     assert aktar.yeni_marka_uyarisi(db_session, {"Siemens"}) == []
+
+
+def test_boru_ayracli_liste_okunur():
+    """SSH'ta sekme bozulduğu için "|" ile yapıştırılan liste de okunmalı."""
+    aktar = _aktar()
+    tablo = (
+        "TEL. NO NUMARASI|KAT|İSİM|SOYİSİM|MAC ADRESİ|İP ADRESİ|MODEL|MARKA\n"
+        "6000|MAKAM KATI|Edip|EREN|||138G|KAREL\n"
+        "1717|BODRUM KAT|Bodrum|Mutfak|||TELSİZ|SİMENS\n"
+    )
+    satirlar = aktar.satirlari_coz(tablo)
+    assert len(satirlar) == 3
+    harita = aktar.basliklari_coz(satirlar[0])
+    assert harita is not None
+    # Boş hücreler korunur: MAC ve İP boş, MODEL kaymaz
+    assert aktar._hucre(satirlar[1], harita, "mac") == ""
+    assert aktar._hucre(satirlar[1], harita, "model") == "138G"
+    assert aktar._hucre(satirlar[1], harita, "marka") == "KAREL"
+    assert aktar._hucre(satirlar[2], harita, "soyad") == "Mutfak"

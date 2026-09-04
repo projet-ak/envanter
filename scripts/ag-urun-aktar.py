@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Ağ / sistem ürünlerini metin tablosundan içe aktarır.
 
-Excel'den kopyalanan tablo doğrudan verilebilir. Başlık satırı varsa
-sütunlar ADINDAN tanınır (sıra önemsiz):
+Excel'den kopyalanan tablo doğrudan verilebilir (.xlsx dosyası da).
+Sütun ayracı sekme, "|" ya da 2+ boşluk olabilir; SSH'ta yapıştırırken
+sekmeler bozulduğu için "|" tercih edilir. Başlık satırı varsa sütunlar
+ADINDAN tanınır (sıra önemsiz):
 
     MARKA  MODEL  LOKASYON  SERİ NO  MAC ADRESİ  KAT
 
@@ -87,6 +89,9 @@ def satirlari_coz(metin: str) -> list[list[str]]:
             continue
         if "\t" in ham:
             parcalar = [p.strip() for p in ham.split("\t")]
+        elif "|" in ham:
+            # SSH ile yapıştırmak için: sekme terminalde bozulur, "|" bozulmaz
+            parcalar = [p.strip() for p in ham.split("|")]
         else:
             parcalar = [p.strip() for p in re.split(r" {2,}", ham.strip())]
         if sum(1 for p in parcalar if p) >= 2:
