@@ -976,7 +976,7 @@ async function lokasyonDetay(id) {
     : '<div class="muted">Bu lokasyona bağlı personel yok</div>';
 
   const cihazlar = d.cihazlar.length ? `<table><thead><tr>
-      <th>Etiket</th><th>Ad</th><th class="gizle-mobil">Tip</th>
+      <th>Cihaz No</th><th>Ad</th><th class="gizle-mobil">Tip</th>
       <th>Durum</th><th class="gizle-mobil">Zimmetli</th><th></th>
       </tr></thead><tbody>
       ${d.cihazlar.map(c => `<tr class="tikla"
@@ -1237,7 +1237,7 @@ function renderInvoiceLines() {
     <td><input id="k_ad_${i}" value="${(k.ad || '').replace(/"/g, '&quot;')}" class="grow" /></td>
     <td><input id="k_adet_${i}" type="number" min="1" value="${k.adet || 1}" style="width:70px" /></td>
     <td><input id="k_fiyat_${i}" type="number" step="0.01" value="${k.birim_fiyat ?? ''}" style="width:110px" /></td>
-    <td><input id="k_pre_${i}" value="BT" style="width:70px" title="Etiket ön eki" /></td>
+    <td><input id="k_pre_${i}" value="BT" style="width:70px" title="Cihaz no ön eki" /></td>
     <td class="muted">${k.kategori ?? '—'}</td></tr>`).join('');
 
   document.getElementById('invResult').innerHTML = `
@@ -1252,7 +1252,7 @@ function renderInvoiceLines() {
     <div class="panel">
       <h2>Kalemler (${d.kalemler.length})</h2>
       <table><thead><tr><th></th><th>Ürün</th><th>Adet</th><th>Birim fiyat</th>
-        <th>Etiket ön eki</th><th>Kategori</th></tr></thead>
+        <th>Cihaz no ön eki</th><th>Kategori</th></tr></thead>
         <tbody>${rows}</tbody></table>
       <div class="row" style="margin-top:12px">
         <button class="primary" onclick="importInvoice()">Onayla ve envantere ekle</button>
@@ -1458,7 +1458,7 @@ async function renderDashboard(sessiz = false) {
     </div>
     <div class="panel">
       <h2>Garantisi biten / bitecek (90 gün) — ${garanti.length}</h2>
-      ${garanti.length ? `<table><thead><tr><th>Etiket</th><th>Cihaz</th><th>Bitiş</th><th>Kalan</th></tr></thead>
+      ${garanti.length ? `<table><thead><tr><th>Cihaz No</th><th>Cihaz</th><th>Bitiş</th><th>Kalan</th></tr></thead>
         <tbody>${garanti.slice(0, 15).map(x => `<tr class="tikla" onclick="cihazDetay(${x.id})"><td><b>${x.asset_tag}</b></td>
           <td>${x.ad ?? '<span class="muted">—</span>'}</td><td>${x.garanti_bitis}</td>
           <td>${x.bitti ? '<span class="tag low">bitti</span>'
@@ -2443,7 +2443,7 @@ function renderAssetsView() {
     ${canWrite() ? `<div class="panel">
       <h2>Hızlı varlık ekle</h2>
       <div class="row">
-        <input id="newTag" placeholder="Etiket (örn. BT-0001)" />
+        <input id="newTag" placeholder="Cihaz no (örn. BT-0001)" />
         <input id="newName" class="grow" placeholder="Ad" />
         <input id="newSerial" placeholder="Seri no" />
         <input id="newDemirbas" placeholder="Demirbaş no" />
@@ -2466,7 +2466,7 @@ function renderAssetsView() {
           <option value="false">Sadece boşta</option>
         </select>
         <input id="fAra" class="grow"
-               placeholder="Etiket / seri / demirbaş / kişi / şantiye ara…"
+               placeholder="Cihaz no / seri / demirbaş / kişi / şantiye ara…"
                oninput="gecikmeliAra()" />
         <button class="ghost" onclick="filtreTemizle()">Temizle</button>
         <button class="ghost" onclick="lokasyonSecAc()"
@@ -2776,7 +2776,7 @@ function varlikTabloCiz() {
       <th class="dar"><input type="checkbox" ${hepsiSecili ? 'checked' : ''}
           onchange="varlikTumunuSec(this.checked)"
           title="Sayfadakileri seç" /></th>
-      ${th('asset_tag', 'Etiket')}
+      ${th('asset_tag', 'Cihaz No')}
       ${th('demirbas_no', 'Demirbaş', 'gizle-mobil')}
       ${th('name', 'Ad')}
       ${th('tur', 'Tür', 'gizle-mobil')}
@@ -3209,7 +3209,7 @@ function varlikCsv() {
   document.getElementById('disaAktarKutu')?.classList.remove('acik');
   const kaynak = varlikSecim.size
     ? varlikListe.filter(a => varlikSecim.has(a.id)) : _varlikSirali();
-  const basliklar = ['Etiket', 'Demirbaş No', 'Ad', 'Tür', 'Lokasyon',
+  const basliklar = ['Cihaz No', 'Demirbaş No', 'Ad', 'Tür', 'Lokasyon',
                      'Seri No', 'Durum', 'Zimmet'];
   const hucre = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const satirlar = kaynak.map(a => [
@@ -3291,7 +3291,7 @@ async function addAsset() {
                  serial: newSerial.value.trim() || null,
                  demirbas_no: newDemirbas.value.trim() || null,
                  barkod: newBarkod.value.trim() || null };
-  if (!body.asset_tag) { addInfo.textContent = 'Etiket zorunlu.'; return; }
+  if (!body.asset_tag) { addInfo.textContent = 'Cihaz no zorunlu.'; return; }
   try {
     await api('/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body) });
@@ -4770,7 +4770,7 @@ function agUrunEkleAc(tur = agTur || AILE_BILGI[agAile].ilk || 'switch') {
     <div class="note" style="margin-top:0">${kacir(s.aciklama)}</div>
     <div class="bolum"><h4>Künye</h4>
       <div class="form-grid">
-        <label>Cihaz No / Etiket <input id="auEtiket"
+        <label>Cihaz No <input id="auEtiket"
                placeholder="boş bırakılırsa seri no kullanılır" /></label>
         <label>Seri No <input id="auSeri" /></label>
         <label>Marka <input id="auMarka"
